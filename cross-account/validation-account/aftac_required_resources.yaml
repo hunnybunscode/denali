@@ -1,0 +1,236 @@
+
+# This stack consists of VPC Endpoints and other resources which
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: VPC ID for AFTAC VPC
+    Default: vpc-048daa85d41f50b10
+  PrivateRouteTableIds:
+    Type: CommaDelimitedList
+    Description: Private Route Table IDs for AFTAC VPC
+    Default: rtb-07027991a9dbb1f36
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: Private Subnet IDs for AFTAC VPC
+    Default: subnet-0f2d694defec254c9, subnet-0f64b1f3ba14fd6ee, subnet-0e44f6353b9e3ee92
+  ExistingVpcCidr:
+    Type: String
+    Description: CIDR of existing VPC
+    Default: 10.162.208.0/20
+Resources:
+  privateVpcDynamoDbEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds: !Ref PrivateRouteTableIds
+      ServiceName:
+        Fn::Join:
+          - ""
+          - - com.amazonaws.
+            - Ref: AWS::Region
+            - .dynamodb
+      VpcEndpointType: Gateway
+      VpcId: !Ref VpcId
+
+  SsmVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for SSM VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Allows Https traffic from inside the vpc
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - SsmVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .ssm
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  SsmMessagesVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for SSM Messages VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Allows Https traffic from inside the vpc
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+
+  SsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - SsmMessagesVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .ssmmessages
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  Ec2MessagesVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for EC2 Messages VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Allows Https traffic from inside the vpc
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - Ec2MessagesVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .ec2messages
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  SqsVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for SQS VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Allow https traffic from inside vpc
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+
+  SqsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - SqsVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .sqs
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  LogsVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Cloudwatch Logs VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Permit HTTPS traffic from inside VPC
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+
+  LogsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - LogsVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .logs
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  SnsVpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for SNS VPC Endpoint
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Ref ExistingVpcCidr
+          Description: Allow https traffic from inside vpc
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !Ref VpcId
+  SnsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - SnsVpcEndpointSecurityGroup
+            - GroupId
+      ServiceName: 
+        Fn::Join:
+        - ""
+        - - com.amazonaws.
+          - Ref: AWS::Region
+          - .sns
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId

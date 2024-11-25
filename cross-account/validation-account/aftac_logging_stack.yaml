@@ -1,0 +1,121 @@
+Resources:
+  logBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Days: 2555
+            Mode: GOVERNANCE
+      ObjectLockEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  logBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: logBucket
+      PolicyDocument:
+        Statement:
+          - Action: s3:*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Resource:
+              - Fn::GetAtt:
+                  - logBucket
+                  - Arn
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - logBucket
+                        - Arn
+                    - /*
+          - Action:
+              - s3:GetBucketAcl
+              - s3:ListBucket
+              - s3:PutObject
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+                - delivery.logs.amazonaws.com
+            Resource:
+              - Fn::GetAtt:
+                  - logBucket
+                  - Arn
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - logBucket
+                        - Arn
+                    - /*
+        Version: "2012-10-17"
+
+  SftpServerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 731
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+
+  ApiGatewayStageLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 731
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+
+
+  IngestWACLAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: aws-waf-logs-ingest-api
+      RetentionInDays: 731
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+
+Outputs:
+
+##########
+
+
+  LogBucketExport: 
+    Description: Name of the S3 Logging Bucket
+    Value:  !Ref logBucket
+    Export:
+      Name: aftac-pipeline-logBucket
+
+  SftpServerLogGroupExport:
+    Description: ARN of the SFTP Server Log Group
+    Value: !GetAtt SftpServerLogGroup.Arn
+    Export:
+      Name: aftac-pipeline-SftpServerLogGroup
+  
+  ApiGatewayStageLogGroupARNExport:
+    Description: Name of the API Gateway Stage Log Group
+    Value:  !GetAtt ApiGatewayStageLogGroup.Arn
+    Export:
+      Name: aftac-pipeline-ApiGatewayStageLogGroup
+
+  IngestWACLAccessLogGroupExport:
+    Description: Name of the Ingest WACL Access Log Group
+    Value:  !Ref IngestWACLAccessLogGroup
+    Export:
+      Name: aftac-pipeline-IngestWACLAccessLogGroup

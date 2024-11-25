@@ -1,0 +1,147 @@
+#### Needs
+# Lambda Transfer Function
+# Lambda Role 
+# Lambda Policy with Cross Account Access
+# Lambda Permission for SQS to Invoke Function
+
+Parameters:
+  ValidationAccountId:
+    Type: String
+    Description: Account Id of the Validation Account
+    Default: '303344244756'
+  DataTransferBucketName:
+    Type: String
+    Description: Name of the S3 data transfer bucket in the Validation Account
+    Default: 'pipeline-app-pipelinestack-558z-datatransferbucket-36gmzqd9mk7y'
+  DataTransferSqsQueueArn:
+    Type: String
+    Description: Arn of the Data Transfer SQS queue in the Validation Account
+    Default: 'arn:aws-us-gov:sqs:us-gov-west-1:303344244756:pipeline-app-PipelineStack-558Z0273LVJW-transferqueue-Gerl7cfYmLPD'
+  TranferResultSqsQueueArn:
+    Type: String
+    Description: Arn of the Transfer Result SQS queue in the Validation Account
+    Default: 'arn:aws-us-gov:sqs:us-gov-west-1:303344244756:pipeline-app-PipelineStack-558Z0273LVJW-TransferResultQueue-QOSiNb7cT0MZ'
+  TranferResultSqsQueueUrl:
+    Type: String
+    Description: Url of the Transfer Result SQS queue in the Validation Account
+    Default: 'https://sqs.us-gov-west-1.amazonaws.com/303344244756/pipeline-app-PipelineStack-558Z0273LVJW-TransferResultQueue-QOSiNb7cT0MZ'
+  DataTransferLambdaCodeKey:
+    Type: String
+    Description: S3 Key of the Lambda Code
+    Default: 'data_transfer.zip'
+  LambdaStorageBucket:
+    Type: String
+    Description: S3 Bucket for Lambda Code
+    Default: 'lambda-functions-303369139906'
+  Cds1MappingId:
+    Type: String
+    Description: CDS_1 Mapping Id
+    Default: '12346789-abcd-1234-abcd-123456789012'
+  Cds2MappingId:
+    Type: String
+    Description: CDS_2 Mapping Id
+    Default: '12346789-abcd-1234-abcd-123456789012'
+  Cds3MappingId:
+    Type: String
+    Description: CDS_3 Mapping Id
+    Default: '12346789-abcd-1234-abcd-123456789012'
+  DiodeMappingId:
+    Type: String
+    Description: Diode Mapping Id
+    Default: ''
+
+
+
+Resources:
+  DataTransferLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AFC2S_DataTransferLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: AFC2S_DataTransferLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws-us-gov:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                Resource:
+                  - Fn::Join:
+                    - ''
+                    - - 'arn:'
+                      - Ref: AWS::Partition
+                      - ':s3:::'
+                      - Ref: DataTransferBucketName
+                      - '/*'
+                  - Fn::Join:
+                    - ''
+                    - - 'arn:'
+                      - Ref: AWS::Partition
+                      - ':s3:::'
+                      - Ref: DataTransferBucketName
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: 
+                  - !Ref TranferResultSqsQueueArn
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: 
+                  - !Ref DataTransferSqsQueueArn
+
+
+  DataTransferLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: AFC2S_DataTransferLambdaFunction
+      Handler: data_transfer.lambda_handler
+      Role: !GetAtt DataTransferLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref DataTransferLambdaCodeKey
+      Runtime: python3.11
+      Timeout: 30
+      Environment:
+        Variables:
+          TRANSFER_RESULT_QUEUE_URL: !Ref TranferResultSqsQueueUrl
+          CDS1_MAPPING : !Ref Cds1MappingId
+          CDS2_MAPPING : !Ref Cds2MappingId
+          CDS3_MAPPING : !Ref Cds3MappingId
+  
+  DataTransferLambdaEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !Ref DataTransferSqsQueueArn
+      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+
+
+  DataTransferLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceArn: !Ref DataTransferSqsQueueArn
+  
