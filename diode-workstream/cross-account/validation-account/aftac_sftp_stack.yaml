@@ -123,15 +123,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - SftpBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - SftpBucket
-                        - Arn
-                    - /*
+              - !Sub ${SftpBucket.Arn}
+              - !Sub ${SftpBucket.Arn}/*
         Version: "2012-10-17"
 
   SftpServerSecurityGroup:
@@ -179,12 +172,7 @@ Resources:
       ServerId: !GetAtt sftpServer.ServerId
       UserName: !Ref SftpUserName
       HomeDirectoryType: PATH
-      HomeDirectory: !Join
-        - ""
-        - - "/"
-          - !Ref SftpBucket
-          - "/"
-          - !Ref SftpUserName
+      HomeDirectory: !Sub /${SftpBucket}/${SftpUserName}
       Role: !Ref TransferUserRoleArn
 
 Outputs:
