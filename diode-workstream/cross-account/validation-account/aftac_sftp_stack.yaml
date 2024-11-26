@@ -4,56 +4,53 @@ Parameters:
   SftpUserName:
     Type: String
     Description: Username for SFTP user
-    Default: ''
+    Default: ""
   TransferUserRoleArn:
     Type: String
     Description: Role ARN for Transfer user
-    Default: ''
+    Default: ""
   TransferLoggingRoleArn:
     Type: String
     Description: Role ARN for Transfer logging
-    Default: ''
+    Default: ""
   AftacVpcId:
     Type: String
     Description: VPC ID for AFTAC Cloud
-    Default: ''
+    Default: ""
   SftpServerSubnetIds:
     Type: CommaDelimitedList
     Description: Subnet IDs for SFTP server
-    Default: ''
+    Default: ""
   SftpBucketDataOwner:
     Type: String
     Description: Data Owner for SFTP bucket
-    Default: ''
+    Default: ""
   SftpBucketGovPoc:
     Type: String
     Description: Gov POC for SFTP bucket
-    Default: ''
+    Default: ""
   SftpBucketKeyOwner:
     Type: String
     Description: Key Owner for SFTP bucket
-    Default: ''
+    Default: ""
   LambdaStorageBucket:
     Type: String
     Description: S3 Bucket for Lambda Storage
-    Default: ''
+    Default: ""
   ObjectTaggerRoleARN:
     Type: String
     Description: Role ARN for Object Tagger
-    Default: ''
+    Default: ""
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: Subnet IDs for Lambda function
-    Default: ''
+    Default: ""
   ObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 Key for Lambda Code
-    Default: ''
-  
+    Default: ""
 
 Resources:
-
-
   SftpFunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -63,7 +60,7 @@ Resources:
           Description: Allow all outbound traffic by default
           IpProtocol: "-1"
       VpcId: !Ref AftacVpcId
-#### Fix This
+  #### Fix This
   SftpBucketObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
@@ -94,7 +91,6 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
 
-
   SftpBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -109,8 +105,8 @@ Resources:
         RestrictPublicBuckets: true
       NotificationConfiguration:
         LambdaConfigurations:
-        - Event: s3:ObjectCreated:*
-          Function: !GetAtt SftpBucketObjectTagger.Arn
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt SftpBucketObjectTagger.Arn
     DependsOn: SftpBucketObjectTagger
 
   SftpBucketPolicy:
@@ -134,8 +130,8 @@ Resources:
               - Fn::Join:
                   - ""
                   - - Fn::GetAtt:
-                      - SftpBucket
-                      - Arn
+                        - SftpBucket
+                        - Arn
                     - /*
         Version: "2012-10-17"
 
@@ -145,22 +141,21 @@ Resources:
       GroupDescription: Security Group for SFTP Server
       VpcId: !Ref AftacVpcId
       SecurityGroupEgress:
-      - IpProtocol: -1
-        CidrIp: 0.0.0.0/0
-        Description: Allow all outbound traffic
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 22
-        ToPort: 22
-        CidrIp: 0.0.0.0/0
-        Description: Allow SSH access
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Allow SSH access
 
   ElasticIpOne:
     Type: AWS::EC2::EIP
 
   ElasticIpTwo:
     Type: AWS::EC2::EIP
-  
 
   sftpServer:
     Type: AWS::Transfer::Server
@@ -171,15 +166,14 @@ Resources:
           - !Ref SftpServerSecurityGroup
         SubnetIds: !Ref SftpServerSubnetIds
         AddressAllocationIds: #must match the length of the list of subnet ids)
-        - !GetAtt ElasticIpOne.AllocationId
-        - !GetAtt ElasticIpTwo.AllocationId
+          - !GetAtt ElasticIpOne.AllocationId
+          - !GetAtt ElasticIpTwo.AllocationId
         VpcId: !Ref AftacVpcId
       IdentityProviderType: SERVICE_MANAGED
       LoggingRole: !Ref TransferLoggingRoleArn
       StructuredLogDestinations:
-      - Fn::ImportValue: aftac-pipeline-SftpServerLogGroup
-      
-  
+        - Fn::ImportValue: aftac-pipeline-SftpServerLogGroup
+
   TransferUser:
     Type: AWS::Transfer::User
     Properties:
@@ -187,27 +181,18 @@ Resources:
       UserName: !Ref SftpUserName
       HomeDirectoryType: PATH
       HomeDirectory: !Join
-        - ''
-        - - '/'
+        - ""
+        - - "/"
           - !Ref SftpBucket
-          - '/'
+          - "/"
           - !Ref SftpUserName
       Role: !Ref TransferUserRoleArn
 
-
 Outputs:
-  S3BucketName: 
+  S3BucketName:
     Value: !Ref SftpBucket
   SFTPHostName:
     Value: !GetAtt sftpServer.ServerId
   SFTPUserName:
     Value: !Ref SftpUserName
-
-
-
-
-
-
-
-
 ##### Create S3 SFTP Server #### 2/14
