@@ -4,51 +4,50 @@ Parameters:
   SftpUserName:
     Type: String
     Description: Username for SFTP user
-    Default: ""
+
   TransferUserRoleArn:
     Type: String
     Description: Role ARN for Transfer user
-    Default: ""
+
   TransferLoggingRoleArn:
     Type: String
     Description: Role ARN for Transfer logging
-    Default: ""
+
   AftacVpcId:
     Type: String
     Description: VPC ID for AFTAC Cloud
-    Default: ""
+
   SftpServerSubnetIds:
     Type: CommaDelimitedList
     Description: Subnet IDs for SFTP server
-    Default: ""
+
   SftpBucketDataOwner:
     Type: String
     Description: Data Owner for SFTP bucket
-    Default: ""
+
   SftpBucketGovPoc:
     Type: String
     Description: Gov POC for SFTP bucket
-    Default: ""
+
   SftpBucketKeyOwner:
     Type: String
     Description: Key Owner for SFTP bucket
-    Default: ""
+
   LambdaStorageBucket:
     Type: String
     Description: S3 Bucket for Lambda Storage
-    Default: ""
+
   ObjectTaggerRoleARN:
     Type: String
     Description: Role ARN for Object Tagger
-    Default: ""
+
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: Subnet IDs for Lambda function
-    Default: ""
+
   ObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 Key for Lambda Code
-    Default: ""
 
 Resources:
   SftpFunctionSecurityGroup:
