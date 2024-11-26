@@ -1,0 +1,20 @@
+---
+stages:
+  - test
+
+include:
+  - component: gitlab.aws.dev/wwps-proserve-dod/common/fortify-sast/fortify@~latest
+  - component: gitlab.aws.dev/wwps-proserve-dod/common/bandit-sast/bandit@~latest
+  - component: gitlab.aws.dev/wwps-proserve-dod/common/semgrep-sast/semgrep@~latest
+  - component: gitlab.aws.dev/wwps-proserve-dod/common/grype-sca/grype@~latest
+  - component: gitlab.aws.dev/wwps-proserve-dod/common/checkov-sast/checkov@~latest
+
+probe:
+  image: registry.gitlab.aws.dev/tsd/probe/standalone-scanner:latest
+  stage: test
+  needs: []
+  script:
+    - /usr/bin/python3 /exec/app.py
+  artifacts:
+    paths:
+      - ${CI_PROJECT_DIR}/probe-out/*
