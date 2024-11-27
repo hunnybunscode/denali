@@ -101,12 +101,12 @@ Resources:
           - Action: sqs:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource: !GetAtt AvScanQueue.Arn
-        Version: "2012-10-17"
+        Version: 2012-10-17
       Queues:
         - Ref: AvScanQueue
 
@@ -211,14 +211,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${IngestBucket1.Arn}
               - !Sub ${IngestBucket1.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   IngestBucket2:
     Type: AWS::S3::Bucket
@@ -248,14 +248,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${IngestBucket2.Arn}
               - !Sub ${IngestBucket2.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   presigngenerator:
     Type: AWS::Lambda::Function
@@ -833,19 +833,19 @@ Outputs:
     Value: !Ref LambdaFunctionSecurityGroup
     Description: Security Group ID of LambdaFunctionSecurityGroup
     Export:
-      Name: "Pipeline-LambdaFunctionSecurityGroup"
+      Name: Pipeline-LambdaFunctionSecurityGroup
 
   IngestBucket1:
     Value: !Ref IngestBucket1
     Description: Name of Ingest Bucket 1
     Export:
-      Name: "Pipeline-IngestBucket1"
+      Name: Pipeline-IngestBucket1
 
   IngestBucket2:
     Value: !Ref IngestBucket2
     Description: Name of Ingest Bucket 2
     Export:
-      Name: "Pipeline-IngestBucket2"
+      Name: Pipeline-IngestBucket2
 
   ###########
 
@@ -874,9 +874,9 @@ Outputs:
       Name: aftac-pipeline-IngestBucket2
 
   NodePresignGeneratorInvokeURL:
-    Value: !Sub "https://${Nodefileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload"
+    Value: !Sub https://${Nodefileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
     Description: Presign Generator Invoke URL
 
   PresignGenerator1InvokeURL:
-    Value: !Sub "https://${fileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload"
+    Value: !Sub https://${fileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
     Description: Presign Generator 1 Invoke URL
