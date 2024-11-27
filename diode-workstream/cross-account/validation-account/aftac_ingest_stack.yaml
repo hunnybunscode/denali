@@ -2,65 +2,81 @@ Parameters:
   Bucket1CDSProfile:
     Type: String
     Description: The CDS Profile for the Bucket 1
+
   Bucket2CDSProfile:
     Type: String
     Description: The CDS Profile for the Bucket 2
+
   ObjectTaggerRoleARN:
     Type: String
     Description: The ARN of the IAM role for the Object Tagger Lambda
-    Default: ''
+    Default: ""
+
   presigngeneratorServiceRole:
     Type: String
     Description: ARN of the service role for the presign generator lambda
-    Default: ''
+    Default: ""
+
   ObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 key for the object tagger lambda code
-    Default: ''
+    Default: ""
+
   LambdaStorageBucket:
     Type: String
     Description: S3 bucket where the lambda code is stored
-    Default: ''
+    Default: ""
+
   ApiGwLambdaCodeKey:
     Type: String
     Description: S3 key for the API Gateway lambda code
-    Default: ''
+    Default: ""
+
   fileuploaderCloudWatchRole:
     Type: String
     Description: ARN of the file uploader CloudWatch role
-    Default: ''
+    Default: ""
+
   APILambdaInvokeRole:
     Type: String
     Description: ARN of the API Lambda invoke role
-    Default: ''
+    Default: ""
+
   AftacVpcId:
     Type: String
     Description: AFTAC VPC ID
-    Default: ''
+    Default: ""
+
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
-    Default: ''
+    Default: ""
+
   BucketOneGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Monica
+
   BucketOneDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Phoebe
+
   BucketOneKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Chandler
+
   BucketTwoGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
     Default: Ross
+
   BucketTwoDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
     Default: Rachel
+
   BucketTwoKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
@@ -136,6 +152,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
+
   bucket1ObjectTaggerPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -144,8 +161,7 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
 
-
-#########################
+  #########################
   bucket2ObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
@@ -168,6 +184,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
+
   bucket2ObjectTaggerPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -176,15 +193,13 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
 
-
-
   IngestBucket1:
     Type: AWS::S3::Bucket
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-        - ServerSideEncryptionByDefault:
-            SSEAlgorithm: AES256
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -193,9 +208,8 @@ Resources:
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
-          #Bucket1 Object Tagger
+            #Bucket1 Object Tagger
             Function: !GetAtt bucket1ObjectTagger.Arn
-
 
   IngestBucket1Policy:
     Type: AWS::S3::BucketPolicy
@@ -228,8 +242,8 @@ Resources:
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-        - ServerSideEncryptionByDefault:
-            SSEAlgorithm: AES256
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -238,7 +252,7 @@ Resources:
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
-          #Bucket1 Object Tagger
+            #Bucket1 Object Tagger
             Function: !GetAtt bucket2ObjectTagger.Arn
 
   IngestBucket2Policy:
@@ -289,7 +303,7 @@ Resources:
     Properties:
       EndpointConfiguration:
         Types:
-        - REGIONAL
+          - REGIONAL
       Name: FileUploader1
 
   fileuploaderAccount:
@@ -297,10 +311,10 @@ Resources:
     Properties:
       CloudWatchRoleArn: !Ref fileuploaderCloudWatchRole
     DependsOn:
-    - fileuploader
+      - fileuploader
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
-    
+
   fileuploaderDeployment:
     Type: AWS::ApiGateway::Deployment
     Properties:
@@ -308,46 +322,46 @@ Resources:
       RestApiId:
         Ref: fileuploader
     DependsOn:
-    - APIModel
-    - fileuploaderuploadOPTIONS
-    - fileuploaderuploadPOST
-    - fileuploaderupload
-    
+      - APIModel
+      - fileuploaderuploadOPTIONS
+      - fileuploaderuploadPOST
+      - fileuploaderupload
+
   fileuploaderDeploymentStageprod:
     Type: AWS::ApiGateway::Stage
     Properties:
       AccessLogSetting:
-        DestinationArn: 
+        DestinationArn:
           Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
-      CacheClusterSize: '0.5'
+      CacheClusterSize: "0.5"
       DeploymentId:
         Ref: fileuploaderDeployment
       MethodSettings:
-      - CacheDataEncrypted: true
-        CachingEnabled: true
-        DataTraceEnabled: false
-        HttpMethod: "*"
-        LoggingLevel: INFO
-        ResourcePath: "/*"
+        - CacheDataEncrypted: true
+          CachingEnabled: true
+          DataTraceEnabled: false
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
       RestApiId:
         Ref: fileuploader
       StageName: prod
     DependsOn:
-    - fileuploaderAccount
-    
+      - fileuploaderAccount
+
   fileuploaderupload:
     Type: AWS::ApiGateway::Resource
     Properties:
       ParentId:
         Fn::GetAtt:
-        - fileuploader
-        - RootResourceId
+          - fileuploader
+          - RootResourceId
       PathPart: upload
       RestApiId:
         Ref: fileuploader
-    
+
   fileuploaderuploadPOSTApiPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -356,19 +370,19 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Join:
-        - ''
-        - - 'arn:'
-          - Ref: AWS::Partition
-          - ':execute-api:'
-          - Ref: AWS::Region
-          - ':'
-          - Ref: AWS::AccountId 
-          - ':'
-          - Ref: fileuploader
-          - "/"
-          - Ref: fileuploaderDeploymentStageprod
-          - "/POST/upload"
-    
+          - ""
+          - - "arn:"
+            - Ref: AWS::Partition
+            - ":execute-api:"
+            - Ref: AWS::Region
+            - ":"
+            - Ref: AWS::AccountId
+            - ":"
+            - Ref: fileuploader
+            - "/"
+            - Ref: fileuploaderDeploymentStageprod
+            - "/POST/upload"
+
   fileuploaderuploadPOST:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -378,28 +392,28 @@ Resources:
         Credentials: !Ref APILambdaInvokeRole
         IntegrationHttpMethod: POST
         IntegrationResponses:
-        - StatusCode: '200'
+          - StatusCode: "200"
         PassthroughBehavior: NEVER
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
         Uri:
           Fn::Join:
-          - ''
-          - - 'arn:'
-            - !Ref AWS::Partition
-            - ':apigateway:'
-            - !Ref AWS::Region
-            - ':lambda:path/2015-03-31/functions/'
-            - Fn::GetAtt:
-              - presigngenerator
-              - Arn
-            - "/invocations"
+            - ""
+            - - "arn:"
+              - !Ref AWS::Partition
+              - ":apigateway:"
+              - !Ref AWS::Region
+              - ":lambda:path/2015-03-31/functions/"
+              - Fn::GetAtt:
+                  - presigngenerator
+                  - Arn
+              - "/invocations"
       MethodResponses:
-      - ResponseModels:
-          application/json:
-            Ref: APIModel
-        StatusCode: '200'
+        - ResponseModels:
+            application/json:
+              Ref: APIModel
+          StatusCode: "200"
       ResourceId:
         Ref: fileuploaderupload
       RestApiId:
@@ -414,26 +428,26 @@ Resources:
         Credentials: !Ref APILambdaInvokeRole
         IntegrationHttpMethod: PUT
         IntegrationResponses:
-        - StatusCode: '200'
+          - StatusCode: "200"
         PassthroughBehavior: NEVER
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
         Uri:
           Fn::Join:
-          - ''
-          - - 'arn:'
-            - Ref: AWS::Partition
-            - ':apigateway:'
-            - Ref: AWS::Region
-            - ':lambda:path/2015-03-31/functions/'
-            - !GetAtt presigngenerator.Arn
-            - "/invocations"
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - ":apigateway:"
+              - Ref: AWS::Region
+              - ":lambda:path/2015-03-31/functions/"
+              - !GetAtt presigngenerator.Arn
+              - "/invocations"
       MethodResponses:
-      - ResponseModels:
-          application/json:
-            Ref: APIModel
-        StatusCode: '200'
+        - ResponseModels:
+            application/json:
+              Ref: APIModel
+          StatusCode: "200"
       ResourceId:
         Ref: fileuploaderupload
       RestApiId:
@@ -447,20 +461,20 @@ Resources:
       HttpMethod: OPTIONS
       Integration:
         IntegrationResponses:
-        - ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-            method.response.header.Access-Control-Allow-Origin: "'*'"
-            method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
-          StatusCode: '200'
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
+            StatusCode: "200"
         RequestTemplates:
           application/json: "{ statusCode: 200 }"
         Type: MOCK
       MethodResponses:
-      - ResponseParameters:
-          method.response.header.Access-Control-Allow-Headers: true
-          method.response.header.Access-Control-Allow-Origin: true
-          method.response.header.Access-Control-Allow-Methods: true
-        StatusCode: '200'
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
       ResourceId:
         Ref: fileuploaderupload
       RestApiId:
@@ -491,24 +505,24 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
-    
+
   fileuploader2:
     Type: AWS::ApiGateway::RestApi
     Properties:
       EndpointConfiguration:
         Types:
-        - REGIONAL
+          - REGIONAL
       Name: FileUploader2
-    
+
   fileuploaderAccount2:
     Type: AWS::ApiGateway::Account
     Properties:
       CloudWatchRoleArn: !Ref fileuploaderCloudWatchRole
     DependsOn:
-    - fileuploader2
+      - fileuploader2
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
-    
+
   fileuploaderDeployment2:
     Type: AWS::ApiGateway::Deployment
     Properties:
@@ -516,70 +530,70 @@ Resources:
       RestApiId:
         Ref: fileuploader2
     DependsOn:
-    - APIModel2
-    - fileuploaderuploadOPTIONS2
-    - fileuploaderuploadPOST2
-    - fileuploaderupload2
-    
+      - APIModel2
+      - fileuploaderuploadOPTIONS2
+      - fileuploaderuploadPOST2
+      - fileuploaderupload2
+
   fileuploaderDeploymentStageprod2:
     Type: AWS::ApiGateway::Stage
     Properties:
       AccessLogSetting:
-        DestinationArn: 
+        DestinationArn:
           Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
-      CacheClusterSize: '0.5'
+      CacheClusterSize: "0.5"
       DeploymentId:
         Ref: fileuploaderDeployment2
       MethodSettings:
-      - CacheDataEncrypted: true
-        CachingEnabled: true
-        DataTraceEnabled: false
-        HttpMethod: "*"
-        LoggingLevel: INFO
-        ResourcePath: "/*"
+        - CacheDataEncrypted: true
+          CachingEnabled: true
+          DataTraceEnabled: false
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
       RestApiId:
         Ref: fileuploader2
       StageName: prod
     DependsOn:
-    - fileuploaderAccount2
-    
+      - fileuploaderAccount2
+
   fileuploaderupload2:
     Type: AWS::ApiGateway::Resource
     Properties:
       ParentId:
         Fn::GetAtt:
-        - fileuploader2
-        - RootResourceId
+          - fileuploader2
+          - RootResourceId
       PathPart: upload
       RestApiId:
         Ref: fileuploader2
-    
+
   fileuploaderuploadPOSTApiPermission2:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       FunctionName:
         Fn::GetAtt:
-        - presigngenerator2
-        - Arn
+          - presigngenerator2
+          - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Join:
-        - ''
-        - - 'arn:'
-          - Ref: AWS::Partition
-          - ':execute-api:'
-          - Ref: AWS::Region
-          - ':'
-          - Ref: AWS::AccountId 
-          - ':'
-          - Ref: fileuploader
-          - "/"
-          - Ref: fileuploaderDeploymentStageprod
-          - "/POST/upload"
-    
+          - ""
+          - - "arn:"
+            - Ref: AWS::Partition
+            - ":execute-api:"
+            - Ref: AWS::Region
+            - ":"
+            - Ref: AWS::AccountId
+            - ":"
+            - Ref: fileuploader
+            - "/"
+            - Ref: fileuploaderDeploymentStageprod
+            - "/POST/upload"
+
   fileuploaderuploadPOST2:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -589,33 +603,33 @@ Resources:
         Credentials: !Ref APILambdaInvokeRole
         IntegrationHttpMethod: POST
         IntegrationResponses:
-        - StatusCode: '200'
+          - StatusCode: "200"
         PassthroughBehavior: NEVER
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
         Uri:
           Fn::Join:
-          - ''
-          - - 'arn:'
-            - !Ref AWS::Partition
-            - ':apigateway:'
-            - !Ref AWS::Region
-            - ':lambda:path/2015-03-31/functions/'
-            - Fn::GetAtt:
-              - presigngenerator2
-              - Arn
-            - "/invocations"
+            - ""
+            - - "arn:"
+              - !Ref AWS::Partition
+              - ":apigateway:"
+              - !Ref AWS::Region
+              - ":lambda:path/2015-03-31/functions/"
+              - Fn::GetAtt:
+                  - presigngenerator2
+                  - Arn
+              - "/invocations"
       MethodResponses:
-      - ResponseModels:
-          application/json:
-            Ref: APIModel2
-        StatusCode: '200'
+        - ResponseModels:
+            application/json:
+              Ref: APIModel2
+          StatusCode: "200"
       ResourceId:
         Ref: fileuploaderupload2
       RestApiId:
         Ref: fileuploader2
-    
+
   fileuploaderuploadOPTIONS2:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -624,25 +638,25 @@ Resources:
       HttpMethod: OPTIONS
       Integration:
         IntegrationResponses:
-        - ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-            method.response.header.Access-Control-Allow-Origin: "'*'"
-            method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
-          StatusCode: '200'
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
+            StatusCode: "200"
         RequestTemplates:
           application/json: "{ statusCode: 200 }"
         Type: MOCK
       MethodResponses:
-      - ResponseParameters:
-          method.response.header.Access-Control-Allow-Headers: true
-          method.response.header.Access-Control-Allow-Origin: true
-          method.response.header.Access-Control-Allow-Methods: true
-        StatusCode: '200'
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
       ResourceId:
         Ref: fileuploaderupload2
       RestApiId:
         Ref: fileuploader2
-    
+
   APIModel2:
     Type: AWS::ApiGateway::Model
     Properties:
@@ -652,7 +666,7 @@ Resources:
       Schema:
         "$schema": http://json-schema.org/draft-04/schema#
 
-### WEB ACL RESOURCES
+  ### WEB ACL RESOURCES
   # IngestAPIWebACL:
   #   Type: AWS::WAFv2::WebACL
   #   Properties:
@@ -712,7 +726,7 @@ Resources:
   #       CloudWatchMetricsEnabled: true
   #       MetricName: IngestAPILogsWAF
   #       SampledRequestsEnabled: true
-    
+
   # IngestAPIWAFLoggingConfig:
   #   Type: AWS::WAFv2::LoggingConfiguration
   #   Properties:
@@ -720,7 +734,6 @@ Resources:
   #     - !GetAtt IngestWACLAccessLogs.Arn
   #     ResourceArn: !GetAtt IngestAPIWebACL.Arn
 
-    
   # IngestAPIWEBACLAssociate:
   #   Type: AWS::WAFv2::WebACLAssociation
   #   Properties:
@@ -751,9 +764,7 @@ Resources:
   #       - IngestAPIWebACL
   #       - Arn
 
-
-
-# NodeJS Gateway
+  # NodeJS Gateway
   Nodepresigngenerator:
     Type: AWS::Lambda::Function
     Properties:
@@ -771,13 +782,12 @@ Resources:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
-
   Nodefileuploader:
     Type: AWS::ApiGateway::RestApi
     Properties:
       EndpointConfiguration:
         Types:
-        - REGIONAL
+          - REGIONAL
       Name: node-file-uploader
 
   NodefileuploaderAccount:
@@ -785,10 +795,10 @@ Resources:
     Properties:
       CloudWatchRoleArn: !Ref fileuploaderCloudWatchRole
     DependsOn:
-    - Nodefileuploader
+      - Nodefileuploader
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
-    
+
   NodefileuploaderDeployment:
     Type: AWS::ApiGateway::Deployment
     Properties:
@@ -796,11 +806,11 @@ Resources:
       RestApiId:
         Ref: Nodefileuploader
     DependsOn:
-    - NodeAPIModel
-    - NodefileuploaderuploadOPTIONS
-    - NodefileuploaderuploadPOST
-    - Nodefileuploaderupload
-    
+      - NodeAPIModel
+      - NodefileuploaderuploadOPTIONS
+      - NodefileuploaderuploadPOST
+      - Nodefileuploaderupload
+
   NodefileuploaderDeploymentStageprod:
     Type: AWS::ApiGateway::Stage
     Properties:
@@ -809,57 +819,57 @@ Resources:
           Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
-      CacheClusterSize: '0.5'
+      CacheClusterSize: "0.5"
       DeploymentId:
         Ref: NodefileuploaderDeployment
       MethodSettings:
-      - CacheDataEncrypted: true
-        CachingEnabled: true
-        DataTraceEnabled: false
-        HttpMethod: "*"
-        LoggingLevel: INFO
-        ResourcePath: "/*"
+        - CacheDataEncrypted: true
+          CachingEnabled: true
+          DataTraceEnabled: false
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
       RestApiId:
         Ref: Nodefileuploader
       StageName: prod
     DependsOn:
-    - NodefileuploaderAccount
-    
+      - NodefileuploaderAccount
+
   Nodefileuploaderupload:
     Type: AWS::ApiGateway::Resource
     Properties:
       ParentId:
         Fn::GetAtt:
-        - Nodefileuploader
-        - RootResourceId
+          - Nodefileuploader
+          - RootResourceId
       PathPart: upload
       RestApiId:
         Ref: Nodefileuploader
-    
+
   NodefileuploaderuploadPOSTApiPermissionIngestionStackfileuploader:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       FunctionName:
         Fn::GetAtt:
-        - Nodepresigngenerator
-        - Arn
+          - Nodepresigngenerator
+          - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Join:
-        - ''
-        - - 'arn:'
-          - Ref: AWS::Partition
-          - ':execute-api:'
-          - Ref: AWS::Region
-          - ':'
-          - Ref: AWS::AccountId 
-          - ':'
-          - Ref: Nodefileuploader
-          - "/"
-          - Ref: NodefileuploaderDeploymentStageprod
-          - "/POST/upload"
-    
+          - ""
+          - - "arn:"
+            - Ref: AWS::Partition
+            - ":execute-api:"
+            - Ref: AWS::Region
+            - ":"
+            - Ref: AWS::AccountId
+            - ":"
+            - Ref: Nodefileuploader
+            - "/"
+            - Ref: NodefileuploaderDeploymentStageprod
+            - "/POST/upload"
+
   NodefileuploaderuploadPOST:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -869,35 +879,35 @@ Resources:
         Credentials: !Ref APILambdaInvokeRole
         IntegrationHttpMethod: POST
         IntegrationResponses:
-        - StatusCode: '200'
+          - StatusCode: "200"
         PassthroughBehavior: NEVER
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
         Uri:
           Fn::Join:
-          - ''
-          - - 'arn:'
-            - !Ref AWS::Partition
-            - ':apigateway:'
-            - !Ref AWS::Region
-            - ':lambda:path/2015-03-31/functions/'
-            - Fn::GetAtt:
-              - Nodepresigngenerator
-              - Arn
-            - "/invocations"
+            - ""
+            - - "arn:"
+              - !Ref AWS::Partition
+              - ":apigateway:"
+              - !Ref AWS::Region
+              - ":lambda:path/2015-03-31/functions/"
+              - Fn::GetAtt:
+                  - Nodepresigngenerator
+                  - Arn
+              - "/invocations"
       MethodResponses:
-      - ResponseModels:
-          application/json:
-            Ref: NodeAPIModel
-        StatusCode: '200'
+        - ResponseModels:
+            application/json:
+              Ref: NodeAPIModel
+          StatusCode: "200"
       ResourceId:
         Ref: Nodefileuploaderupload
       RestApiId:
         Ref: Nodefileuploader
-    DependsOn: 
+    DependsOn:
       - Nodepresigngenerator
-    
+
   NodefileuploaderuploadOPTIONS:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -906,20 +916,20 @@ Resources:
       HttpMethod: OPTIONS
       Integration:
         IntegrationResponses:
-        - ResponseParameters:
-            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-            method.response.header.Access-Control-Allow-Origin: "'*'"
-            method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
-          StatusCode: '200'
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
+            StatusCode: "200"
         RequestTemplates:
           application/json: "{ statusCode: 200 }"
         Type: MOCK
       MethodResponses:
-      - ResponseParameters:
-          method.response.header.Access-Control-Allow-Headers: true
-          method.response.header.Access-Control-Allow-Origin: true
-          method.response.header.Access-Control-Allow-Methods: true
-        StatusCode: '200'
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
       ResourceId:
         Ref: Nodefileuploaderupload
       RestApiId:
@@ -934,8 +944,6 @@ Resources:
       Schema:
         "$schema": http://json-schema.org/draft-04/schema#
 
-
-
   AvScanQueueURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -943,8 +951,9 @@ Resources:
       Name: /pipeline/AvScanQueueUrl
       Type: String
       Value: !GetAtt AvScanQueue.QueueUrl
+
 Outputs:
-#### Temporary PlaceHolders ###
+  #### Temporary PlaceHolders ###
   LambdaFunctionSecurityGroup:
     Value: !Ref LambdaFunctionSecurityGroup
     Description: Security Group ID of LambdaFunctionSecurityGroup
@@ -963,21 +972,19 @@ Outputs:
     Export:
       Name: !Sub "Pipeline-IngestBucket2"
 
+  ###########
 
-###########
-
-  AvScanQueueUrlExport: 
+  AvScanQueueUrlExport:
     Description: Queue URL of the SQS AV Scan Queue
-    Value:  !Ref AvScanQueue
+    Value: !Ref AvScanQueue
     Export:
       Name: aftac-pipeline-av-scan-queue
+
   AvScanQueueNameExport:
     Description: Name of the SQS AV Scan Queue
-    Value:  !GetAtt AvScanQueue.QueueName
+    Value: !GetAtt AvScanQueue.QueueName
     Export:
       Name: aftac-pipeline-av-scan-queue-name
-
-
 
   IngestBucket1b:
     Value: !Ref IngestBucket1
@@ -994,7 +1001,7 @@ Outputs:
   NodePresignGeneratorInvokeURL:
     Value: !Sub "https://${Nodefileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload"
     Description: Presign Generator Invoke URL
-  
+
   PresignGenerator1InvokeURL:
     Value: !Sub "https://${fileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload"
     Description: Presign Generator 1 Invoke URL
