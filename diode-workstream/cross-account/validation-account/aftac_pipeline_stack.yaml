@@ -77,8 +77,7 @@ Resources:
   LongTermStorageBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: LongTermStorageBucket
+      Bucket: !Ref LongTermStorageBucket
       PolicyDocument:
         Statement:
           - Action: s3:*
@@ -89,15 +88,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - LongTermStorageBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - LongTermStorageBucket
-                        - Arn
-                    - /*
+              - !Sub ${LongTermStorageBucket.Arn}
+              - !Sub ${LongTermStorageBucket.Arn}/*
         Version: "2012-10-17"
 
   QuarantineBucket:
@@ -114,8 +106,7 @@ Resources:
   QuarantineBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: QuarantineBucket
+      Bucket: !Ref QuarantineBucket
       PolicyDocument:
         Statement:
           - Action: s3:*
@@ -126,15 +117,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - QuarantineBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - QuarantineBucket
-                        - Arn
-                    - /*
+              - !Sub ${QuarantineBucket.Arn}
+              - !Sub ${QuarantineBucket.Arn}/*
         Version: "2012-10-17"
 
   InvalidFilesBucket:
@@ -151,8 +135,7 @@ Resources:
   InvalidFilesBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: InvalidFilesBucket
+      Bucket: !Ref InvalidFilesBucket
       PolicyDocument:
         Statement:
           - Action: s3:*
@@ -163,15 +146,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - InvalidFilesBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - InvalidFilesBucket
-                        - Arn
-                    - /*
+              - !Sub ${InvalidFilesBucket.Arn}
+              - !Sub ${InvalidFilesBucket.Arn}/*
         Version: "2012-10-17"
 
   PipelineFunctionSecurityGroup:
@@ -221,9 +197,7 @@ Resources:
         Monitoring:
           Enabled: false
         SecurityGroupIds:
-          - Fn::GetAtt:
-              - AvScanSecurityGroup
-              - GroupId
+          - !GetAtt AvScanSecurityGroup.GroupId
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -239,12 +213,8 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       LaunchTemplate:
-        LaunchTemplateId:
-          Ref: AutoScalingGroupLaunchTemplate
-        Version:
-          Fn::GetAtt:
-            - AutoScalingGroupLaunchTemplate
-            - LatestVersionNumber
+        LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
+        Version: !GetAtt AutoScalingGroupLaunchTemplate.LatestVersionNumber
       MaxSize: "12"
       MinSize: "2"
       Tags:
@@ -285,14 +255,13 @@ Resources:
     Properties:
       ActionsEnabled: true
       AlarmActions:
-        - Ref: AsgScaleUpAction
+        - !Ref AsgScaleUpAction
       OKActions:
-        - Ref: AsgScaleDownAction
+        - !Ref AsgScaleDownAction
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: QueueName
-          Value:
-            Fn::ImportValue: aftac-pipeline-av-scan-queue-name
+          Value: !ImportValue aftac-pipeline-av-scan-queue-name
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
@@ -314,8 +283,7 @@ Resources:
   failedtransferbucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: failedtransferbucket
+      Bucket: !Ref failedtransferbucket
       PolicyDocument:
         Statement:
           - Action: s3:*
@@ -326,15 +294,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - failedtransferbucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - failedtransferbucket
-                        - Arn
-                    - /*
+              - !Sub ${failedtransferbucket.Arn}
+              - !Sub ${failedtransferbucket.Arn}/*
         Version: "2012-10-17"
 
   transferdlq:
@@ -375,22 +336,15 @@ Resources:
   TransferResultEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
-      EventSourceArn:
-        Fn::GetAtt:
-          - TransferResultQueue
-          - Arn
-      FunctionName:
-        Ref: TransferResultLambda
+      EventSourceArn: !GetAtt TransferResultQueue.Arn
+      FunctionName: !Ref TransferResultLambda
 
   transferqueue:
     Type: AWS::SQS::Queue
     Properties:
       ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
-        deadLetterTargetArn:
-          Fn::GetAtt:
-            - transferdlq
-            - Arn
+        deadLetterTargetArn: !GetAtt transferdlq.Arn
         maxReceiveCount: 1
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
@@ -407,29 +361,17 @@ Resources:
             Effect: Deny
             Principal:
               AWS: "*"
-            Resource:
-              Fn::GetAtt:
-                - transferqueue
-                - Arn
+            Resource: !GetAtt transferqueue.Arn
           - Action: sqs:SendMessage
             Effect: Allow
             Principal:
               Service: s3.amazonaws.com
-            Resource:
-              Fn::GetAtt:
-                - transferqueue
-                - Arn
+            Resource: !GetAtt transferqueue.Arn
             Condition:
               StringEquals:
-                aws:SourceAccount:
-                  Ref: AWS::AccountId
+                aws:SourceAccount: !Ref AWS::AccountId
               ArnLike:
-                aws:SourceArn:
-                  Fn::Join:
-                    - ""
-                    - - "arn:"
-                      - !Ref AWS::Partition
-                      - ":s3:::*"
+                aws:SourceArn: !Sub arn:${AWS::Partition}:s3:::*
           - Action:
               - sqs:ReceiveMessage
               - sqs:DeleteMessage
@@ -437,13 +379,10 @@ Resources:
             Effect: Allow
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
-            Resource:
-              Fn::GetAtt:
-                - transferqueue
-                - Arn
+            Resource: !GetAtt transferqueue.Arn
         Version: "2012-10-17"
       Queues:
-        - Ref: transferqueue
+        - !Ref transferqueue
 
   TransferResultQueue:
     Type: AWS::SQS::Queue
@@ -464,22 +403,16 @@ Resources:
             Effect: Deny
             Principal:
               AWS: "*"
-            Resource:
-              Fn::GetAtt:
-                - transferqueue
-                - Arn
+            Resource: !GetAtt transferqueue.Arn
           - Action:
               - sqs:SendMessage
             Effect: Allow
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
-            Resource:
-              Fn::GetAtt:
-                - TransferResultQueue
-                - Arn
+            Resource: !GetAtt TransferResultQueue.Arn
         Version: "2012-10-17"
       Queues:
-        - Ref: TransferResultQueue
+        - !Ref TransferResultQueue
 
   TransferStatusTable:
     Type: AWS::DynamoDB::Table
@@ -532,10 +465,7 @@ Resources:
       NotificationConfiguration:
         QueueConfigurations:
           - Event: s3:ObjectCreated:*
-            Queue:
-              Fn::GetAtt:
-                - transferqueue
-                - Arn
+            Queue: !GetAtt transferqueue.Arn
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     DependsOn:
@@ -545,8 +475,7 @@ Resources:
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: DataTransferBucket
+      Bucket: !Ref DataTransferBucket
       PolicyDocument:
         Statement:
           - Action: s3:*
@@ -557,15 +486,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - DataTransferBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - DataTransferBucket
-                        - Arn
-                    - /*
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
           - Action:
               - s3:GetObject
               - s3:GetObjectTagging
@@ -573,15 +495,8 @@ Resources:
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
             Resource:
-              - Fn::GetAtt:
-                  - DataTransferBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - DataTransferBucket
-                        - Arn
-                    - /*
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
 
           # The Below Lines required the Lambda Mapping Role ARN
           # Has not been tested yet...
@@ -610,15 +525,8 @@ Resources:
             Principal:
               AWS: "arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9"
             Resource:
-              - Fn::GetAtt:
-                  - DataTransferBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - DataTransferBucket
-                        - Arn
-                    - /*
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
         Version: "2012-10-17"
 
   ApprovedFileTypesParameter:
