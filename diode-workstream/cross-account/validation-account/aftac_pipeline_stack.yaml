@@ -83,14 +83,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${LongTermStorageBucket.Arn}
               - !Sub ${LongTermStorageBucket.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   QuarantineBucket:
     Type: AWS::S3::Bucket
@@ -112,14 +112,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${QuarantineBucket.Arn}
               - !Sub ${QuarantineBucket.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   InvalidFilesBucket:
     Type: AWS::S3::Bucket
@@ -141,14 +141,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${InvalidFilesBucket.Arn}
               - !Sub ${InvalidFilesBucket.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   PipelineFunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -289,14 +289,14 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
             Resource:
               - !Sub ${failedtransferbucket.Arn}
               - !Sub ${failedtransferbucket.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   transferdlq:
     Type: AWS::SQS::Queue
@@ -359,7 +359,7 @@ Resources:
           - Action: sqs:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
@@ -382,7 +382,7 @@ Resources:
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
             Resource: !GetAtt transferqueue.Arn
-        Version: "2012-10-17"
+        Version: 2012-10-17
       Queues:
         - !Ref transferqueue
 
@@ -402,7 +402,7 @@ Resources:
           - Action: sqs:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
@@ -413,7 +413,7 @@ Resources:
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
             Resource: !GetAtt TransferResultQueue.Arn
-        Version: "2012-10-17"
+        Version: 2012-10-17
       Queues:
         - !Ref TransferResultQueue
 
@@ -484,7 +484,7 @@ Resources:
           - Action: s3:*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
             Effect: Deny
             Principal:
               AWS: "*"
@@ -526,11 +526,11 @@ Resources:
               - s3:GetObjectTagging
             Effect: Allow
             Principal:
-              AWS: "arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9"
+              AWS: arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9
             Resource:
               - !Sub ${DataTransferBucket.Arn}
               - !Sub ${DataTransferBucket.Arn}/*
-        Version: "2012-10-17"
+        Version: 2012-10-17
 
   ApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
