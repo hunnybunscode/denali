@@ -2,55 +2,67 @@ Parameters:
   DataTransferLambdaRoleArn:
     Type: String
     Description: The ARN of the Data Transfer Lambda Role
-    Default: ''
+    Default: ""
+
   PipelineAmiId:
     Type: String
     Description: The AMI ID to use for the pipeline.
     Default: ami-0d5355919bf9f9b1e
+
   DiodeAccountId:
     Type: String
     Description: AWS Account ID of the Diode Account
-    Default: ''
+    Default: ""
+
   VpcCidr:
     Type: String
     Description: The CIDR block of the existing VPC
-    Default: ''
+    Default: ""
+
   Ec2ScannerInstanceProfileARN:
     Type: String
     Description: The ARN of the EC2 Scanner Role
-    Default: ''
+    Default: ""
+
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
-    Default: ''
+    Default: ""
+
   AftacVpcId:
     Type: String
     Description: The VPC ID to use for the pipeline
-    Default: ''
+    Default: ""
+
   LambdaStorageBucket:
     Type: String
     Description: The S3 bucket to store the lambda code in
-    Default: ''
+    Default: ""
+
   TransferResultLambdaCodeKey:
     Type: String
     Description: The S3 key of the pipeline lambda code
-    Default: ''
+    Default: ""
+
   TransferResultServiceRole:
     Type: String
     Description: The ARN of the IAM role for the Transfer Result Lambda
-    Default: ''
+    Default: ""
+
   ApprovedFileTypes:
     Type: String
     Description: The list of approved file types
-    Default: ''
+    Default: ""
+
   DfdlApprovedFileTypes:
     Type: String
     Description: The list of approved file types for DFDL
-    Default: ''
+    Default: ""
+
   LambdaMappingRoleArn:
     Type: String
     Description: The ARN of the Lambda Mapping Role
-    Default: ''
+    Default: ""
 
 Resources:
   LongTermStorageBucket:
@@ -63,17 +75,14 @@ Resources:
         RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
-        - Status: Enabled
-          Id: GlacierTransitions
-          Prefix: Glacier
-          Transitions:
-          - TransitionInDays: 30
-            StorageClass: GLACIER_IR
-          - TransitionInDays: 120
-            StorageClass: GLACIER
-              
-
-
+          - Status: Enabled
+            Id: GlacierTransitions
+            Prefix: Glacier
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: GLACIER_IR
+              - TransitionInDays: 120
+                StorageClass: GLACIER
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
@@ -176,6 +185,7 @@ Resources:
                         - Arn
                     - /*
         Version: "2012-10-17"
+
   PipelineFunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -199,8 +209,6 @@ Resources:
           Description: Permit Access from VPC
           IpProtocol: "-1"
       VpcId: !Ref AftacVpcId
-
-
 
   InfectedFileTopic:
     Type: AWS::SNS::Topic
@@ -271,6 +279,7 @@ Resources:
       StepAdjustments:
         - MetricIntervalLowerBound: 0
           ScalingAdjustment: 1
+
   AsgScaleDownAction:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
@@ -294,7 +303,7 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: QueueName
-          Value: 
+          Value:
             Fn::ImportValue: aftac-pipeline-av-scan-queue-name
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
@@ -302,7 +311,6 @@ Resources:
       Period: 120
       Statistic: Average
       Threshold: 50
-
 
   failedtransferbucket:
     Type: AWS::S3::Bucket
@@ -362,14 +370,10 @@ Resources:
         S3Key: !Ref TransferResultLambdaCodeKey
       Environment:
         Variables:
-          FAILED_TRANSFER_TOPIC_ARN:
-            !GetAtt FailedTransferTopic.TopicArn
-          DATA_TRANSFER_BUCKET:
-            !Ref DataTransferBucket
-          DYNAMODB_TABLE_NAME:
-            !Ref TransferStatusTable
-          FAILED_TRANSFER_BUCKET:
-            !Ref failedtransferbucket
+          FAILED_TRANSFER_TOPIC_ARN: !GetAtt FailedTransferTopic.TopicArn
+          DATA_TRANSFER_BUCKET: !Ref DataTransferBucket
+          DYNAMODB_TABLE_NAME: !Ref TransferStatusTable
+          FAILED_TRANSFER_BUCKET: !Ref failedtransferbucket
       FunctionName: Transfer-Result-lambda
       Handler: transfer_result.lambda_handler
       Role: !Ref TransferResultServiceRole
@@ -402,7 +406,6 @@ Resources:
         maxReceiveCount: 1
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
-
 
   transferqueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -439,10 +442,10 @@ Resources:
                     - - "arn:"
                       - !Ref AWS::Partition
                       - ":s3:::*"
-          - Action: 
-            - sqs:ReceiveMessage
-            - sqs:DeleteMessage
-            - sqs:GetQueueAttributes
+          - Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
             Effect: Allow
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
@@ -454,14 +457,13 @@ Resources:
       Queues:
         - Ref: transferqueue
 
-
-
   TransferResultQueue:
     Type: AWS::SQS::Queue
     Properties:
       ReceiveMessageWaitTimeSeconds: 20
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
+
   TransferResultQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
@@ -478,8 +480,8 @@ Resources:
               Fn::GetAtt:
                 - transferqueue
                 - Arn
-          - Action: 
-            - sqs:SendMessage
+          - Action:
+              - sqs:SendMessage
             Effect: Allow
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
@@ -491,14 +493,13 @@ Resources:
       Queues:
         - Ref: TransferResultQueue
 
-
   TransferStatusTable:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
       SSESpecification:
         SSEEnabled: true
-### Added Below: Anything you use in the GSI Key Schema must be added to Attribute Definitions
+      ### Added Below: Anything you use in the GSI Key Schema must be added to Attribute Definitions
       AttributeDefinitions:
         - AttributeName: s3Key
           AttributeType: S
@@ -553,7 +554,6 @@ Resources:
       - transferqueue
       - transferqueuePolicy
 
-
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -578,9 +578,9 @@ Resources:
                         - DataTransferBucket
                         - Arn
                     - /*
-          - Action: 
-            - s3:GetObject
-            - s3:GetObjectTagging
+          - Action:
+              - s3:GetObject
+              - s3:GetObjectTagging
             Effect: Allow
             Principal:
               AWS: !Ref DataTransferLambdaRoleArn
@@ -595,10 +595,9 @@ Resources:
                         - Arn
                     - /*
 
-
-      # The Below Lines required the Lambda Mapping Role ARN
-      # Has not been tested yet...
-          # - Action: 
+          # The Below Lines required the Lambda Mapping Role ARN
+          # Has not been tested yet...
+          # - Action:
           #   - s3:GetObject
           #   - s3:GetObjectTagging
           #   Effect: Allow
@@ -614,14 +613,14 @@ Resources:
           #               - DataTransferBucket
           #               - Arn
           #           - /*
-    ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
-    ##### REMOVE PRIOR TO AFTAC DEPLOYMENT
-          - Action: 
-            - s3:GetObject
-            - s3:GetObjectTagging
+          ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
+          ##### REMOVE PRIOR TO AFTAC DEPLOYMENT
+          - Action:
+              - s3:GetObject
+              - s3:GetObjectTagging
             Effect: Allow
             Principal:
-              AWS: 'arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9'
+              AWS: "arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9"
             Resource:
               - Fn::GetAtt:
                   - DataTransferBucket
@@ -634,8 +633,6 @@ Resources:
                     - /*
         Version: "2012-10-17"
 
-
-
   ApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -643,6 +640,7 @@ Resources:
       Name: /pipeline/ApprovedFileTypes
       Type: String
       Value: !Ref ApprovedFileTypes
+
   DfdlApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -658,6 +656,7 @@ Resources:
       Name: /pipeline/InvalidFilesBucketName
       Type: String
       Value: !Ref InvalidFilesBucket
+
   InvalidFilesTopicArnParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -665,6 +664,7 @@ Resources:
       Name: /pipeline/InvalidFilesTopicArn
       Type: String
       Value: !GetAtt InvalidFilesTopic.TopicArn
+
   DataTransferIngestBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -672,6 +672,7 @@ Resources:
       Name: /pipeline/DataTransferIngestBucketName
       Type: String
       Value: !Ref DataTransferBucket
+
   QuarantineBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -679,6 +680,7 @@ Resources:
       Name: /pipeline/QuarantineBucketName
       Type: String
       Value: !Ref QuarantineBucket
+
   DataTransferQueueURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -686,6 +688,7 @@ Resources:
       Name: /pipeline/DataTransferQueueUrl
       Type: String
       Value: !GetAtt transferqueue.QueueUrl
+
   LongTermStorageBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -693,6 +696,7 @@ Resources:
       Name: /pipeline/LongTermStorageBucketName
       Type: String
       Value: !Ref LongTermStorageBucket
+
   QuarantineTopicARNParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -701,7 +705,7 @@ Resources:
       Type: String
       Value: !GetAtt InfectedFileTopic.TopicArn
 
-# ######## CUSTOM RESOURCES TO ADD EVENT NOTIFICATION 
+# ######## CUSTOM RESOURCES TO ADD EVENT NOTIFICATION
 #   CustomResourceRole:
 #     Type: AWS::IAM::Role
 #     Properties:
@@ -783,7 +787,7 @@ Resources:
 #     Type: Custom::AWS
 #     Properties:
 #       ServiceToken: !GetAtt CustomResourceFunction.Arn
-#       Create: 
+#       Create:
 #         - !Join
 #           - ''
 #           - - '{"action":"invoke","service":"Lambda","parameters":{"FunctionName":"'
@@ -814,7 +818,7 @@ Resources:
 #     Type: Custom::AWS
 #     Properties:
 #       ServiceToken: !GetAtt CustomResourceFunction.Arn
-#       Create: 
+#       Create:
 #         - !Join
 #           - ''
 #           - - '{"action":"invoke","service":"Lambda","parameters":{"FunctionName":"'
@@ -828,15 +832,9 @@ Resources:
 #     UpdateReplacePolicy: Delete
 #     DeletionPolicy: Delete
 
-
-
-
-
 Outputs:
-
   PipelineSecurityGroupExport:
     Description: Security Group ID of the pipeline function
     Value: !Ref PipelineFunctionSecurityGroup
     Export:
       Name: aftac-pipeline-security-group
-
