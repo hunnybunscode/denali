@@ -5,16 +5,22 @@ Parameters:
     Type: String
     Description: VPC ID for AFTAC VPC
     Default: vpc-048daa85d41f50b10
+    AllowedPattern: ^vpc-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid VPC ID.
 
   PrivateRouteTableIds:
     Type: CommaDelimitedList
     Description: Private Route Table IDs for AFTAC VPC
     Default: rtb-07027991a9dbb1f36
+    AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be one or more valid route table IDs.
 
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: Private Subnet IDs for AFTAC VPC
     Default: subnet-0f2d694defec254c9, subnet-0f64b1f3ba14fd6ee, subnet-0e44f6353b9e3ee92
+    AllowedPattern: ^subnet-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be one or more valid subnet IDs.
 
   ExistingVpcCidr:
     Type: String
