@@ -301,6 +301,7 @@ Resources:
   transferdlq:
     Type: AWS::SQS::Queue
     Properties:
+      MessageRetentionPeriod: 345600 # Default value (4 days)
       KmsMasterKeyId: alias/aws/sqs
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
@@ -342,6 +343,7 @@ Resources:
   transferqueue:
     Type: AWS::SQS::Queue
     Properties:
+      MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt transferdlq.Arn
@@ -387,6 +389,7 @@ Resources:
   TransferResultQueue:
     Type: AWS::SQS::Queue
     Properties:
+      MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
