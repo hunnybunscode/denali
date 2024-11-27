@@ -25,7 +25,7 @@ Parameters:
   PipelineStackDiodeAccountId:
     Type: String
     Description: Account ID for Diode Account
-    Default: "062339239041"
+    Default: 062339239041
 
   TemplateURLSftpServerStack:
     Type: String
@@ -34,17 +34,17 @@ Parameters:
   TemplateURLLoggingStack:
     Type: String
     Description: S3 URL for LoggingStack
-    Default: "https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml"
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml
 
   TemplateURLIngestStack:
     Type: String
     Description: S3 URL for IngestStack
-    Default: "https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml"
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
 
   TemplateURLPipelineStack:
     Type: String
     Description: S3 URL for PipelineStack
-    Default: "https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml"
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml
 
   SftpServerStackSftpUserName:
     Type: String
@@ -54,17 +54,17 @@ Parameters:
   SftpServerStackTransferUserRoleArn:
     Type: String
     Description: Role ARN for Transfer user
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferUserRole-0pQEMV7bs5oB"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferUserRole-0pQEMV7bs5oB
 
   SftpServerStackTransferLoggingRoleArn:
     Type: String
     Description: Role ARN for Transfer logging
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferLoggingRole-Wfe9l4IHH9mZ"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferLoggingRole-Wfe9l4IHH9mZ
 
   AftacVpcId:
     Type: String
     Description: VPC ID for AFTAC Cloud
-    Default: "vpc-0e8995e670cc55aed"
+    Default: vpc-0e8995e670cc55aed
 
   SftpServerStackSftpServerSubnetIds:
     Type: CommaDelimitedList
@@ -74,37 +74,37 @@ Parameters:
   LoggingStackCloudTrailLogsRoleARN:
     Type: String
     Description: ARN of the role that CloudTrail will assume to put logs into the log bucket.
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2
 
   IngestStackpresigngeneratorServiceRole:
     Type: String
     Description: ARN of the service role for the presign generator lambda
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-PresignGeneratorServiceRole-ULoKi3d6jtk1"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-PresignGeneratorServiceRole-ULoKi3d6jtk1
 
   LambdaStorageBucket:
     Type: String
     Description: S3 bucket where the lambda code is stored
-    Default: "aftac-cloudformation-templates"
+    Default: aftac-cloudformation-templates
 
   IngestStackObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 key for the ObjectTagger lambda code
-    Default: "lambda_functions/object_tagger.zip"
+    Default: lambda_functions/object_tagger.zip
 
   IngestStackApiGwLambdaCodeKey:
     Type: String
     Description: S3 key for the API Gateway lambda code
-    Default: "lambda_functions/api_gw_lambda_functions.zip"
+    Default: lambda_functions/api_gw_lambda_functions.zip
 
   IngestStackfileuploaderCloudWatchRole:
     Type: String
     Description: ARN of the file uploader CloudWatch role
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-FileuploaderCloudWatchRole-xhEQq0tIEvVk"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-FileuploaderCloudWatchRole-xhEQq0tIEvVk
 
   IngestStackAPILambdaInvokeRole:
     Type: String
     Description: ARN of the API Lambda invoke role
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-APILambdaInvokeRole-1nh0H5T3vvAr"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-APILambdaInvokeRole-1nh0H5T3vvAr
 
   PipelineStackPipelineAmiId:
     Type: String
@@ -159,12 +159,12 @@ Parameters:
   PipelineStackTransferResultLambdaCodeKey:
     Type: String
     Description: The S3 key of the pipeline lambda code
-    Default: "lambda_functions/transfer_result.zip"
+    Default: lambda_functions/transfer_result.zip
 
   PipelineStackTransferResultServiceRole:
     Type: String
     Description: The ARN of the IAM role for the TransferResult Lambda
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferResultLambdaRole-rcTfF0po1uRc"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferResultLambdaRole-rcTfF0po1uRc
 
   PipelineStackLambdaMappingRoleArn:
     Type: String
@@ -173,12 +173,12 @@ Parameters:
   PipelineStackObjectTaggerRoleARN:
     Type: String
     Description: The ARN of the Object Tagger Role
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl
 
   PipelineStackInvokeTaggerRoleARN:
     Type: String
     Description: The ARN of the Invoke Tagger Role
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE
 
   SftpServerStackSftpBucketDataOwner:
     Type: String
