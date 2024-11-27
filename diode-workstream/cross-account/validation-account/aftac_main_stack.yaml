@@ -21,7 +21,6 @@ Parameters:
   PipelineStackDataTransferLambdaRoleArn:
     Type: String
     Description: ARN for Data Transfer Lambda in Diode Account
-    Default: ""
 
   PipelineStackDiodeAccountId:
     Type: String
@@ -31,7 +30,6 @@ Parameters:
   TemplateURLSftpServerStack:
     Type: String
     Description: S3 URL for SftpServerStack
-    Default: ""
 
   TemplateURLLoggingStack:
     Type: String
@@ -171,7 +169,6 @@ Parameters:
   PipelineStackLambdaMappingRoleArn:
     Type: String
     Description: The ARN of the Lambda Mapping Role
-    Default: ""
 
   PipelineStackObjectTaggerRoleARN:
     Type: String
