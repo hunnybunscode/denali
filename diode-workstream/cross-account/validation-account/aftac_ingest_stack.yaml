@@ -112,10 +112,7 @@ Resources:
             Effect: Deny
             Principal:
               AWS: "*"
-            Resource:
-              Fn::GetAtt:
-                - AvScanQueue
-                - Arn
+            Resource: !GetAtt AvScanQueue.Arn
         Version: "2012-10-17"
       Queues:
         - Ref: AvScanQueue
@@ -226,15 +223,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - IngestBucket1
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - IngestBucket1
-                        - Arn
-                    - /*
+              - !Sub ${IngestBucket1.Arn}
+              - !Sub ${IngestBucket1.Arn}/*
         Version: "2012-10-17"
 
   IngestBucket2:
@@ -270,15 +260,8 @@ Resources:
             Principal:
               AWS: "*"
             Resource:
-              - Fn::GetAtt:
-                  - IngestBucket2
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - IngestBucket2
-                        - Arn
-                    - /*
+              - !Sub ${IngestBucket2.Arn}
+              - !Sub ${IngestBucket2.Arn}/*
         Version: "2012-10-17"
 
   presigngenerator:
@@ -331,8 +314,7 @@ Resources:
     Type: AWS::ApiGateway::Stage
     Properties:
       AccessLogSetting:
-        DestinationArn:
-          Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
+        DestinationArn: !ImportValue aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
@@ -354,10 +336,7 @@ Resources:
   fileuploaderupload:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId:
-        Fn::GetAtt:
-          - fileuploader
-          - RootResourceId
+      ParentId: !GetAtt fileuploader.RootResourceId
       PathPart: upload
       RestApiId:
         Ref: fileuploader
@@ -368,20 +347,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref presigngenerator
       Principal: apigateway.amazonaws.com
-      SourceArn:
-        Fn::Join:
-          - ""
-          - - "arn:"
-            - Ref: AWS::Partition
-            - ":execute-api:"
-            - Ref: AWS::Region
-            - ":"
-            - Ref: AWS::AccountId
-            - ":"
-            - Ref: fileuploader
-            - "/"
-            - Ref: fileuploaderDeploymentStageprod
-            - "/POST/upload"
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${fileuploader}/${fileuploaderDeploymentStageprod}/POST/upload
 
   fileuploaderuploadPOST:
     Type: AWS::ApiGateway::Method
@@ -397,18 +363,7 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri:
-          Fn::Join:
-            - ""
-            - - "arn:"
-              - !Ref AWS::Partition
-              - ":apigateway:"
-              - !Ref AWS::Region
-              - ":lambda:path/2015-03-31/functions/"
-              - Fn::GetAtt:
-                  - presigngenerator
-                  - Arn
-              - "/invocations"
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json:
@@ -433,16 +388,7 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri:
-          Fn::Join:
-            - ""
-            - - "arn:"
-              - Ref: AWS::Partition
-              - ":apigateway:"
-              - Ref: AWS::Region
-              - ":lambda:path/2015-03-31/functions/"
-              - !GetAtt presigngenerator.Arn
-              - "/invocations"
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json:
@@ -539,8 +485,7 @@ Resources:
     Type: AWS::ApiGateway::Stage
     Properties:
       AccessLogSetting:
-        DestinationArn:
-          Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
+        DestinationArn: !ImportValue aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
@@ -562,10 +507,7 @@ Resources:
   fileuploaderupload2:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId:
-        Fn::GetAtt:
-          - fileuploader2
-          - RootResourceId
+      ParentId: !GetAtt fileuploader2.RootResourceId
       PathPart: upload
       RestApiId:
         Ref: fileuploader2
@@ -574,25 +516,9 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName:
-        Fn::GetAtt:
-          - presigngenerator2
-          - Arn
+      FunctionName: !GetAtt presigngenerator2.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn:
-        Fn::Join:
-          - ""
-          - - "arn:"
-            - Ref: AWS::Partition
-            - ":execute-api:"
-            - Ref: AWS::Region
-            - ":"
-            - Ref: AWS::AccountId
-            - ":"
-            - Ref: fileuploader
-            - "/"
-            - Ref: fileuploaderDeploymentStageprod
-            - "/POST/upload"
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${fileuploader}/${fileuploaderDeploymentStageprod}/POST/upload
 
   fileuploaderuploadPOST2:
     Type: AWS::ApiGateway::Method
@@ -608,18 +534,7 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri:
-          Fn::Join:
-            - ""
-            - - "arn:"
-              - !Ref AWS::Partition
-              - ":apigateway:"
-              - !Ref AWS::Region
-              - ":lambda:path/2015-03-31/functions/"
-              - Fn::GetAtt:
-                  - presigngenerator2
-                  - Arn
-              - "/invocations"
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator2.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json:
@@ -815,8 +730,7 @@ Resources:
     Type: AWS::ApiGateway::Stage
     Properties:
       AccessLogSetting:
-        DestinationArn:
-          Fn::ImportValue: aftac-pipeline-ApiGatewayStageLogGroup
+        DestinationArn: !ImportValue aftac-pipeline-ApiGatewayStageLogGroup
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
@@ -838,10 +752,7 @@ Resources:
   Nodefileuploaderupload:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId:
-        Fn::GetAtt:
-          - Nodefileuploader
-          - RootResourceId
+      ParentId: !GetAtt Nodefileuploader.RootResourceId
       PathPart: upload
       RestApiId:
         Ref: Nodefileuploader
@@ -850,25 +761,9 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName:
-        Fn::GetAtt:
-          - Nodepresigngenerator
-          - Arn
+      FunctionName: !GetAtt Nodepresigngenerator.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn:
-        Fn::Join:
-          - ""
-          - - "arn:"
-            - Ref: AWS::Partition
-            - ":execute-api:"
-            - Ref: AWS::Region
-            - ":"
-            - Ref: AWS::AccountId
-            - ":"
-            - Ref: Nodefileuploader
-            - "/"
-            - Ref: NodefileuploaderDeploymentStageprod
-            - "/POST/upload"
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Nodefileuploader}/${NodefileuploaderDeploymentStageprod}/POST/upload
 
   NodefileuploaderuploadPOST:
     Type: AWS::ApiGateway::Method
@@ -884,18 +779,7 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri:
-          Fn::Join:
-            - ""
-            - - "arn:"
-              - !Ref AWS::Partition
-              - ":apigateway:"
-              - !Ref AWS::Region
-              - ":lambda:path/2015-03-31/functions/"
-              - Fn::GetAtt:
-                  - Nodepresigngenerator
-                  - Arn
-              - "/invocations"
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${Nodepresigngenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json:
