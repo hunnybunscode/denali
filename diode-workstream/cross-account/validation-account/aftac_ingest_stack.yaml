@@ -10,47 +10,38 @@ Parameters:
   ObjectTaggerRoleARN:
     Type: String
     Description: The ARN of the IAM role for the Object Tagger Lambda
-    Default: ""
 
   presigngeneratorServiceRole:
     Type: String
     Description: ARN of the service role for the presign generator lambda
-    Default: ""
 
   ObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 key for the object tagger lambda code
-    Default: ""
 
   LambdaStorageBucket:
     Type: String
     Description: S3 bucket where the lambda code is stored
-    Default: ""
 
   ApiGwLambdaCodeKey:
     Type: String
     Description: S3 key for the API Gateway lambda code
-    Default: ""
 
   fileuploaderCloudWatchRole:
     Type: String
     Description: ARN of the file uploader CloudWatch role
-    Default: ""
 
   APILambdaInvokeRole:
     Type: String
     Description: ARN of the API Lambda invoke role
-    Default: ""
 
   AftacVpcId:
     Type: String
     Description: AFTAC VPC ID
-    Default: ""
 
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
-    Default: ""
 
   BucketOneGovPoc:
     Type: String
@@ -789,8 +780,6 @@ Resources:
         Ref: Nodefileuploaderupload
       RestApiId:
         Ref: Nodefileuploader
-    DependsOn:
-      - Nodepresigngenerator
 
   NodefileuploaderuploadOPTIONS:
     Type: AWS::ApiGateway::Method
@@ -854,7 +843,7 @@ Outputs:
     Value: !Ref IngestBucket2
     Description: Name of Ingest Bucket 2
     Export:
-      Name: !Sub "Pipeline-IngestBucket2"
+      Name: "Pipeline-IngestBucket2"
 
   ###########
 
