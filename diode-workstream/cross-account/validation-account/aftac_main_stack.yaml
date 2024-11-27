@@ -218,6 +218,8 @@ Parameters:
 Resources:
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLSftpServerStack
       Parameters:
@@ -239,11 +241,15 @@ Resources:
 
   LoggingStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLLoggingStack
 
   IngestStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLIngestStack
       Parameters:
@@ -269,6 +275,8 @@ Resources:
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLPipelineStack
       Parameters:
