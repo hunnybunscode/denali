@@ -5,10 +5,10 @@
 # Lambda Permission for SQS to Invoke Function
 
 Parameters:
-  ValidationAccountId:
-    Type: String
-    Description: Account Id of the Validation Account
-    Default: 303344244756
+  # ValidationAccountId:
+  #   Type: String
+  #   Description: Account Id of the Validation Account
+  #   Default: 303344244756
 
   DataTransferBucketName:
     Type: String
@@ -55,9 +55,9 @@ Parameters:
     Description: CDS_3 Mapping Id
     Default: 12346789-abcd-1234-abcd-123456789012
 
-  DiodeMappingId:
-    Type: String
-    Description: Diode Mapping Id
+  # DiodeMappingId:
+  #   Type: String
+  #   Description: Diode Mapping Id
 
 Resources:
   DataTransferLambdaRole:
@@ -69,11 +69,8 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: /
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
       Policies:
         - PolicyName: AFC2S_DataTransferLambdaPolicy
           PolicyDocument:
@@ -84,7 +81,7 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: arn:aws-us-gov:logs:*:*:*
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
               - Effect: Allow
                 Action:
                   - s3:GetObject
