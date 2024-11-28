@@ -90,31 +90,17 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectTagging
                 Resource:
-                  - Fn::Join:
-                      - ""
-                      - - "arn:"
-                        - Ref: AWS::Partition
-                        - ":s3:::"
-                        - Ref: DataTransferBucketName
-                        - "/*"
-                  - Fn::Join:
-                      - ""
-                      - - "arn:"
-                        - Ref: AWS::Partition
-                        - ":s3:::"
-                        - Ref: DataTransferBucketName
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}
               - Effect: Allow
-                Action:
-                  - sqs:SendMessage
-                Resource:
-                  - !Ref TranferResultSqsQueueArn
+                Action: sqs:SendMessage
+                Resource: !Ref TranferResultSqsQueueArn
               - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
-                Resource:
-                  - !Ref DataTransferSqsQueueArn
+                Resource: !Ref DataTransferSqsQueueArn
 
   DataTransferLambdaFunction:
     Type: AWS::Lambda::Function
