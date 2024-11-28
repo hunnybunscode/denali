@@ -1,23 +1,23 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 Description: Creates the stack for diode service simulator. The simulator does not implement all the Diode API calls - supported calls are documented in the README.txt.
 
 Metadata:
   Copyright:
-    Value:
-      "(c) 2020, 2021 Amazon Web Services, Inc. or its affiliates. All Rights Reserved.
+    Value: >
+      (c) 2020, 2021 Amazon Web Services, Inc. or its affiliates. All Rights Reserved.
       This AWS Content is provided subject to the terms of the AWS Customer Agreement available at
-      http://aws.amazon.com/agreement or other written agreements between Customer and Amazon Web Services, Inc."
+      http://aws.amazon.com/agreement or other written agreements between Customer and Amazon Web Services, Inc.
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Simulator Application Location"
+          default: Simulator Application Location
         Parameters:
           - SoftwareDeploymentPackageBucketName
           - SimulatorDeploymentPackageObjectKey
           - ManifestHashLambdaDeploymentPackageObjectKey
 
       - Label:
-          default: "Amazon EC2 Configuration for Simulator Application"
+          default: Amazon EC2 Configuration for Simulator Application
         Parameters:
           - InstanceType
           # - KeyName
@@ -28,7 +28,7 @@ Metadata:
           - SubnetId
 
       - Label:
-          default: "Simulator Application Configuration"
+          default: Simulator Application Configuration
         Parameters:
           - SimulatorListenPort
           - SimulatorAccessLocation
@@ -45,24 +45,30 @@ Metadata:
 
 Parameters:
   SoftwareDeploymentPackageBucketName:
-    Description: "The name of your S3 bucket containing the simulator software package. This bucket must already exist and contain the simulator deployment package whose object key is specified by the SimulatorDeploymentPackageObjectKey parameter."
+    Description: >
+      The name of your S3 bucket containing the simulator software package. This bucket must already exist and contain
+      the simulator deployment package whose object key is specified by the SimulatorDeploymentPackageObjectKey parameter.
     Type: String
     MinLength: 3
 
   SimulatorDeploymentPackageObjectKey:
-    Description: "The S3 object key, contained inside of your bucket named in the SoftwareDeploymentPackageBucketName parameter, that specifies the simulator software package. (Default: diode-simulator-application.zip)"
+    Description: >
+      The S3 object key, contained inside of your bucket named in the SoftwareDeploymentPackageBucketName parameter,
+      that specifies the simulator software package. (Default: diode-simulator-application.zip)
     Type: String
     MinLength: 3
-    AllowedPattern: ".*\\.zip"
-    ConstraintDescription: "must be the zip file name uploaded to s3 with simulator application bundle"
+    AllowedPattern: ^\S+\.zip$
+    ConstraintDescription: must be the zip file name uploaded to s3 with simulator application bundle
     Default: diode-simulator-application.zip
 
   ManifestHashLambdaDeploymentPackageObjectKey:
-    Description: "The S3 object key, contained inside of your bucket named in the SoftwareDeploymentPackageBucketName parameter, that specifies the Lambda hash calculators package. (Default: diode-simulator-swams-lambda-application.zip)"
+    Description: >
+      The S3 object key, contained inside of your bucket named in the SoftwareDeploymentPackageBucketName parameter,
+      that specifies the Lambda hash calculators package. (Default: diode-simulator-swams-lambda-application.zip)
     Type: String
     MinLength: 3
-    AllowedPattern: ".*\\.zip"
-    ConstraintDescription: "must be the zip file name uploaded to s3 with lambda functions for hash calculations"
+    AllowedPattern: ^\S+\.zip$
+    ConstraintDescription: must be the zip file name uploaded to s3 with lambda functions for hash calculations
     Default: diode-simulator-swams-lambda-application.zip
 
   InstanceType:
@@ -89,8 +95,8 @@ Parameters:
 
   LatestAmiId:
     # Use amazon linux 2
-    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
-    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
 
   #  KeyName:
   #    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
@@ -107,7 +113,7 @@ Parameters:
   #    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
 
   SimulatorListenPort:
-    Description: "The port number to listen on for API and CLI calls. (min=80, max=65000). Does not support https."
+    Description: The port number to listen on for API and CLI calls. (min=80, max=65000). Does not support https.
     Type: Number
     MinValue: 80
     MaxValue: 65000
@@ -124,56 +130,54 @@ Parameters:
     ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
 
   LowSideBucketName:
-    Description: "The name of the S3 bucket whose objects will be transferred via diode. This bucket will be created-leave blank if you would like one auto-generated."
+    Description: The name of the S3 bucket whose objects will be transferred via diode. This bucket will be created-leave blank if you would like one auto-generated.
     Type: String
-    Default: ""
 
   HighSideBucketName:
-    Description: "The name of the S3 bucket where successfully transferred objects will be placed. This bucket will be created-leave blank if you would like one auto-generated."
+    Description: The name of the S3 bucket where successfully transferred objects will be placed. This bucket will be created-leave blank if you would like one auto-generated.
     Type: String
-    Default: ""
 
   EnableAllBucketsAccess:
     AllowedValues: ["false", "true"]
     Default: "false"
-    Description: "Select true to allow simulator read access to all bucket data for you to simulate transfers and to allow using multiple buckets for high side mapping setup."
+    Description: Select true to allow simulator read access to all bucket data for you to simulate transfers and to allow using multiple buckets for high side mapping setup.
     Type: String
 
   MaximumDiodeTransfersPerSecond:
-    Description: "Each call to createTransfer will be placed against this limit. (min=1, max=10)"
+    Description: Each call to createTransfer will be placed against this limit. (min=1, max=10)
     Type: Number
     MinValue: 1
     MaxValue: 10
     Default: 1
 
   MaximumAllowedMBInTransit:
-    Description: "The total size of all transfers in transit allowed (in MB) until throttled. (min=2048, max=8192)"
+    Description: The total size of all transfers in transit allowed (in MB) until throttled. (min=2048, max=8192)
     Type: Number
     MinValue: 2048
     MaxValue: 8192
     Default: 2048
 
   MaximumFileSizeAllowed:
-    Description: "The maximum file size allowed in MB for transfers. Default diode limits are 100MB."
+    Description: The maximum file size allowed in MB for transfers. Default diode limits are 100MB.
     Type: Number
     AllowedValues: [1024, 2048]
     Default: 1024
 
   NumberOfCDSSystemsToRun:
-    Description: "Total number of parallel CDS threads to run. (min=1, max=6)"
+    Description: Total number of parallel CDS threads to run. (min=1, max=6)
     Type: Number
     MinValue: 1
     MaxValue: 6
     Default: 1
 
   RandomTransferFailures:
-    Description: "If random transfer fails should occur then set to true."
+    Description: If random transfer fails should occur then set to true.
     AllowedValues: ["false", "true"]
     Default: "false"
     Type: String
 
   LogRetentionInDays:
-    Description: "Select number of days to retain simulator logs in cloudwatch - default is 7 days"
+    Description: Select number of days to retain simulator logs in cloudwatch - default is 7 days
     AllowedValues:
       - 1
       - 3
@@ -196,7 +200,7 @@ Parameters:
     Type: Number
 
   CloudWatchEventsSource:
-    Description: "Value for source parameter in generated cloudwatch events. Do not use anything with aws in the prefix."
+    Description: Value for source parameter in generated cloudwatch events. Do not use anything with aws in the prefix.
     Default: diode.simulator
     Type: String
 
@@ -238,7 +242,7 @@ Resources:
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 900
       KmsDataKeyReusePeriodSeconds: 43200
-      KmsMasterKeyId: "alias/aws/sqs"
+      KmsMasterKeyId: alias/aws/sqs
 
   LowSideBucket:
     Type: AWS::S3::Bucket
@@ -271,11 +275,11 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
-        - AttributeName: "transferId"
-          AttributeType: "S"
+        - AttributeName: transferId
+          AttributeType: S
       KeySchema:
-        - AttributeName: "transferId"
-          KeyType: "HASH"
+        - AttributeName: transferId
+          KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 20
         WriteCapacityUnits: 20
@@ -284,11 +288,11 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
-        - AttributeName: "mappingId"
-          AttributeType: "S"
+        - AttributeName: mappingId
+          AttributeType: S
       KeySchema:
-        - AttributeName: "mappingId"
-          KeyType: "HASH"
+        - AttributeName: mappingId
+          KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 20
         WriteCapacityUnits: 20
@@ -297,26 +301,26 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
-        - AttributeName: "transferManifestId"
-          AttributeType: "S"
-        - AttributeName: "status"
-          AttributeType: "S"
-        - AttributeName: "cleanupDate"
-          AttributeType: "N"
-        - AttributeName: "internalStatus"
-          AttributeType: "S"
-        - AttributeName: "expiryTime"
-          AttributeType: "N"
-        - AttributeName: "mappingId"
-          AttributeType: "S"
+        - AttributeName: transferManifestId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: cleanupDate
+          AttributeType: N
+        - AttributeName: internalStatus
+          AttributeType: S
+        - AttributeName: expiryTime
+          AttributeType: N
+        - AttributeName: mappingId
+          AttributeType: S
       KeySchema:
-        - AttributeName: "transferManifestId"
-          KeyType: "HASH"
+        - AttributeName: transferManifestId
+          KeyType: HASH
       GlobalSecondaryIndexes:
         - IndexName: transferManifestId-cleanup-index
           KeySchema:
             - AttributeName: cleanupDate
-              KeyType: "HASH"
+              KeyType: HASH
           Projection:
             ProjectionType: ALL
           ProvisionedThroughput:
@@ -325,9 +329,9 @@ Resources:
         - IndexName: internal-status-index
           KeySchema:
             - AttributeName: internalStatus
-              KeyType: "HASH"
+              KeyType: HASH
             - AttributeName: expiryTime
-              KeyType: "RANGE"
+              KeyType: RANGE
           Projection:
             ProjectionType: ALL
           ProvisionedThroughput:
@@ -336,13 +340,13 @@ Resources:
         - IndexName: status-index
           KeySchema:
             - AttributeName: status
-              KeyType: "HASH"
+              KeyType: HASH
             - AttributeName: mappingId
-              KeyType: "RANGE"
+              KeyType: RANGE
           Projection:
             ProjectionType: INCLUDE
             NonKeyAttributes:
-              - "payloadSizeBytes"
+              - payloadSizeBytes
           ProvisionedThroughput:
             ReadCapacityUnits: 20
             WriteCapacityUnits: 20
@@ -351,90 +355,90 @@ Resources:
         WriteCapacityUnits: 20
 
   DynamoDBGeneralAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorDynamoDBLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorDynamoDBLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "dynamodb:DeleteItem"
-              - "dynamodb:GetItem"
-              - "dynamodb:PutItem"
-              - "dynamodb:Query"
-              - "dynamodb:UpdateItem"
-              - "dynamodb:Scan"
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:Query
+              - dynamodb:UpdateItem
+              - dynamodb:Scan
             Resource:
-              - !GetAtt "MappingTable.Arn"
-              - !GetAtt "TransferTable.Arn"
-              - !GetAtt "ManifestTable.Arn"
+              - !GetAtt MappingTable.Arn
+              - !GetAtt TransferTable.Arn
+              - !GetAtt ManifestTable.Arn
               # include the accesses to the special indices on this table
-              - !Sub "${ManifestTable.Arn}/*"
+              - !Sub ${ManifestTable.Arn}/*
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   EC2ExecutionRole:
-    Type: "AWS::IAM::Role"
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Principal:
               Service:
-                - "ec2.amazonaws.com"
+                - ec2.amazonaws.com
             Action:
-              - "sts:AssumeRole"
-      Path: "/"
+              - sts:AssumeRole
+      Path: /
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2RoleforSSM
 
   EC2EnvironmentAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-AWSEC2EnvironmentAccess"
+      PolicyName: !Sub ${AWS::StackName}-AWSEC2EnvironmentAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
-            Action: "ec2:DescribeTags"
+          - Effect: Allow
+            Action: ec2:DescribeTags
             Resource: "*"
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   SQSGeneralAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorSQSLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorSQSLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "sqs:GetQueueAttributes"
-              - "sqs:SendMessage"
-              - "sqs:ReceiveMessage"
-              - "sqs:ChangeMessageVisibility"
-              - "sqs:DeleteMessage"
-              - "sqs:GetQueueUrl"
+              - sqs:GetQueueAttributes
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:ChangeMessageVisibility
+              - sqs:DeleteMessage
+              - sqs:GetQueueUrl
             Resource:
-              - !GetAtt "CDSEventsQueue.Arn"
+              - !GetAtt CDSEventsQueue.Arn
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   S3LowSideGeneralAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorS3LowLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorS3LowLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:GetObject"
-              - "s3:ListBucket"
-              - "s3:GetObjectTagging"
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetObjectTagging
             Resource:
               - !Join [
                   ":",
@@ -452,23 +456,23 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: "EC2ExecutionRole"
-        - Ref: "LambdaControllerCalculatorExecutionRole"
+        - Ref: EC2ExecutionRole
+        - Ref: LambdaControllerCalculatorExecutionRole
 
   S3HighSideGeneralAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorS3HighLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorS3HighLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:GetObject"
-              - "s3:DeleteObject"
-              - "s3:PutObject"
-              - "s3:ListBucket"
-              - "s3:PutObjectTagging"
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:PutObjectTagging
             Resource:
               - !Join [
                   ":",
@@ -486,37 +490,37 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   S3AllBucketsReadAccessPolicyForSWAMS:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorS3AllBucketsReadAccessSWAMS"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorS3AllBucketsReadAccessSWAMS
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:GetObject"
-              - "s3:ListBucket"
-              - "s3:GetObjectTagging"
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetObjectTagging
             Resource:
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
       Roles:
-        - Ref: "EC2ExecutionRole"
-        - Ref: "LambdaControllerCalculatorExecutionRole"
+        - Ref: EC2ExecutionRole
+        - Ref: LambdaControllerCalculatorExecutionRole
 
   S3ManifestGeneratorGeneralAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorS3BucketForManifestGeneratorAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorS3BucketForManifestGeneratorAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:*"
+              - s3:*
             Resource:
               - !Join [
                   ":",
@@ -541,42 +545,42 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   S3AllBucketsAccessPolicy:
-    Type: "AWS::IAM::Policy"
-    Condition: "AllowAccessToAllBuckets"
+    Type: AWS::IAM::Policy
+    Condition: AllowAccessToAllBuckets
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-SimulatorS3AllBucketsAccess"
+      PolicyName: !Sub ${AWS::StackName}-SimulatorS3AllBucketsAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:GetObject"
-              - "s3:ListBucket"
-              - "s3:GetObjectTagging"
-              - "s3:DeleteObject"
-              - "s3:PutObject"
-              - "s3:PutObjectTagging"
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetObjectTagging
+              - s3:DeleteObject
+              - s3:PutObject
+              - s3:PutObjectTagging
             Resource:
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
       Roles:
-        - Ref: "EC2ExecutionRole"
-        - Ref: "LambdaControllerCalculatorExecutionRole"
+        - Ref: EC2ExecutionRole
+        - Ref: LambdaControllerCalculatorExecutionRole
 
   S3SoftwareLoadAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-S3SimulatorSoftwareLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-S3SimulatorSoftwareLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "s3:GetObject"
-              - "s3:ListBucket"
+              - s3:GetObject
+              - s3:ListBucket
             Resource:
               - !Join [
                   ":",
@@ -604,66 +608,66 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   CloudWatchEventsAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-CloudWatchEventsLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-CloudWatchEventsLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "events:PutEvents"
+              - events:PutEvents
             Resource:
               - "*"
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   CloudWatchAccessPolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-CloudWatchLimitedAccess"
+      PolicyName: !Sub ${AWS::StackName}-CloudWatchLimitedAccess
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "logs:CreateLogGroup"
-              - "logs:CreateLogStream"
-              - "logs:PutLogEvents"
-              - "logs:DescribeLogStreams"
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
             Resource:
               # - !Join [ ":", [ arn, !Ref "AWS::Partition", logs, "*", "*", "*" ]]
-              - !GetAtt "SimulatorLogGroup.Arn"
+              - !GetAtt SimulatorLogGroup.Arn
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   EC2InstanceProfile:
-    Type: "AWS::IAM::InstanceProfile"
+    Type: AWS::IAM::InstanceProfile
     Properties:
-      Path: "/"
+      Path: /
       Roles:
         - !Ref EC2ExecutionRole
 
   SimulatorClientSecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
+    Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable client access to simulator
       VpcId: !If
         - SuppliedVPCIdForPlacement
         - !Ref VPCIdForServerSecurityGroup
-        - !Ref "AWS::NoValue"
+        - !Ref AWS::NoValue
 
   SimulatorEC2ServerSecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
+    Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable SSH access and simulator access
       VpcId: !If
         - SuppliedVPCIdForPlacement
         - !Ref VPCIdForServerSecurityGroup
-        - !Ref "AWS::NoValue"
+        - !Ref AWS::NoValue
       SecurityGroupIngress:
         # - IpProtocol: tcp
         #   FromPort: "22"
@@ -692,7 +696,7 @@ Resources:
   SimulatorEC2Server:
     DependsOn:
       - S3SoftwareLoadAccessPolicy
-    Type: "AWS::EC2::Instance"
+    Type: AWS::EC2::Instance
     Metadata:
       AWS::CloudFormation::Init:
         config:
@@ -849,8 +853,8 @@ Resources:
                   yum:
                     - awslogs
                 files:
-                  - "/etc/awslogs/awslogs.conf"
-                  - "/etc/awslogs/awscli.conf"
+                  - /etc/awslogs/awslogs.conf
+                  - /etc/awslogs/awscli.conf
     Properties:
       ImageId: !Ref LatestAmiId
       # ImageId: !FindInMap
@@ -862,7 +866,7 @@ Resources:
       #     - Arch
       InstanceType: !Ref InstanceType
       BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
+        - DeviceName: /dev/xvda
           Ebs:
             VolumeSize: 40
       IamInstanceProfile: !Ref EC2InstanceProfile
@@ -870,12 +874,12 @@ Resources:
       #   - !Ref SimulatorEC2ServerSecurityGroup
       # Switched to specifying SecurityGroupIds due to customer wanting to specify the VPC to place into
       SecurityGroupIds:
-        - !GetAtt "SimulatorEC2ServerSecurityGroup.GroupId"
+        - !GetAtt SimulatorEC2ServerSecurityGroup.GroupId
       # KeyName: !Ref KeyName
       SubnetId: !If
         - SuppliedSubnetIdForPlacement
         - !Ref SubnetId
-        - !Ref "AWS::NoValue"
+        - !Ref AWS::NoValue
       Tags:
         - Key: Name
           Value: !Ref InstanceTagName
@@ -928,40 +932,40 @@ Resources:
     Properties:
       MessageRetentionPeriod: 86400
       KmsDataKeyReusePeriodSeconds: 43200
-      KmsMasterKeyId: "alias/aws/sqs"
+      KmsMasterKeyId: alias/aws/sqs
 
   CloudWatchEventsQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       Queues:
-        - !Ref "CloudWatchEventsQueue"
+        - !Ref CloudWatchEventsQueue
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Sid: !Sub "${AWS::StackName}-cwatchSimulatorEvents"
+          - Sid: !Sub ${AWS::StackName}-cwatchSimulatorEvents
             Effect: Allow
             Principal:
               AWS: "*"
             Action: SQS:SendMessage
-            Resource: !GetAtt "CloudWatchEventsQueue.Arn"
+            Resource: !GetAtt CloudWatchEventsQueue.Arn
             Condition:
               StringEquals:
-                aws:SourceArn: !GetAtt "SimulatorCloudwatchEventRule.Arn"
+                aws:SourceArn: !GetAtt SimulatorCloudwatchEventRule.Arn
 
   SimulatorCloudwatchEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Description: "Diode Simulator CloudWatch Events EventRule"
+      Description: Diode Simulator CloudWatch Events EventRule
       EventPattern:
         source:
           - !Ref CloudWatchEventsSource
         detail:
           s3Bucket:
             - !Ref LowSideBucket
-      State: "ENABLED"
+      State: ENABLED
       Targets:
-        - Arn: !GetAtt "CloudWatchEventsQueue.Arn"
-          Id: "SuccessQueue"
+        - Arn: !GetAtt CloudWatchEventsQueue.Arn
+          Id: SuccessQueue
 
   # The following Lambda setups are to support manifest hash generation of the
   # hash keys and they are invoked by the simulator to support SWAMS functionality.
@@ -969,15 +973,15 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Principal:
               Service:
-                - "lambda.amazonaws.com"
+                - lambda.amazonaws.com
             Action:
-              - "sts:AssumeRole"
-      Path: "/"
+              - sts:AssumeRole
+      Path: /
       ManagedPolicyArns:
         - !Join [
             ":",
@@ -1017,63 +1021,63 @@ Resources:
   LambdaControllerCwatchLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${ControllerLambda}"
+      LogGroupName: !Sub /aws/lambda/${ControllerLambda}
       RetentionInDays: !Ref LogRetentionInDays
 
   EC2LambdaInvokePolicy:
-    Type: "AWS::IAM::Policy"
+    Type: AWS::IAM::Policy
     DependsOn:
       - LambdaControllerCalculatorExecutionRole
     Properties:
-      PolicyName: !Sub "${AWS::StackName}-InvokeControllerLambda"
+      PolicyName: !Sub ${AWS::StackName}-InvokeControllerLambda
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
-          - Effect: "Allow"
+          - Effect: Allow
             Action:
-              - "lambda:InvokeFunction"
+              - lambda:InvokeFunction
             Resource:
-              - !GetAtt "ControllerLambda.Arn"
+              - !GetAtt ControllerLambda.Arn
       Roles:
-        - Ref: "EC2ExecutionRole"
+        - Ref: EC2ExecutionRole
 
   ControllerLambda:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref SoftwareDeploymentPackageBucketName
         S3Key: !Ref ManifestHashLambdaDeploymentPackageObjectKey
-      Role: !GetAtt "LambdaControllerCalculatorExecutionRole.Arn"
+      Role: !GetAtt LambdaControllerCalculatorExecutionRole.Arn
       Timeout: 900
-      Handler: "hash_lambda_controller.lambda_handler"
+      Handler: hash_lambda_controller.lambda_handler
       Runtime: python3.8
       MemorySize: 1344
       Environment:
         Variables:
-          LOG_LEVEL: "info"
+          LOG_LEVEL: info
           LAMBDA_CALCULATOR: !Ref CalculatorLambda
-          REGION: !Ref "AWS::Region"
+          REGION: !Ref AWS::Region
 
   LambdaCalculatorCwatchLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${CalculatorLambda}"
+      LogGroupName: !Sub /aws/lambda/${CalculatorLambda}
       RetentionInDays: !Ref LogRetentionInDays
 
   CalculatorLambda:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref SoftwareDeploymentPackageBucketName
         S3Key: !Ref ManifestHashLambdaDeploymentPackageObjectKey
-      Role: !GetAtt "LambdaControllerCalculatorExecutionRole.Arn"
+      Role: !GetAtt LambdaControllerCalculatorExecutionRole.Arn
       Timeout: 120
-      Handler: "hash_lambda_calculator.lambda_handler"
+      Handler: hash_lambda_calculator.lambda_handler
       Runtime: python3.8
       MemorySize: 256
       Environment:
         Variables:
-          LOG_LEVEL: "info"
+          LOG_LEVEL: info
 
 Outputs:
   #  ServerLogin:
@@ -1126,7 +1130,7 @@ Outputs:
 
   SQSQueueForCloudWatchSimulatorEvents:
     Description: The name of the created SQS queue to which simulator cloudwatch events are sent.
-    Value: !GetAtt "CloudWatchEventsQueue.QueueName"
+    Value: !GetAtt CloudWatchEventsQueue.QueueName
 
   Help:
     Description: For assistance or questions regarding this CloudFormation stack please email aws-diode@amazon.com
