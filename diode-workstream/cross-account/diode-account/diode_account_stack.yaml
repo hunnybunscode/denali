@@ -58,7 +58,6 @@ Parameters:
   DiodeMappingId:
     Type: String
     Description: Diode Mapping Id
-    Default: ""
 
 Resources:
   DataTransferLambdaRole:
