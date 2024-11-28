@@ -1,5 +1,5 @@
-# If Data Transfer Lambda in Diode Account exists at time of deployment, need to add the Data Transfer Lambda as a parameter, and 
-# 
+# If Data Transfer Lambda in Diode Account exists at time of deployment, need to add the Data Transfer Lambda as a parameter, and
+#
 
 Parameters:
   IngestStackBucket1CDSProfile:
@@ -9,6 +9,7 @@ Parameters:
       - CDS_1
       - CDS_2
       - CDS_3
+
   IngestStackBucket2CDSProfile:
     Type: String
     Description: CDS Profile for IngestBucket2
@@ -16,162 +17,199 @@ Parameters:
       - CDS_1
       - CDS_2
       - CDS_3
+
   PipelineStackDataTransferLambdaRoleArn:
     Type: String
     Description: ARN for Data Transfer Lambda in Diode Account
-    Default: ''
+
   PipelineStackDiodeAccountId:
     Type: String
     Description: Account ID for Diode Account
-    Default: '062339239041'
+    Default: 062339239041
+
   TemplateURLSftpServerStack:
     Type: String
     Description: S3 URL for SftpServerStack
-    Default: ''
+
   TemplateURLLoggingStack:
     Type: String
     Description: S3 URL for LoggingStack
-    Default: 'https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml'
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml
+
   TemplateURLIngestStack:
     Type: String
     Description: S3 URL for IngestStack
-    Default: 'https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml'
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
+
   TemplateURLPipelineStack:
     Type: String
     Description: S3 URL for PipelineStack
-    Default: 'https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml'
+    Default: https://aftac-cloudformation-templates.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml
+
   SftpServerStackSftpUserName:
     Type: String
     Description: Username for SFTP user
     Default: sftpuser
+
   SftpServerStackTransferUserRoleArn:
     Type: String
     Description: Role ARN for Transfer user
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferUserRole-0pQEMV7bs5oB'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferUserRole-0pQEMV7bs5oB
+
   SftpServerStackTransferLoggingRoleArn:
     Type: String
     Description: Role ARN for Transfer logging
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferLoggingRole-Wfe9l4IHH9mZ'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferLoggingRole-Wfe9l4IHH9mZ
+
   AftacVpcId:
     Type: String
     Description: VPC ID for AFTAC Cloud
-    Default: 'vpc-0e8995e670cc55aed'
+    Default: vpc-0e8995e670cc55aed
+
   SftpServerStackSftpServerSubnetIds:
     Type: CommaDelimitedList
     Description: Comma Separated List of Two (2) Subnet IDs for SFTP server
     Default: subnet-047423901be4b2a74, subnet-0e7af08e515c92771
+
   LoggingStackCloudTrailLogsRoleARN:
     Type: String
     Description: ARN of the role that CloudTrail will assume to put logs into the log bucket.
-    Default: "arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2"
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2
+
   IngestStackpresigngeneratorServiceRole:
     Type: String
     Description: ARN of the service role for the presign generator lambda
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-PresignGeneratorServiceRole-ULoKi3d6jtk1'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-PresignGeneratorServiceRole-ULoKi3d6jtk1
+
   LambdaStorageBucket:
     Type: String
     Description: S3 bucket where the lambda code is stored
-    Default: 'aftac-cloudformation-templates'
+    Default: aftac-cloudformation-templates
+
   IngestStackObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 key for the ObjectTagger lambda code
-    Default: 'lambda_functions/object_tagger.zip'
+    Default: lambda_functions/object_tagger.zip
+
   IngestStackApiGwLambdaCodeKey:
     Type: String
     Description: S3 key for the API Gateway lambda code
-    Default: 'lambda_functions/api_gw_lambda_functions.zip'
+    Default: lambda_functions/api_gw_lambda_functions.zip
+
   IngestStackfileuploaderCloudWatchRole:
     Type: String
     Description: ARN of the file uploader CloudWatch role
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-FileuploaderCloudWatchRole-xhEQq0tIEvVk'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-FileuploaderCloudWatchRole-xhEQq0tIEvVk
+
   IngestStackAPILambdaInvokeRole:
     Type: String
     Description: ARN of the API Lambda invoke role
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-APILambdaInvokeRole-1nh0H5T3vvAr'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-APILambdaInvokeRole-1nh0H5T3vvAr
+
   PipelineStackPipelineAmiId:
     Type: String
     Description: The AMI ID to use for the pipeline.
     Default: ami-06e637594d4f5ea44
+
   PipelineStackBucketOneGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Monica
+
   PipelineStackBucketOneDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Phoebe
+
   PipelineStackBucketOneKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
     Default: Chandler
+
   PipelineStackBucketTwoGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
     Default: Ross
+
   PipelineStackBucketTwoDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
     Default: Rachel
+
   PipelineStackBucketTwoKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
     Default: Joey
+
   PipelineStackVpcCidr:
     Type: String
     Description: The CIDR block of the existing VPC
     Default: 10.161.64.0/20
+
   PipelineStackEc2ScannerInstanceProfileARN:
     Type: String
     Description: The ARN of the EC2 Scanner Role
     Default: arn:aws-us-gov:iam::073653673774:instance-profile/my-iam-stack-Ec2ScannerInstanceProfile-1ZNMFT1U011
+
   PipelineStackPrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
     Default: subnet-0da24508eee08b8ef, subnet-06ec78f23d6fbb8a6, subnet-024def395a2dd8eda
+
   PipelineStackTransferResultLambdaCodeKey:
     Type: String
     Description: The S3 key of the pipeline lambda code
-    Default: 'lambda_functions/transfer_result.zip'
+    Default: lambda_functions/transfer_result.zip
+
   PipelineStackTransferResultServiceRole:
     Type: String
     Description: The ARN of the IAM role for the TransferResult Lambda
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferResultLambdaRole-rcTfF0po1uRc'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferResultLambdaRole-rcTfF0po1uRc
+
   PipelineStackLambdaMappingRoleArn:
     Type: String
     Description: The ARN of the Lambda Mapping Role
-    Default: ''
+
   PipelineStackObjectTaggerRoleARN:
     Type: String
     Description: The ARN of the Object Tagger Role
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl
+
   PipelineStackInvokeTaggerRoleARN:
     Type: String
     Description: The ARN of the Invoke Tagger Role
-    Default: 'arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE'
+    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE
+
   SftpServerStackSftpBucketDataOwner:
     Type: String
     Description: Name of the Sftp Server Data Owner
     Default: George
+
   SftpServerStackSftpBucketGovPoc:
     Type: String
     Description: Name of the Sftp Server Gov Poc
     Default: Jerry
+
   SftpServerStackSftpBucketKeyOwner:
     Type: String
     Description: Name of the Sftp Server Key Owner
     Default: Cosmo
+
   # CustomResourceCodeKey:
   #   Type: String
   #   Description: The S3 key of the custom resource code
   #   Default: lambda_functions/CustomResourceCode.zip
+
   # AddEventNotificationCodeKey:
   #   Type: String
   #   Description: The S3 key of the add event notification code
   #   Default: lambda_functions/AddEventNotificationCode.zip
+
   ApprovedFileTypes:
     Type: String
     Description: A Comma Separated List of File Types to be Allowed through the validation pipeline
     Default: csv, flac, wav, mp4, txt, json, zip
+
   DfdlApprovedFileTypes:
     Type: String
     Description: A Comma Separated List of File Types to be Allowed through the DFDL validation pipeline
@@ -180,6 +218,8 @@ Parameters:
 Resources:
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLSftpServerStack
       Parameters:
@@ -187,23 +227,29 @@ Resources:
         TransferUserRoleArn: !Ref SftpServerStackTransferUserRoleArn
         TransferLoggingRoleArn: !Ref SftpServerStackTransferLoggingRoleArn
         AftacVpcId: !Ref AftacVpcId
-        SftpServerSubnetIds: !Join [',', !Ref SftpServerStackSftpServerSubnetIds]
+        SftpServerSubnetIds:
+          !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
         SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
         SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
         LambdaStorageBucket: !Ref LambdaStorageBucket
         ObjectTaggerRoleARN: !Ref PipelineStackObjectTaggerRoleARN
-        PrivateSubnetIds: !Join [',', !Ref PipelineStackPrivateSubnetIds]
+        PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
         # TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
     DependsOn: PipelineStack
+
   LoggingStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLLoggingStack
 
-  IngestStack: 
+  IngestStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLIngestStack
       Parameters:
@@ -214,7 +260,7 @@ Resources:
         fileuploaderCloudWatchRole: !Ref IngestStackfileuploaderCloudWatchRole
         APILambdaInvokeRole: !Ref IngestStackAPILambdaInvokeRole
         AftacVpcId: !Ref AftacVpcId
-        PrivateSubnetIds: !Join [',', !Ref PipelineStackPrivateSubnetIds]
+        PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         BucketOneGovPoc: !Ref PipelineStackBucketOneGovPoc
         BucketOneDataOwner: !Ref PipelineStackBucketOneDataOwner
         BucketOneKeyOwner: !Ref PipelineStackBucketOneKeyOwner
@@ -224,10 +270,13 @@ Resources:
         ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
         Bucket1CDSProfile: !Ref IngestStackBucket1CDSProfile
         Bucket2CDSProfile: !Ref IngestStackBucket2CDSProfile
-    DependsOn: 
-    - LoggingStack
+    DependsOn:
+      - LoggingStack
+
   PipelineStack:
     Type: AWS::CloudFormation::Stack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       TemplateURL: !Ref TemplateURLPipelineStack
       Parameters:
@@ -237,7 +286,7 @@ Resources:
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         VpcCidr: !Ref PipelineStackVpcCidr
         Ec2ScannerInstanceProfileARN: !Ref PipelineStackEc2ScannerInstanceProfileARN
-        PrivateSubnetIds: !Join [',', !Ref PipelineStackPrivateSubnetIds]
+        PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         AftacVpcId: !Ref AftacVpcId
         TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
         TransferResultServiceRole: !Ref PipelineStackTransferResultServiceRole
@@ -246,5 +295,3 @@ Resources:
         DfdlApprovedFileTypes: !Ref DfdlApprovedFileTypes
     DependsOn:
       - IngestStack
-
-        
