@@ -1,22 +1,160 @@
 # If Data Transfer Lambda in Diode Account exists at time of deployment, need to add the Data Transfer Lambda as a parameter, and
 #
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Parameters
+        Parameters:
+          - AftacVpcId
+          - LambdaStorageBucket
+
+      - Label:
+          default: Ingest Stack Parameters
+        Parameters:
+          - TemplateURLIngestStack
+          - IngestStackBucket1CDSProfile
+          - IngestStackBucket2CDSProfile
+          - IngestStackpresigngeneratorServiceRole
+          - IngestStackObjectTaggerLambdaCodeKey
+          - IngestStackApiGwLambdaCodeKey
+          - IngestStackfileuploaderCloudWatchRole
+          - IngestStackAPILambdaInvokeRole
+
+      - Label:
+          default: Pipeline Stack Parameters
+        Parameters:
+          - TemplateURLPipelineStack
+          - PipelineStackVpcCidr
+          - PipelineStackPrivateSubnetIds
+          - PipelineStackDiodeAccountId
+          - PipelineStackPipelineAmiId
+          - ApprovedFileTypes
+          - DfdlApprovedFileTypes
+          - PipelineStackBucketOneGovPoc
+          - PipelineStackBucketOneDataOwner
+          - PipelineStackBucketOneKeyOwner
+          - PipelineStackBucketTwoGovPoc
+          - PipelineStackBucketTwoDataOwner
+          - PipelineStackBucketTwoKeyOwner
+          - PipelineStackEc2ScannerInstanceProfileARN
+          - PipelineStackTransferResultLambdaCodeKey
+          - PipelineStackTransferResultServiceRole
+          - PipelineStackDataTransferLambdaRoleArn
+          - PipelineStackLambdaMappingRoleArn
+          - PipelineStackObjectTaggerRoleARN
+          # - PipelineStackInvokeTaggerRoleARN
+
+      - Label:
+          default: Logging Stack Parameters
+        Parameters:
+          - TemplateURLLoggingStack
+          # - LoggingStackCloudTrailLogsRoleARN
+
+      - Label:
+          default: STFP Stack Parameters
+        Parameters:
+          - TemplateURLSftpServerStack
+          - SftpServerStackSftpUserName
+          - SftpServerStackTransferUserRoleArn
+          - SftpServerStackTransferLoggingRoleArn
+          - SftpServerStackSftpServerSubnetIds
+          - SftpServerStackSftpBucketDataOwner
+          - SftpServerStackSftpBucketGovPoc
+          - SftpServerStackSftpBucketKeyOwner
+
+    ParameterLabels:
+      IngestStackBucket1CDSProfile:
+        default: Ingest Stack Bucket 1 CDS Profile
+      IngestStackBucket2CDSProfile:
+        default: Ingest Stack Bucket 2 CDS Profile
+      PipelineStackDataTransferLambdaRoleArn:
+        default: Pipeline Stack Data Transfer Lambda Role ARN
+      PipelineStackDiodeAccountId:
+        default: Pipeline Stack Diode Account ID
+      TemplateURLIngestStack:
+        default: Ingest Stack Template URL
+      TemplateURLPipelineStack:
+        default: Pipeline Stack Template URL
+      TemplateURLLoggingStack:
+        default: Logging Stack Template URL
+      TemplateURLSftpServerStack:
+        default: SFTP Server Stack Template URL
+      SftpServerStackSftpUserName:
+        default: SFTP Server Stack SFTP User Name
+      SftpServerStackTransferUserRoleArn:
+        default: SFTP Server Stack Transfer User Role ARN
+      SftpServerStackTransferLoggingRoleArn:
+        default: SFTP Server Stack Transfer Logging Role ARN
+      SftpServerStackSftpServerSubnetIds:
+        default: SFTP Server Stack SFTP Server Subnet IDs
+      SftpServerStackSftpBucketDataOwner:
+        default: SFTP Server Stack SFTP Bucket Data Owner
+      SftpServerStackSftpBucketGovPoc:
+        default: SFTP Server Stack SFTP Bucket Gov POC
+      SftpServerStackSftpBucketKeyOwner:
+        default: SFTP Server Stack SFTP Bucket Key Owner
+      AftacVpcId:
+        default: AFTAC VPC ID
+      PipelineStackVpcCidr:
+        default: Pipeline Stack VPC CIDR
+      PipelineStackPrivateSubnetIds:
+        default: Pipeline Stack Private Subnet IDs
+      IngestStackpresigngeneratorServiceRole:
+        default: Ingest Stack Presign Generator Service Role
+      IngestStackObjectTaggerLambdaCodeKey:
+        default: Ingest Stack Object Tagger Lambda Code Key
+      IngestStackApiGwLambdaCodeKey:
+        default: Ingest Stack API Gateway Lambda Code Key
+      IngestStackfileuploaderCloudWatchRole:
+        default: Ingest Stack File Uploader CloudWatch Role
+      IngestStackAPILambdaInvokeRole:
+        default: Ingest Stack API Lambda Invoke Role
+      PipelineStackBucketOneGovPoc:
+        default: Pipeline Stack Bucket One Gov POC
+      PipelineStackBucketOneDataOwner:
+        default: Pipeline Stack Bucket One Data Owner
+      PipelineStackBucketOneKeyOwner:
+        default: Pipeline Stack Bucket One Key Owner
+      PipelineStackBucketTwoGovPoc:
+        default: Pipeline Stack Bucket Two Gov POC
+      PipelineStackBucketTwoDataOwner:
+        default: Pipeline Stack Bucket Two Data Owner
+      PipelineStackBucketTwoKeyOwner:
+        default: Pipeline Stack Bucket Two Key Owner
+      PipelineStackEc2ScannerInstanceProfileARN:
+        default: Pipeline Stack EC2 Scanner Instance Profile ARN
+      PipelineStackTransferResultLambdaCodeKey:
+        default: Pipeline Stack Transfer Result Lambda Code Key
+      PipelineStackTransferResultServiceRole:
+        default: Pipeline Stack Transfer Result Service Role ARN
+      PipelineStackLambdaMappingRoleArn:
+        default: Pipeline Stack Lambda Mapping Role ARN
+      PipelineStackObjectTaggerRoleARN:
+        default: Pipeline Stack Object Tagger Role ARN
+      # PipelineStackInvokeTaggerRoleARN:
+      #   default: Pipeline Stack Invoke Tagger Role ARN
+      LambdaStorageBucket:
+        default: Lambda Storage Bucket
+      # LoggingStackCloudTrailLogsRoleARN:
+      #   default: Logging Stack CloudTrail Logs Role ARN
+      PipelineStackPipelineAmiId:
+        default: Pipeline Stack Pipeline AMI ID
+      ApprovedFileTypes:
+        default: Approved File Types
+      DfdlApprovedFileTypes:
+        default: DFDL Approved File Types
 
 Parameters:
   IngestStackBucket1CDSProfile:
     Type: String
     Description: CDS Profile for IngestBucket1
-    AllowedValues:
-      - CDS_1
-      - CDS_2
-      - CDS_3
+    AllowedValues: [CDS_1, CDS_2, CDS_3]
 
   IngestStackBucket2CDSProfile:
     Type: String
     Description: CDS Profile for IngestBucket2
-    AllowedValues:
-      - CDS_1
-      - CDS_2
-      - CDS_3
+    AllowedValues: [CDS_1, CDS_2, CDS_3]
 
   PipelineStackDataTransferLambdaRoleArn:
     Type: String
@@ -71,10 +209,10 @@ Parameters:
     Description: Comma Separated List of Two (2) Subnet IDs for SFTP server
     Default: subnet-047423901be4b2a74, subnet-0e7af08e515c92771
 
-  LoggingStackCloudTrailLogsRoleARN:
-    Type: String
-    Description: ARN of the role that CloudTrail will assume to put logs into the log bucket.
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2
+  # LoggingStackCloudTrailLogsRoleARN:
+  #   Type: String
+  #   Description: ARN of the role that CloudTrail will assume to put logs into the log bucket.
+  #   Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2
 
   IngestStackpresigngeneratorServiceRole:
     Type: String
@@ -175,10 +313,10 @@ Parameters:
     Description: The ARN of the Object Tagger Role
     Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl
 
-  PipelineStackInvokeTaggerRoleARN:
-    Type: String
-    Description: The ARN of the Invoke Tagger Role
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE
+  # PipelineStackInvokeTaggerRoleARN:
+  #   Type: String
+  #   Description: The ARN of the Invoke Tagger Role
+  #   Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE
 
   SftpServerStackSftpBucketDataOwner:
     Type: String
