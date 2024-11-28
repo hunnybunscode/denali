@@ -1,4 +1,3 @@
-
 # This stack consists of VPC Endpoints and other resources which
 
 Parameters:
@@ -6,29 +5,34 @@ Parameters:
     Type: String
     Description: VPC ID for AFTAC VPC
     Default: vpc-048daa85d41f50b10
+    AllowedPattern: ^vpc-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid VPC ID.
+
   PrivateRouteTableIds:
     Type: CommaDelimitedList
     Description: Private Route Table IDs for AFTAC VPC
     Default: rtb-07027991a9dbb1f36
+    AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be one or more valid route table IDs.
+
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: Private Subnet IDs for AFTAC VPC
     Default: subnet-0f2d694defec254c9, subnet-0f64b1f3ba14fd6ee, subnet-0e44f6353b9e3ee92
+    AllowedPattern: ^subnet-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be one or more valid subnet IDs.
+
   ExistingVpcCidr:
     Type: String
     Description: CIDR of existing VPC
     Default: 10.162.208.0/20
+
 Resources:
   privateVpcDynamoDbEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds: !Ref PrivateRouteTableIds
-      ServiceName:
-        Fn::Join:
-          - ""
-          - - com.amazonaws.
-            - Ref: AWS::Region
-            - .dynamodb
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
       VpcEndpointType: Gateway
       VpcId: !Ref VpcId
 
@@ -53,15 +57,8 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - SsmVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .ssm
+        - !GetAtt SsmVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -87,15 +84,8 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - SsmMessagesVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .ssmmessages
+        - !GetAtt SsmMessagesVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -121,15 +111,8 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - Ec2MessagesVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .ec2messages
+        - !GetAtt Ec2MessagesVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -155,15 +138,8 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - SqsVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .sqs
+        - !GetAtt SqsVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sqs
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -189,15 +165,8 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - LogsVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .logs
+        - !GetAtt LogsVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -217,20 +186,14 @@ Resources:
           IpProtocol: tcp
           ToPort: 443
       VpcId: !Ref VpcId
+
   SnsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - Fn::GetAtt:
-            - SnsVpcEndpointSecurityGroup
-            - GroupId
-      ServiceName: 
-        Fn::Join:
-        - ""
-        - - com.amazonaws.
-          - Ref: AWS::Region
-          - .sns
+        - !GetAtt SnsVpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
