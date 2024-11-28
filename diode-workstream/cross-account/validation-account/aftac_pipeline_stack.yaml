@@ -11,6 +11,8 @@ Parameters:
   DiodeAccountId:
     Type: String
     Description: AWS Account ID of the Diode Account
+    AllowedPattern: ^\d{12}$
+    ConstraintDescription: Must be a valid AWS Account ID
 
   VpcCidr:
     Type: String
@@ -355,34 +357,36 @@ Resources:
     Type: AWS::SQS::QueuePolicy
     Properties:
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: sqs:*
+          - Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt transferqueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
-            Effect: Deny
-            Principal:
-              AWS: "*"
-            Resource: !GetAtt transferqueue.Arn
-          - Action: sqs:SendMessage
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: s3.amazonaws.com
+            Action: sqs:SendMessage
             Resource: !GetAtt transferqueue.Arn
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
               ArnLike:
                 aws:SourceArn: !Sub arn:${AWS::Partition}:s3:::*
-          - Action:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref DiodeAccountId
+            Action:
               - sqs:ReceiveMessage
               - sqs:DeleteMessage
               - sqs:GetQueueAttributes
-            Effect: Allow
-            Principal:
-              AWS: !Ref DataTransferLambdaRoleArn
             Resource: !GetAtt transferqueue.Arn
-        Version: 2012-10-17
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
       Queues:
         - !Ref transferqueue
 
@@ -398,22 +402,23 @@ Resources:
     Type: AWS::SQS::QueuePolicy
     Properties:
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: sqs:*
+          - Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt transferqueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Allow
             Principal:
-              AWS: "*"
-            Resource: !GetAtt transferqueue.Arn
-          - Action:
-              - sqs:SendMessage
-            Effect: Allow
-            Principal:
-              AWS: !Ref DataTransferLambdaRoleArn
+              AWS: !Ref DiodeAccountId
+            Action: sqs:SendMessage
             Resource: !GetAtt TransferResultQueue.Arn
-        Version: 2012-10-17
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
       Queues:
         - !Ref TransferResultQueue
 
@@ -480,26 +485,27 @@ Resources:
     Properties:
       Bucket: !Ref DataTransferBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
             Condition:
               Bool:
                 aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Allow
             Principal:
-              AWS: "*"
-            Resource:
-              - !Sub ${DataTransferBucket.Arn}
-              - !Sub ${DataTransferBucket.Arn}/*
-          - Action:
+              AWS: !Ref DiodeAccountId
+            Action:
               - s3:GetObject
               - s3:GetObjectTagging
-            Effect: Allow
-            Principal:
-              AWS: !Ref DataTransferLambdaRoleArn
-            Resource:
-              - !Sub ${DataTransferBucket.Arn}
-              - !Sub ${DataTransferBucket.Arn}/*
+            Resource: !Sub ${DataTransferBucket.Arn}/*
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
 
           # The Below Lines required the Lambda Mapping Role ARN
           # Has not been tested yet...
@@ -519,18 +525,16 @@ Resources:
           #               - DataTransferBucket
           #               - Arn
           #           - /*
+
           ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
           ##### REMOVE PRIOR TO AFTAC DEPLOYMENT
-          - Action:
-              - s3:GetObject
-              - s3:GetObjectTagging
-            Effect: Allow
+          - Effect: Allow
             Principal:
               AWS: arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9
-            Resource:
-              - !Sub ${DataTransferBucket.Arn}
-              - !Sub ${DataTransferBucket.Arn}/*
-        Version: 2012-10-17
+            Action:
+              - s3:GetObject
+              - s3:GetObjectTagging
+            Resource: !Sub ${DataTransferBucket.Arn}/*
 
   ApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
