@@ -396,11 +396,8 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: /
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEC2RoleforSSM
 
@@ -432,8 +429,7 @@ Resources:
               - sqs:ChangeMessageVisibility
               - sqs:DeleteMessage
               - sqs:GetQueueUrl
-            Resource:
-              - !GetAtt CDSEventsQueue.Arn
+            Resource: !GetAtt CDSEventsQueue.Arn
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -450,21 +446,8 @@ Resources:
               - s3:ListBucket
               - s3:GetObjectTagging
             Resource:
-              - !Join [
-                  ":",
-                  [arn, !Ref "AWS::Partition", s3, "", "", !Ref LowSideBucket],
-                ]
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Join ["", [!Ref LowSideBucket, "/*"]],
-                  ],
-                ]
+              - !Sub ${LowSideBucket.Arn}
+              - !Sub ${LowSideBucket.Arn}/*
       Roles:
         - !Ref EC2ExecutionRole
         - !Ref LambdaControllerCalculatorExecutionRole
@@ -484,21 +467,8 @@ Resources:
               - s3:ListBucket
               - s3:PutObjectTagging
             Resource:
-              - !Join [
-                  ":",
-                  [arn, !Ref "AWS::Partition", s3, "", "", !Ref HighSideBucket],
-                ]
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Join ["", [!Ref HighSideBucket, "/*"]],
-                  ],
-                ]
+              - !Sub ${HighSideBucket.Arn}
+              - !Sub ${HighSideBucket.Arn}/*
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -514,9 +484,7 @@ Resources:
               - s3:GetObject
               - s3:ListBucket
               - s3:GetObjectTagging
-            Resource:
-              - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
-              - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
+            Resource: !Sub arn:${AWS::Partition}:s3:::*
       Roles:
         - !Ref EC2ExecutionRole
         - !Ref LambdaControllerCalculatorExecutionRole
@@ -529,31 +497,10 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Action:
-              - s3:*
+            Action: s3:*
             Resource:
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Ref ManifestGeneratorBucket,
-                  ],
-                ]
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Join ["", [!Ref ManifestGeneratorBucket, "/*"]],
-                  ],
-                ]
+              - !Sub ${ManifestGeneratorBucket.Arn}
+              - !Sub ${ManifestGeneratorBucket.Arn}/*
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -573,9 +520,7 @@ Resources:
               - s3:DeleteObject
               - s3:PutObject
               - s3:PutObjectTagging
-            Resource:
-              - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
-              - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
+            Resource: !Sub arn:${AWS::Partition}:s3:::*
       Roles:
         - !Ref EC2ExecutionRole
         - !Ref LambdaControllerCalculatorExecutionRole
@@ -592,31 +537,8 @@ Resources:
               - s3:GetObject
               - s3:ListBucket
             Resource:
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Ref SoftwareDeploymentPackageBucketName,
-                  ],
-                ]
-              - !Join [
-                  ":",
-                  [
-                    arn,
-                    !Ref "AWS::Partition",
-                    s3,
-                    "",
-                    "",
-                    !Join [
-                      "",
-                      [!Ref SoftwareDeploymentPackageBucketName, "/*"],
-                    ],
-                  ],
-                ]
+              - !Sub arn:${AWS::Partition}:s3:::${SoftwareDeploymentPackageBucketName}
+              - !Sub arn:${AWS::Partition}:s3:::${SoftwareDeploymentPackageBucketName}/*
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -628,10 +550,8 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Action:
-              - events:PutEvents
-            Resource:
-              - "*"
+            Action: events:PutEvents
+            Resource: "*"
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -988,45 +908,12 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: /
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
       ManagedPolicyArns:
-        - !Join [
-            ":",
-            [
-              arn,
-              !Ref "AWS::Partition",
-              iam,
-              "",
-              aws,
-              policy/AWSLambda_FullAccess,
-            ],
-          ]
-        - !Join [
-            ":",
-            [
-              arn,
-              !Ref "AWS::Partition",
-              iam,
-              "",
-              aws,
-              policy/CloudWatchLogsFullAccess,
-            ],
-          ]
-        - !Join [
-            ":",
-            [
-              arn,
-              !Ref "AWS::Partition",
-              iam,
-              "",
-              aws,
-              policy/service-role/AWSLambdaBasicExecutionRole,
-            ],
-          ]
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AWSLambda_FullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchLogsFullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
   # We cheat by creating a log group of the same name that lambda would create so we can set a retention policy
   LambdaControllerCwatchLogGroup:
@@ -1039,18 +926,15 @@ Resources:
 
   EC2LambdaInvokePolicy:
     Type: AWS::IAM::Policy
-    DependsOn:
-      - LambdaControllerCalculatorExecutionRole
+    DependsOn: LambdaControllerCalculatorExecutionRole
     Properties:
       PolicyName: !Sub ${AWS::StackName}-InvokeControllerLambda
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Action:
-              - lambda:InvokeFunction
-            Resource:
-              - !GetAtt ControllerLambda.Arn
+            Action: lambda:InvokeFunction
+            Resource: !GetAtt ControllerLambda.Arn
       Roles:
         - !Ref EC2ExecutionRole
 
@@ -1108,24 +992,14 @@ Outputs:
 
   SimulatorPublicEndpoint:
     Description: The value to use for public clients on all API calls as the --endpoint argument
-    Value: !Join
-      - ""
-      - - "http://"
-        - !Ref SimulatorEC2ServerEIP
-        #        - !GetAtt
-        #          - SimulatorEC2Server
-        #          - PublicDnsName
-        - ":"
-        - !Ref SimulatorListenPort
+    Value: !Sub http://${SimulatorEC2ServerEIP}:${SimulatorListenPort}
+    #        - !GetAtt
+    #          - SimulatorEC2Server
+    #          - PublicDnsName
 
   SimulatorPrivateEndpoint:
     Description: The value to use for private clients on all API calls as the --endpoint argument
-    Value: !Join
-      - ""
-      - - "http://"
-        - !GetAtt SimulatorEC2Server.PrivateIp
-        - ":"
-        - !Ref SimulatorListenPort
+    Value: !Sub http://${SimulatorEC2Server.PrivateIp}:${SimulatorListenPort}
 
   ClientSecurityGroup:
     Description: The ID of the security group for Simulator clients to use.
