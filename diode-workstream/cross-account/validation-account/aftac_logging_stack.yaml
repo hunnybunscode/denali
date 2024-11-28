@@ -29,44 +29,29 @@ Resources:
       Bucket:
         Ref: logBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${logBucket.Arn}
+              - !Sub ${logBucket.Arn}/*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
-            Effect: Deny
-            Principal:
-              AWS: "*"
-            Resource:
-              - Fn::GetAtt:
-                  - logBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - logBucket
-                        - Arn
-                    - /*
-          - Action:
-              - s3:GetBucketAcl
-              - s3:ListBucket
-              - s3:PutObject
-            Effect: Allow
+                aws:SecureTransport: false
+          - Effect: Allow
             Principal:
               Service:
                 - cloudtrail.amazonaws.com
                 - delivery.logs.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+              - s3:ListBucket
+              - s3:PutObject
             Resource:
-              - Fn::GetAtt:
-                  - logBucket
-                  - Arn
-              - Fn::Join:
-                  - ""
-                  - - Fn::GetAtt:
-                        - logBucket
-                        - Arn
-                    - /*
-        Version: "2012-10-17"
+              - !Sub ${logBucket.Arn}
+              - !Sub ${logBucket.Arn}/*
 
   SftpServerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -82,7 +67,6 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
 
-
   IngestWACLAccessLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -92,13 +76,9 @@ Resources:
     DeletionPolicy: Delete
 
 Outputs:
-
-##########
-
-
-  LogBucketExport: 
+  LogBucketExport:
     Description: Name of the S3 Logging Bucket
-    Value:  !Ref logBucket
+    Value: !Ref logBucket
     Export:
       Name: aftac-pipeline-logBucket
 
@@ -107,15 +87,15 @@ Outputs:
     Value: !GetAtt SftpServerLogGroup.Arn
     Export:
       Name: aftac-pipeline-SftpServerLogGroup
-  
+
   ApiGatewayStageLogGroupARNExport:
     Description: Name of the API Gateway Stage Log Group
-    Value:  !GetAtt ApiGatewayStageLogGroup.Arn
+    Value: !GetAtt ApiGatewayStageLogGroup.Arn
     Export:
       Name: aftac-pipeline-ApiGatewayStageLogGroup
 
   IngestWACLAccessLogGroupExport:
     Description: Name of the Ingest WACL Access Log Group
-    Value:  !Ref IngestWACLAccessLogGroup
+    Value: !Ref IngestWACLAccessLogGroup
     Export:
       Name: aftac-pipeline-IngestWACLAccessLogGroup
