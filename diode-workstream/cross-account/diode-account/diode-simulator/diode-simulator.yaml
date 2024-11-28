@@ -233,7 +233,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      LogGroupName: !Sub ${AWS::StackName}
+      LogGroupName: !Ref AWS::StackName
       RetentionInDays: !Ref LogRetentionInDays
 
   CDSEventsQueue:
@@ -386,7 +386,7 @@ Resources:
               # include the accesses to the special indices on this table
               - !Sub ${ManifestTable.Arn}/*
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   EC2ExecutionRole:
     Type: AWS::IAM::Role
@@ -415,7 +415,7 @@ Resources:
             Action: ec2:DescribeTags
             Resource: "*"
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   SQSGeneralAccessPolicy:
     Type: AWS::IAM::Policy
@@ -435,7 +435,7 @@ Resources:
             Resource:
               - !GetAtt CDSEventsQueue.Arn
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   S3LowSideGeneralAccessPolicy:
     Type: AWS::IAM::Policy
@@ -466,8 +466,8 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: EC2ExecutionRole
-        - Ref: LambdaControllerCalculatorExecutionRole
+        - !Ref EC2ExecutionRole
+        - !Ref LambdaControllerCalculatorExecutionRole
 
   S3HighSideGeneralAccessPolicy:
     Type: AWS::IAM::Policy
@@ -500,7 +500,7 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   S3AllBucketsReadAccessPolicyForSWAMS:
     Type: AWS::IAM::Policy
@@ -518,8 +518,8 @@ Resources:
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
       Roles:
-        - Ref: EC2ExecutionRole
-        - Ref: LambdaControllerCalculatorExecutionRole
+        - !Ref EC2ExecutionRole
+        - !Ref LambdaControllerCalculatorExecutionRole
 
   S3ManifestGeneratorGeneralAccessPolicy:
     Type: AWS::IAM::Policy
@@ -555,7 +555,7 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   S3AllBucketsAccessPolicy:
     Type: AWS::IAM::Policy
@@ -577,8 +577,8 @@ Resources:
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*"]]
               - !Join [":", [arn, !Ref "AWS::Partition", s3, "", "", "*/*"]]
       Roles:
-        - Ref: EC2ExecutionRole
-        - Ref: LambdaControllerCalculatorExecutionRole
+        - !Ref EC2ExecutionRole
+        - !Ref LambdaControllerCalculatorExecutionRole
 
   S3SoftwareLoadAccessPolicy:
     Type: AWS::IAM::Policy
@@ -618,7 +618,7 @@ Resources:
                   ],
                 ]
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   CloudWatchEventsAccessPolicy:
     Type: AWS::IAM::Policy
@@ -633,7 +633,7 @@ Resources:
             Resource:
               - "*"
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   CloudWatchAccessPolicy:
     Type: AWS::IAM::Policy
@@ -652,7 +652,7 @@ Resources:
               # - !Join [ ":", [ arn, !Ref "AWS::Partition", logs, "*", "*", "*" ]]
               - !GetAtt SimulatorLogGroup.Arn
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -1052,7 +1052,7 @@ Resources:
             Resource:
               - !GetAtt ControllerLambda.Arn
       Roles:
-        - Ref: EC2ExecutionRole
+        - !Ref EC2ExecutionRole
 
   ControllerLambda:
     Type: AWS::Lambda::Function
