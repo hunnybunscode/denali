@@ -1,0 +1,673 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates an EC2 Image Builder image pipeline
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: ""
+        Parameters:
+          - pResourcePrefix
+          - pParentImage
+          - pLaunchTemplateId
+          - pSubnetId
+          - pSecurityGroupIds
+          # - pInstanceProfileName
+
+    ParameterLabels:
+      pResourcePrefix:
+        default: Resource Prefix
+      pParentImage:
+        default: Parent Image
+      pLaunchTemplateId:
+        default: Launch Template ID
+      pSubnetId:
+        default: Subnet ID
+      pSecurityGroupIds:
+        default: Security Group IDs
+      # pInstanceProfileName:
+      #   default: EC2 Instance Profile Name
+
+Parameters:
+  pResourcePrefix:
+    Type: String
+    Description: >-
+      Prefix added to the named AWS resources. It must start with a lowercase letter and contain 
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    Default: ec2-av-scanner
+    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  pParentImage:
+    Type: String
+    Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+    AllowedPattern: ^(arn:(aws|aws-us-gov):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid Image ARN or AMI ID.
+
+  # This could be imported in later
+  pLaunchTemplateId:
+    Type: String
+    Description: The ID of the launch template to be used to launch EC2 instances.
+    AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid launch template ID.
+
+  # pInstanceProfileName:
+  #   Type: String
+  #   Description: The name of the EC2 instance profile to be associated with EC2 instances launched by the image pipeline.
+  #   Default: EC2InstanceProfileForImageBuilder
+
+  pSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet.
+
+  pSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: The IDs of the security groups to be associated with EC2 instances launched by the image pipeline.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select one or more security group IDs.
+
+Resources:
+  BuildComponentPython3AndPipInstall:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-python3-and-pip
+      Description: Installs and upgrades Python3 and Pip
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.1"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      ## If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: Python3 and Pip
+        description: Installs and upgrades Python3 and Pip
+        schemaVersion: 1.0
+        parameters:
+          - PythonVersion:
+              type: string
+              default: python3.11
+              description: Python3 version to install
+        phases:
+          - name: build
+            steps:
+              - name: InstallPython3
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - yum install -y {{ PythonVersion }}
+                    # - "{{ PythonVersion }} --version 2>/dev/null"
+                    # - exit_code=$?
+                    # - |
+                    #   if [[ $exit_code -ne 0 ]]; then
+                    #     echo {{ PythonVersion }} installation failed"
+                    #     exit $exit_code
+                    #   fi
+
+              - name: InstallPip
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - yum install -y {{ PythonVersion }}-pip
+
+              - name: UpgradePip
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - "{{ PythonVersion }} -m pip install pip --upgrade"
+
+  BuildComponentPythonPackagesInstall:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-python-packages
+      Description: Installs Python packages
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.1"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: Python package
+        description: Installs Python packages
+        schemaVersion: 1.0
+        parameters:
+          - PythonVersion:
+              type: string
+              default: python3.11
+              description: Python3 version to install
+          - PythonPackages:
+              type: string
+              description: Comma-separated list of Python package to install
+        phases:
+          - name: build
+            steps:
+              - name: Install
+                action: ExecuteBash
+                loop:
+                  forEach:
+                    list: "{{ PythonPackages }}"
+                    delimiter: ","
+                inputs:
+                  commands:
+                    - "{{ PythonVersion }} -m pip install {{ loop.value }}"
+                    # - '{{ PythonVersion }} -c "import {{ loop.value }}"'
+                    # - exit_code=$?
+                    # - |
+                    #   if [[ $exit_code -ne 0 ]]; then
+                    #     echo "{{ loop.value }} installation failed"
+                    #     exit $exit_code
+                    #   fi
+
+  BuildComponentS3Download:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-s3-download-overwrite
+      Description: Downloads files from S3 to a local path, overwriting any existing files
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.0"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: S3 Download
+        description: Download files from S3
+        schemaVersion: 1.0
+        parameters:
+          - Source:
+              type: string
+              description: >
+                Source S3 bucket for your files. You can specify a path to a specific object; or use a key prefix, that ends with
+                a forward-slash, followed by an asterisk wildcard (/*), to download a set of objects that match the key prefix.
+          - ExpectedBucketOwner:
+              type: string
+              description: Expected owner account ID of the bucket provided in the source path.
+          - Destination:
+              type: string
+              description: >
+                The local path where the S3 objects are downloaded.
+                To download a single file, you must specify the file name as part of the path. For example, /myfolder/package.zip.
+        phases:
+          - name: build
+            steps:
+              - name: DownloadFilesFromS3 
+                action: S3Download
+                inputs:
+                  - source: "s3://{{ Source }}"
+                    expectedBucketOwner: "{{ ExpectedBucketOwner }}"
+                    destination: "{{ Destination }}"
+                    overwrite: true
+
+  BuildComponentEnableSQSPollerService:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-enable-sqs-poller-service
+      Description: Enables SQS poller service
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.0"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: Enable SQS Poller Service
+        description: Enables SQS poller service
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: MoveFile
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
+              - name: EnablePollerService
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - systemctl enable sqs_poller.service
+
+  BuildComponentEnableCloudWatchAgent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-enable-cloudwatch-agent
+      Description: Enables CloudWatch Agent
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.0"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: Enable CloudWatch Agent
+        description: Enables CloudWatch Agent
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: MoveFile
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+              - name: EnablePollerService
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - systemctl enable amazon-cloudwatch-agent
+
+  BuildComponentPerformOtherTasks:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-perform-other-tasks
+      Description: Performs other tasks
+      #############################################
+      # Update Version and ChangeDescription when you make any changes to this Component resource #
+      Version: "1.0.1"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: Perform Other Tasks
+        description: Performs other tasks
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: OtherTasks
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - mkdir /usr/bin/files
+
+  # TODO
+  ImageBuilderTestComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub ${pResourcePrefix}-test-component
+      Description: Dummy description
+      #############################################
+      # Update Version and ChangeDescription when any changes are made to this resource #
+      Version: "1.0.0"
+      ChangeDescription: Initial version
+      #############################################
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      # KmsKeyId: String
+      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      Data: |
+        name: test-image
+        description: This is hello world testing doc
+        schemaVersion: 1.0
+        phases:
+          - name: test
+            steps:
+              - name: HelloWorldStep
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - echo "Hello World! Test."
+
+  ImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub ${pResourcePrefix}-image-recipe
+      Version: "1.0.6"
+      # Description: Testing ec2 scanner recipe
+      ParentImage: !Ref pParentImage
+      # WorkingDirectory: String # The default path is `/tmp`
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false # Set this to `true` to remove SSM Agent after the final image
+        ## If overriding the user data, add commands to install SSM, unless it is pre-installed on the base image. Example below.
+        # UserDataOverride:
+        #   Fn::Base64: !Sub |
+        #     #!/bin/bash
+        #     # TODO: Add a conditional statement to install the correct SSM Agent based on the architecture
+        #     ARCH=$(arch)
+        #     # Install SSM Agent on RHEL 8 or 9 on x86_64
+        #     dnf install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm
+        #     # Install SSM Agent on RHEL 8 or 9 on ARM64
+        #     dnf install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm
+      ## x.x.x ensures we use the latest version of the component
+      Components:
+        - ComponentArn: !Ref BuildComponentS3Download
+          Parameters:
+            - Name: Source
+              Value: [!Sub "${EC2RequiredFilesBucket}/ec2-files/*"]
+            - Name: ExpectedBucketOwner
+              Value: [!Ref "AWS::AccountId"]
+            - Name: Destination
+              Value: [/usr/bin/validation-pipeline/]
+        - ComponentArn: !Ref BuildComponentPython3AndPipInstall
+        - ComponentArn: !Ref BuildComponentPythonPackagesInstall
+          Parameters:
+            - Name: PythonPackages
+              Value: ["boto3,puremagic,pyjwt"]
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
+        - ComponentArn: !Ref BuildComponentEnableCloudWatchAgent
+        - ComponentArn: !Ref BuildComponentEnableSQSPollerService
+        - ComponentArn: !Ref BuildComponentPerformOtherTasks
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux-kernel-ml/x.x.x
+
+      # BlockDeviceMappings:
+      #   - DeviceName: String
+      #     Ebs:
+      #       DeleteOnTermination: true
+      #       Encrypted: true
+      #       KmsKeyId: alias/aws/ebs # The default AWS managed key
+      #       Iops: 100 # The range is 100-64000
+      #       SnapshotId: String
+      #       VolumeType: gp3 # standard | io1 | io2 | gp2 | gp3 | sc1 | st1
+      #       Throughput: 125 # For gp3 volumes only; the range is 125–1000 MiB/s
+      #       VolumeSize: 30 # The range is 1-16000
+      #     NoDevice: "" # Enter an empty string to remove a mapping from the parent image.
+      #     VirtualName: String # Manages the instance ephemeral devices.
+
+  InfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub ${pResourcePrefix}-infra-config
+      InstanceMetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      # InstanceProfileName: !Ref pInstanceProfileName
+      InstanceProfileName: !Ref ImageBuilderInfraInstanceProfile
+      SubnetId: !Ref pSubnetId
+      SecurityGroupIds: !Ref pSecurityGroupIds
+      TerminateInstanceOnFailure: true # For troubleshooting, set it to false
+      InstanceTypes: [t3.small]
+      # KeyPair: String
+      # Logging:
+      #   S3Logs:
+      #     S3BucketName: String
+      #     S3KeyPrefix: String
+      # Placement: Placement
+      # ResourceTags:
+      #   Key: Value
+      # SnsTopicArn: String
+      # Tags:
+      #   Key: Value
+
+  ImageBuilderImagePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub ${pResourcePrefix}-image-pipeline
+      Status: ENABLED
+      EnhancedImageMetadataEnabled: true # default value is true
+      ImageRecipeArn: !Ref ImageRecipe
+      DistributionConfigurationArn: !Ref ImageBuilderDistroConfig
+      ImageScanningConfiguration:
+        ImageScanningEnabled: false # Enable it if Amazon Inspector is activated
+      ImageTestsConfiguration:
+        ImageTestsEnabled: true
+      InfrastructureConfigurationArn: !Ref InfraConfig
+      # Schedule:
+      #   PipelineExecutionStartCondition: EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE
+      #   ScheduleExpression: cron(0 0 * * ? *) # every day at 12:00 AM UTC
+      # This Role is for the workflow
+      # ExecutionRole: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+      # Workflows:
+      #   - WorkflowArn: !GetAtt BuildWorkflow.Arn
+
+  ImageBuilderDistroConfig:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub ${pResourcePrefix}-distro-config
+      Distributions:
+        - LaunchTemplateConfigurations:
+            - AccountId: !Ref AWS::AccountId
+              LaunchTemplateId: !Ref pLaunchTemplateId # Identifies the Amazon EC2 launch template to use.
+              SetDefaultVersion: true # Set the specified Amazon EC2 launch template as the default launch template for the specified account.
+          # AmiDistributionConfiguration:
+          #   Name: String
+          #   Description: String
+          #   KmsKeyId: String
+          #   # LaunchPermissionConfiguration: LaunchPermissionConfiguration
+          #   TargetAccountIds:
+          #     - String
+          Region: !Ref AWS::Region
+
+  EC2RequiredFilesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # LoggingConfiguration:
+      #   DestinationBucketName: BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              # KMSMasterKeyID: KeyID
+              SSEAlgorithm: aws:kms # Uses aws/s3
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      ObjectLockEnabled: true
+
+  EC2RequiredFilesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref EC2RequiredFilesBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${EC2RequiredFilesBucket.Arn}/*
+              - !Sub ${EC2RequiredFilesBucket.Arn}
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AllowTls12Only
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${EC2RequiredFilesBucket.Arn}
+              - !Sub ${EC2RequiredFilesBucket.Arn}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  ImageBuilderInfraInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      # InstanceProfileName: String
+      Roles: [!Ref ImageBuilderInfraInstanceRole]
+
+  ImageBuilderInfraInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # RoleName: String
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+            # Condition:
+            #   StringEquals:
+            #     aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        # TODO: Scope it down if possible
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: ImageBuilderInfraInstanceRoleInlinePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowGetObject
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${EC2RequiredFilesBucket.Arn}/*
+              - Sid: AllowListBucket
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub ${EC2RequiredFilesBucket.Arn}
+
+  # BuildWorkflow:
+  #   Type: AWS::ImageBuilder::Workflow
+  #   Properties:
+  #     Name: !Sub ${pResourcePrefix}-build-workflow
+  #     Type: BUILD # BUILD | TEST | DISTRIBUTION
+  #     # KmsKeyId: String
+  #     #############################################
+  #     # Update Version and ChangeDescription when any changes are made to this resource #
+  #     Version: "1.0.0"
+  #     ChangeDescription: Initial version
+  #     #############################################
+  #     Data: |
+  #       name: build-image
+  #       description: Workflow to build an AMI
+  #       schemaVersion: 1.0
+
+  #       steps:
+  #         - name: LaunchBuildInstance
+  #           action: LaunchInstance
+  #           onFailure: Abort
+  #           inputs:
+  #             waitFor: "ssmAgent"
+
+  #         - name: ApplyBuildComponents
+  #           action: ExecuteComponents
+  #           onFailure: Abort
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchBuildInstance.instanceId"
+
+  #         - name: InventoryCollection
+  #           action: CollectImageMetadata
+  #           onFailure: Abort
+  #           if:
+  #             and:
+  #               - stringEquals: "AMI"
+  #                 value: "$.imagebuilder.imageType"
+  #               - booleanEquals: true
+  #                 value: "$.imagebuilder.collectImageMetadata"
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchBuildInstance.instanceId"
+
+  #         - name: RunSanitizeScript
+  #           action: SanitizeInstance
+  #           onFailure: Abort
+  #           if:
+  #             and:
+  #               - stringEquals: "AMI"
+  #                 value: "$.imagebuilder.imageType"
+  #               - not:
+  #                   stringEquals: "Windows"
+  #                   value: "$.imagebuilder.platform"
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchBuildInstance.instanceId"
+
+  #         - name: CreateOutputAMI
+  #           action: CreateImage
+  #           onFailure: Abort
+  #           if:
+  #             stringEquals: "AMI"
+  #             value: "$.imagebuilder.imageType"
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchBuildInstance.instanceId"
+
+  #         - name: TerminateBuildInstance
+  #           action: TerminateInstance
+  #           onFailure: Continue
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchBuildInstance.instanceId"
+
+  #       outputs:
+  #         - name: "ImageId"
+  #           value: "$.stepOutputs.CreateOutputAMI.imageId"
+
+  # TestWorkflow:
+  #   Type: AWS::ImageBuilder::Workflow
+  #   Properties:
+  #     Name: !Sub ${pResourcePrefix}-test-workflow
+  #     # Description: ec2-scanner-workflow description
+  #     Type: TEST
+  #     # KmsKeyId: String
+  #     #############################################
+  #     # Update Version and ChangeDescription when any changes are made to this resource #
+  #     Version: "1.0.0"
+  #     ChangeDescription: Initial version
+  #     #############################################
+  #     Data: |
+  #       name: test-image
+  #       description: Workflow to test an image
+  #       schemaVersion: 1.0
+
+  #       steps:
+  #         - name: LaunchTestInstance
+  #           action: LaunchInstance
+  #           onFailure: Abort
+  #           inputs:
+  #             waitFor: "ssmAgent"
+
+  #         # - name: CollectImageScanFindings
+  #         #   action: CollectImageScanFindings
+  #         #   onFailure: Continue
+  #         #   if:
+  #         #     booleanEquals: true
+  #         #     value: "$.imagebuilder.collectImageScanFindings"
+  #         #   inputs:
+  #         #     instanceId.$: "$.stepOutputs.LaunchTestInstance.instanceId"
+
+  #         - name: ApplyTestComponents
+  #           action: ExecuteComponents
+  #           onFailure: Abort
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchTestInstance.instanceId"
+
+  #         - name: TerminateTestInstance
+  #           action: TerminateInstance
+  #           onFailure: Continue
+  #           inputs:
+  #             instanceId.$: "$.stepOutputs.LaunchTestInstance.instanceId"
