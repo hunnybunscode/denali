@@ -1,0 +1,11 @@
+[
+    {".txt": "text/plain"}, 
+    {".json": "application/json"}, 
+    {".wav": "audio/wave"}, 
+    {".xml": "application/xml"}, 
+    {".flac": "audio/flac"},
+    {".zip": "application/zip"}, 
+    {".wav": "audio/wav"}, 
+    {".wav": "audio/x-wav"}, 
+    {".infoset": "application/xml"}
+]
