@@ -324,6 +324,7 @@ Resources:
           DATA_TRANSFER_BUCKET: !Ref DataTransferBucket
           DYNAMODB_TABLE_NAME: !Ref TransferStatusTable
           FAILED_TRANSFER_BUCKET: !Ref failedtransferbucket
+          ACCOUNT_ID: !Ref AWS::AccountId
       FunctionName: Transfer-Result-lambda
       Handler: transfer_result.lambda_handler
       Role: !Ref TransferResultServiceRole
@@ -419,11 +420,13 @@ Resources:
 
   TransferStatusTable:
     Type: AWS::DynamoDB::Table
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
-      BillingMode: PAY_PER_REQUEST
+      BillingMode: PAY_PER_REQUEST # On-Demand Mode, for unpredictable workloads
       SSESpecification:
         SSEEnabled: true
-      ### Added Below: Anything you use in the GSI Key Schema must be added to Attribute Definitions
+      ### Added Below: Anything you use in the GlobalSecondaryIndexes KeySchema must be added to AttributeDefinitions
       AttributeDefinitions:
         - AttributeName: s3Key
           AttributeType: S
@@ -433,16 +436,16 @@ Resources:
           AttributeType: S
       KeySchema:
         - AttributeName: s3Key
-          KeyType: HASH
+          KeyType: HASH # partition key
         - AttributeName: mappingId
-          KeyType: RANGE
+          KeyType: RANGE # sort key
       GlobalSecondaryIndexes:
         - IndexName: mappingId-index
           KeySchema:
             - AttributeName: mappingId
-              KeyType: HASH
+              KeyType: HASH # partition key
             - AttributeName: status
-              KeyType: RANGE
+              KeyType: RANGE # sort key
           Projection:
             NonKeyAttributes:
               - s3Key
@@ -454,8 +457,6 @@ Resources:
             ProjectionType: INCLUDE
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
   DataTransferBucket:
     Type: AWS::S3::Bucket
