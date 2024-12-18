@@ -519,17 +519,6 @@ Resources:
           #               - DataTransferBucket
           #               - Arn
           #           - /*
-          ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
-          ##### REMOVE PRIOR TO AFTAC DEPLOYMENT
-          - Action:
-              - s3:GetObject
-              - s3:GetObjectTagging
-            Effect: Allow
-            Principal:
-              AWS: arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9
-            Resource:
-              - !Sub ${DataTransferBucket.Arn}
-              - !Sub ${DataTransferBucket.Arn}/*
         Version: 2012-10-17
 
   ApprovedFileTypesParameter:
