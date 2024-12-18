@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from urllib.parse import unquote_plus
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
@@ -23,10 +24,14 @@ SQS_CLIENT = boto3.client("sqs", config=config)
 
 def lambda_handler(event, context):
     bucket = event["Records"][0]["s3"]["bucket"]["name"]
-    key = event["Records"][0]["s3"]["object"]["key"]
+    key = unquote_plus(event["Records"][0]["s3"]["object"]["key"])
 
+    logger.info(
+        f"Adding tags and sending a message to the SQS queue for Bucket: {bucket}, Key: {key}"  # noqa: E501
+    )
     add_tags(bucket, key)
     send_to_sqs(bucket, key)
+    logger.info(f"SUCCESS")
 
 
 def add_tags(bucket: str, key: str):
@@ -38,7 +43,7 @@ def add_tags(bucket: str, key: str):
         {"Key": "CDSProfile", "Value": CDS_PROFILE}
     ]
 
-    response = S3_CLIENT.put_object_tagging(
+    S3_CLIENT.put_object_tagging(
         Bucket=bucket,
         Key=key,
         Tagging={
@@ -49,11 +54,9 @@ def add_tags(bucket: str, key: str):
         # ExpectedBucketOwner
     )
 
-    logger.info(f"PutObjectTagging response = {response}")
-
 
 def send_to_sqs(bucket, key):
-    response = SQS_CLIENT.send_message(
+    SQS_CLIENT.send_message(
         QueueUrl=QUEUE_URL,
         MessageBody=json.dumps({
             "detail": {
@@ -63,7 +66,4 @@ def send_to_sqs(bucket, key):
                 }
             }
         })
-
     )
-
-    logger.info(f"SendMessage response: {response}")
