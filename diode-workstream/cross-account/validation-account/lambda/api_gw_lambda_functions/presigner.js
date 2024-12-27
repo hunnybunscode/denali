@@ -1,74 +1,66 @@
 'use strict';
-import {S3Client, PutObjectCommand} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import https from "https";
 import Path from "path";
 
 const s3_client = new S3Client({});
-const input_bucket=process.env["pitcher_bucket"]
-const approved_file_types=[".wav", ".json", ".mp4", ".zip"]
+const input_bucket = process.env["pitcher_bucket"]
+const approved_file_types = [".wav", ".json", ".mp4", ".zip"]
 
 
-export const handler = (event, context, callback) => {
-  
-    //Capture file name and file extension 
-    console.log("This is the content of event:",event)
-    const currFile=String(event["Key"])
-    const currFile_ext=Path.extname(currFile)
-    console.log(currFile_ext)
-    
-    //Validate extension 
-    if (approved_file_types.includes(currFile_ext)){
-      //specify
-      var params = {
-              'Bucket' : input_bucket,
-              'Key' : currFile,
-      };
-      const command = new PutObjectCommand(params);
-      const expiresIn =  60 * 60;
-  
-      
-      //Generate URL and upload file
-      async function generateurl(){
-        try{
-          const url = await getSignedUrl(s3_client, command, {expiresIn});
-          console.log(url)
-          await put(url, event["Key"]);
-          console.log( "File successfully uploaded")
-          callback(null, url)
-        } catch (err) {
-            console.log(err)
-            return err
+export const handler = async (event, context) => {
+  console.log("Event:", event)
+
+  // Capture file name and file extension 
+  const file = String(event["Key"])
+  const fileExt = Path.extname(file)
+  console.log("File Extension:", fileExt)
+
+  // If the file extension is approved
+  if (approved_file_types.includes(fileExt)) {
+    const params = {
+      'Bucket': input_bucket,
+      'Key': file,
+    };
+    const command = new PutObjectCommand(params);
+    const expiresIn = 60 * 60; // 1 hour
+
+    // Generate URL and upload file
+    const url = await getSignedUrl(s3_client, command, { expiresIn });
+    console.log("URL:", url)
+    try {
+      const response = await fetch(url, {
+        method: "PUT",
+        body: event["Body"],
+      })
+
+      if (response.ok) {
+        const message = "File upload succeeded"
+        console.log(message)
+        return {
+          "statusCode": response.status,
+          "body": message,
         }
       }
-      generateurl();
-      
-      
-      //Put Object Function 
-      function put(url, data) {
-        console.log("Made it to put function")
-        console.log("URL officially passed in:", url)
-        const request = https.request(url, (response) => { 
-          response.on(data, (chunk) => { 
-            data = data + chunk.toString(); 
-          }); 
-  
-          response.on('end', () => { 
-            const body = JSON.parse(data); 
-            console.log(body); 
-            callback(null, body)
-          }); 
-        }) 
-  
-        request.on('error', (error) => { 
-          console.log('An error', error); 
-        }); 
-  
-        request.end()
+
+      // If the response is NOT okay
+      const message = `File upload failed with the status code of ${response.status}`
+      console.log(message)
+      throw new Error(message)
+
+    } catch (err) {
+      console.log(err)
+      return {
+        "statusCode": 500,
+        "body": err.message,
       }
-  
-    }else{
-      console.log("File type not accepted")
-      callback(null,"File type not accepted")
+    }
+
+  } else { // If the file extension is NOT approved
+    console.log("File type not accepted")
+    return {
+      "statusCode": 400,
+      "body": "File type not accepted"
+    }
   }
 };

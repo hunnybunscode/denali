@@ -1,86 +1,105 @@
-import boto3
 import logging
 import os
-import zipfile
-import zipfile_validator
-import validator
 import subprocess
+import zipfile
+
 import clamscan
+import validator
+import zipfile_validator
 
-s3_client = boto3.client('s3', region_name = 'us-gov-west-1')
-logging.basicConfig(format='%(message)s', filename='/var/log/messages', level=logging.INFO)
-def get_file(bucket, key, receipt_handle, approved_filetypes, mime_mapping):
-    logging.info('Getting File')
-    file_path = '/usr/bin/files/'
+import boto3  # type: ignore
+from botocore.config import Config  # type: ignore
+
+logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logger = logging.getLogger()
+
+# TODO: Should not have to hard-code the region
+region = "us-gov-west-1"
+config = Config(retries={"max_attempts": 5, "mode": "standard"})
+S3_CLIENT = boto3.client("s3", config=config, region_name=region)
+SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
+
+
+def get_file(bucket, key: str, receipt_handle, approved_filetypes, mime_mapping):
+    logger.info("Getting File")
+    file_path = "/usr/bin/files/"
     files = os.listdir(file_path)
-    logging.info(f'Number of files: {len(files)}')
-    if len(files) != 0:
-        logging.info('emptying directory')
+    logger.info(f"Number of files: {len(files)}")
+    if files:
+        logger.info("emptying directory")
         for file in files:
-            subprocess.run(['rm', '-r', f'{file_path}{file}'])
+            subprocess.run(["rm", "-r", f"{file_path}{file}"])
 
-    # Identify file extension
-    ext = key.split('.',-1)
-    ext = ext[-1]
-    logging.info(f'Extension: {ext}') 
-    if ext == 'csv':
-        logging.info(f'File {key} is a .csv file.  Proceeding to scanner.')
+    file_ext = key.split(".")[-1]
+
+    logger.info(f"Extension: {file_ext}")
+
+    if file_ext not in approved_filetypes:
+        handle_non_approved_filetypes(bucket, key, receipt_handle, file_ext)
+        return
+
+    if file_ext == "csv":
+        logger.info(f"File {key} is a .csv file.  Proceeding to scanner.")
         clamscan.scanner(bucket, key, receipt_handle)
-    elif ext in approved_filetypes:
-        if ext == 'zip':
-            try:
-                logging.info(f'Downloading {key} to local directory')
-                s3_client.download_file(
-                    Bucket = bucket,
-                    Key = key,
-                    Filename = '/usr/bin/zipfiles/zipfile.zip'
-                )
-                logging.info(f'Attempting to unzip {key} from {bucket}...')
-                #Unzip file
-                #Exract Zip File
-            except Exception as e:
-                logging.error(f'Exception ocurred copying file to local storage: {e}')
-            try:
-                with zipfile.ZipFile('/usr/bin/zipfiles/zipfile.zip') as zip_file:
-                    ## extact files from zip into tmp location
-                    zip_file.extractall(path='/usr/bin/files/')
+        return
 
-                logging.info(f'{key} successfully unzipped.')
-            except zipfile.BadZipFile as bzf:
-                logging.error(f'BadZipFile exception ocurred: {bzf}')
-
-            #Validate file
-            
-            zipfile_validator.validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping)
-        else:
-            logging.info(f'Attempting to copy {key} to local storage from {bucket}...')
-            try:
-                #Copy file to Local Storage
-                
-                s3_client.download_file(
-                    Bucket = bucket,
-                    Key = key,
-                    Filename = f'/usr/bin/files/file_to_scan.{ext}'
-                )
-                validator.validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping)
-            except Exception as e:
-                logging.error(f'Exception ocurred copying file to local storage: {e}')  
-    else:
-        logging.info(f'Extension {ext} not included in list of allowed filetypes')
+    if file_ext == "zip":
         try:
-            #obtain Quarantine Bucket name via Parameter Store
-            ssm_client = boto3.client('ssm', region_name = 'us-gov-west-1')
-            quarantine_bucket_parameter = ssm_client.get_parameter(
-                Name='/pipeline/QuarantineBucketName'
+            logger.info(f"Downloading {key} to local directory")
+            S3_CLIENT.download_file(
+                Bucket=bucket,
+                Key=key,
+                Filename="/usr/bin/zipfiles/zipfile.zip"
             )
-            quarantine_bucket = quarantine_bucket_parameter['Parameter']['Value']
-            dest_bucket = quarantine_bucket
-            validator.quarantine_file(bucket, key, dest_bucket, receipt_handle)
+            logger.info(f"Attempting to unzip {key} from {bucket}...")
         except Exception as e:
-            logging.error(f'Exception ocurred quarantining file: {e}')
-            
+            logger.error(
+                f"Exception ocurred copying file to local storage: {e}"
+            )
+
+        try:
+            with zipfile.ZipFile("/usr/bin/zipfiles/zipfile.zip") as zip_file:
+                # extact files from zip into tmp location
+                zip_file.extractall(path="/usr/bin/files/")
+
+            logger.info(f"{key} successfully unzipped.")
+        except zipfile.BadZipFile as bzf:
+            logger.error(f"BadZipFile exception ocurred: {bzf}")
+
+        zipfile_validator.validator(
+            bucket, key, receipt_handle, approved_filetypes, mime_mapping)
+        return
+
+    # If file extension is not zip or csv
+    logger.info(
+        f"Attempting to copy {key} to local storage from {bucket}..."
+    )
+    try:
+        # Copy file to Local Storage
+        S3_CLIENT.download_file(
+            Bucket=bucket,
+            Key=key,
+            Filename=f"/usr/bin/files/file_to_scan.{file_ext}"
+        )
+        validator.validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
+    except Exception as e:
+        logger.error(
+            f"Exception ocurred copying file to local storage: {e}")
 
 
+def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, file_ext: str):
+    logger.info(
+        f"Extension {file_ext} is NOT one of the allowed filetypes"
+    )
+    try:
+        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
+        validator.quarantine_file(bucket, key, quarantine_bucket, receipt_handle)  # noqa: E501
+    except Exception as e:
+        logger.error(f"Exception ocurred quarantining file: {e}")
 
 
-
+def get_param_value(name: str, with_decryption=False) -> str:
+    return SSM_CLIENT.get_parameter(
+        Name=name,
+        WithDecryption=with_decryption
+    )["Parameter"]["Value"]

@@ -1,4 +1,26 @@
-# This stack consists of VPC Endpoints and other resources which
+AWSTemplateFormatVersion: 2010-09-09
+Description: This stack consists of VPC Endpoints and other resources
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: ""
+        Parameters:
+          - VpcId
+          - ExistingVpcCidr
+          - PrivateSubnetIds
+          - PrivateRouteTableIds
+
+    ParameterLabels:
+      VpcId:
+        default: VPC ID
+      PrivateRouteTableIds:
+        default: Private Route Table IDs
+      PrivateSubnetIds:
+        default: Private Subnet IDs
+      ExistingVpcCidr:
+        default: Existing VPC CIDR
 
 Parameters:
   VpcId:
@@ -36,17 +58,17 @@ Resources:
       VpcEndpointType: Gateway
       VpcId: !Ref VpcId
 
-  SsmVpcEndpointSecurityGroup:
+  VpcEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security Group for SSM VPC Endpoint
+      GroupDescription: Security Group for VPC Endpoints
       SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
+        - CidrIp: 127.0.0.1/32
+          Description: No outbound traffic allowed
           IpProtocol: "-1"
       SecurityGroupIngress:
         - CidrIp: !Ref ExistingVpcCidr
-          Description: Allows Https traffic from inside the vpc
+          Description: Allows inbound HTTPS traffic
           FromPort: 443
           IpProtocol: tcp
           ToPort: 443
@@ -57,26 +79,10 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt SsmVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-
-  SsmMessagesVpcEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for SSM Messages VPC Endpoint
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
-          Description: Allows Https traffic from inside the vpc
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
       VpcId: !Ref VpcId
 
   SsmMessagesVpcEndpoint:
@@ -84,26 +90,10 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt SsmMessagesVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-
-  Ec2MessagesVpcEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for EC2 Messages VPC Endpoint
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
-          Description: Allows Https traffic from inside the vpc
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
       VpcId: !Ref VpcId
 
   Ec2MessagesVpcEndpoint:
@@ -111,26 +101,10 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt Ec2MessagesVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-
-  SqsVpcEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for SQS VPC Endpoint
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
-          Description: Allow https traffic from inside vpc
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
       VpcId: !Ref VpcId
 
   SqsVpcEndpoint:
@@ -138,26 +112,10 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt SqsVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.sqs
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-
-  LogsVpcEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for Cloudwatch Logs VPC Endpoint
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
-          Description: Permit HTTPS traffic from inside VPC
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
       VpcId: !Ref VpcId
 
   LogsVpcEndpoint:
@@ -165,26 +123,10 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt LogsVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
-      VpcId: !Ref VpcId
-
-  SnsVpcEndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for SNS VPC Endpoint
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
-          Description: Allow https traffic from inside vpc
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
       VpcId: !Ref VpcId
 
   SnsVpcEndpoint:
@@ -192,7 +134,7 @@ Resources:
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
-        - !GetAtt SnsVpcEndpointSecurityGroup.GroupId
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface

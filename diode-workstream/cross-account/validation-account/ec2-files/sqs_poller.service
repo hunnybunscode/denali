@@ -7,5 +7,6 @@ Type=simple
 Restart=always
 ExecStart=/bin/python3 /usr/bin/validation-pipeline/sqs_poller.py
 User=root
+
 [Install]
 WantedBy=multi-user.target

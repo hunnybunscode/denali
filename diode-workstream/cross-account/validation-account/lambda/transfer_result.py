@@ -1,134 +1,148 @@
 import json
+import logging
 import os
-import boto3
 import zoneinfo
 from datetime import datetime
-import logging
 
-from urllib.parse import unquote_plus
+import boto3  # type: ignore
+from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-dynamodb_table_name = os.environ['DYNAMODB_TABLE_NAME']
+DDB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
+DATA_TRANSFER_BUCKET = os.environ["DATA_TRANSFER_BUCKET"]
+FAILED_TRANSFER_TOPIC_ARN = os.environ["FAILED_TRANSFER_TOPIC_ARN"]
+FAILED_TRANSFER_BUCKET = os.environ["FAILED_TRANSFER_BUCKET"]
+ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 
-ddb_client = boto3.client('dynamodb')
-s3_client = boto3.client('s3')
-sns_client = boto3.client('sns')
+config = Config(retries={"max_attempts": 5, "mode": "standard"})
+DDB_CLIENT = boto3.client("dynamodb", config=config)
+S3_CLIENT = boto3.client("s3", config=config)
+SNS_CLIENT = boto3.client("sns", config=config)
 
 # TODO: Add handling for Failed Transfers - Delete Object From Pitcher, Move object to failed transfer bucket, Send SNS Message
 
-def publish_sns(key):
-    print('Sending SNS Message due to failed statusCode')
-    response = sns_client.publish(
-        TopicArn = os.getenv('FAILED_TRANSFER_TOPIC_ARN'),
-        Message = f'The File {key} was not successfully transferred.\nIt has been moved from the Data Transfer bucket and is now located at the following Location:\n{os.getenv("FAILED_TRANSFER_BUCKET")}/{key}',
-        Subject = 'Failed Cross Domain Trainsfer'
-    )
-
-def move_object(key):
-    move_response = s3_client.copy_object(
-        Bucket = os.getenv('FAILED_TRANSFER_BUCKET'),
-        CopySource = {'Bucket': os.getenv('DATA_TRANSFER_BUCKET'), 'Key': key},
-        Key = key
-    )
-    logger.info(f'Copy Response: {move_response}')
-    
-    
-def delete_object(key):
-    del_response = s3_client.delete_object(
-        Bucket = os.getenv('DATA_TRANSFER_BUCKET'),
-        Key = key
-    )
-    logger.info(f'Delete Response: {del_response}')
-
-
-
-def get_object_tagging(bucket, key):
-    print(f'Getting Object Tags for {bucket}/{key}')
-    try: 
-        response = s3_client.get_object_tagging(
-            Bucket = bucket,
-            Key = key
-            )
-        tags = response['TagSet']
-        data_owner = None
-        gov_poc = None   
-        key_owner = None
-        for i in tags:
-            if i['Key'] == 'DataOwner':
-                data_owner = i['Value']
-            elif i['Key'] == 'GovPOC':
-                gov_poc = i['Value']
-            elif i['Key'] == 'KeyOwner':
-                key_owner = i['Value']
-            else:
-                pass
-        # print(f'Data Owner = {data_owner}')
-        # print(f'Gov POC = {gov_poc}')
-        # print(f'Key Owner = {key_owner}')
-        print(f'{key} tags obtained: {tags}')
-        return data_owner, gov_poc, key_owner
-    except Exception as e:
-        logger.error(f'Exception occurred getting object tags ------- {e}')
-        #print(f'Exception occurred getting object tags ------- {e}')
-        data_owner = 'Unknown'
-        gov_poc = 'Unknown'
-        key_owner = 'Unknown'
-        return data_owner, gov_poc, key_owner
-
 
 def lambda_handler(event, context):
-    print(event)
-    data = event["Records"][0]["body"]
-    data = json.loads(data)
+    logger.info(f"Event: {json.dumps(event, default=str)}")
 
-    gov_poc = 'unknown'
-    data_owner = 'unknown'
-    key_owner = 'unknown'
-    
+    data = json.loads(event["Records"][0]["body"])
     bucket = data["bucket"]
     key = data["key"]
-    key = unquote_plus(key)
-    statusCode = data["TransferStatusCode"] 
-    
-    data_owner, gov_poc, key_owner = get_object_tagging(bucket, key)
-    
-    try:
-        ny_tz = zoneinfo.ZoneInfo("America/New_York")
-        current_timestamp= datetime.now(ny_tz)
 
-        ddb_client.put_item(
-            TableName=dynamodb_table_name,
+    data_owner, gov_poc, key_owner = get_object_tagging(bucket, key)
+    timestamp = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+
+    put_item_in_ddb(data, timestamp, data_owner, gov_poc, key_owner)
+
+    if data["TransferStatusCode"] != 200:
+        logger.info(
+            f"Data transfer failed; moving {bucket}/{key} to {FAILED_TRANSFER_BUCKET}"  # noqa: E501
+        )
+        # Send a message to the SNS topic for failed data transfers
+        send_transfer_error_message(key)
+        # Copy the failed S3 object to the failed transfer bucket
+        copy_object(DATA_TRANSFER_BUCKET, FAILED_TRANSFER_BUCKET, key)
+
+    delete_object(DATA_TRANSFER_BUCKET, key)
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps("Result Successfully Captured")
+    }
+
+
+def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
+    """
+    Returns `TagSet` for `key` in `bucket` in a dict.
+    """
+    logger.info(f"Getting tags for {bucket}/{key}")
+
+    tag_set = S3_CLIENT.get_object_tagging(
+        Bucket=bucket,
+        Key=key,
+        ExpectedBucketOwner=ACCOUNT_ID,
+    )["TagSet"]
+
+    tags = {tag["Key"]: tag["Value"] for tag in tag_set}
+    logger.info(f"Tags for {bucket}/{key}: {tags}")
+    return tags
+
+
+def get_object_tagging(bucket: str, key: str):
+    """
+    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner` for `key` in `bucket`.
+    If any of these tags are not set, returns "unknown".
+    """
+    unknown = "unknown"
+    try:
+        tags = _get_object_tagging(bucket, key)
+
+        data_owner = tags.get("DataOwner", unknown)
+        gov_poc = tags.get("GovPOC", unknown)
+        key_owner = tags.get("KeyOwner", unknown)
+
+        return data_owner, gov_poc, key_owner
+    except ClientError as e:
+        logger.error(f"Failed to get object tags: {e}")
+        return unknown, unknown, unknown
+
+
+def put_item_in_ddb(data: dict, timestamp: datetime, data_owner: str, gov_poc: str, key_owner: str):
+    try:
+        DDB_CLIENT.put_item(
+            TableName=DDB_TABLE_NAME,
             Item={
-                "mappingId": {"S": data["mappingId"]},
+                "s3Key": {"S": data["key"]},  # partition key
+                "mappingId": {"S": data["mappingId"]},  # sort key
+                "status": {"S": data["Status"]},
                 "transferId": {"S": data["transferId"]},
-                "s3Key": {"S": data["key"]},
-                "TransferStatusCode": {"S": str(statusCode)},
-                "Status": {"S": data["Status"]},
-                "timestamp": {"S": str(current_timestamp)},
-                "govPoc": {"S": gov_poc},
+                "transferStatusCode": {"S": str(data["TransferStatusCode"])},
+                "timestamp": {"S": str(timestamp)},
                 "dataOwner": {"S": data_owner},
+                "govPoc": {"S": gov_poc},
                 "keyOwner": {"S": key_owner},
             },
         )
-    except Exception as e:
-        print(e)
-        print(
-            "Error putting metadata about object {} into DynamoDB table".format(
-                data["key"]
-            )
+    except ClientError as e:
+        logger.exception(e)
+        logger.error(
+            f'Error putting metadata about {data["key"]} object into DynamoDB table'  # noqa: E501
         )
-        raise e
-    
-    if statusCode != 200:
-        print(f'Transfer failed - moving {bucket}/{key} to {os.environ["FAILED_TRANSFER_BUCKET"]}')
-        publish_sns(key)
-        move_object(key)
+        raise
 
-    delete_object(key)
-    
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps('Result Successfully Captured')
-    }
+
+def send_transfer_error_message(obj_key: str):
+    logger.info("Sending SNS Message due to failed status code")
+
+    SNS_CLIENT.publish(
+        TopicArn=FAILED_TRANSFER_TOPIC_ARN,
+        Subject="Failed Cross Domain Transfer",
+        Message=(f"The file {obj_key} was NOT successfully transferred.\n"
+                 "It has been moved from the Data Transfer bucket to "
+                 f"the following location:\n{FAILED_TRANSFER_BUCKET}/{obj_key}"),
+    )
+
+
+def copy_object(from_bucket: str, to_bucket: str, key: str):
+    response = S3_CLIENT.copy_object(
+        # Source bucket/key/owner
+        CopySource={"Bucket": from_bucket, "Key": key},
+        ExpectedSourceBucketOwner=ACCOUNT_ID,
+        # Destination bucket/key/owner
+        Bucket=to_bucket,
+        Key=key,
+        ExpectedBucketOwner=ACCOUNT_ID,
+    )
+    logger.info(f"CopyObject response: {response}")
+
+
+def delete_object(bucket: str, key: str):
+    response = S3_CLIENT.delete_object(
+        Bucket=bucket,
+        Key=key,
+        ExpectedBucketOwner=ACCOUNT_ID,
+    )
+    logger.info(f"DeleteObject response: {response}")
