@@ -12,7 +12,7 @@ export const handler = async (event, context) => {
   console.log("Event:", event)
 
   // Capture file name and file extension 
-  const file = String(event["Key"])
+  const file = String(event["queryStringParameters"]["Key"])
   const fileExt = Path.extname(file)
   console.log("File Extension:", fileExt)
 
