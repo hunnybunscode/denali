@@ -4,60 +4,100 @@
 # Lambda Policy with Cross Account Access
 # Lambda Permission for SQS to Invoke Function
 
-Parameters:
-  # ValidationAccountId:
-  #   Type: String
-  #   Description: Account Id of the Validation Account
-  #   Default: 303344244756
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Resources from Validation Account
+        Parameters:
+          - DataTransferBucketName
+          - DataTransferSqsQueueArn
+          - TranferResultSqsQueueArn
+          - TranferResultSqsQueueUrl
 
+      - Label:
+          default: Data Transfer Lambda Code
+        Parameters:
+          - DataTransferLambdaStorageBucket
+          - DataTransferLambdaCodeKey
+
+      - Label:
+          default: Data Transfer Lambda Code
+        Parameters:
+          - Cds1MappingId
+          - Cds2MappingId
+          - Cds3MappingId
+
+    ParameterLabels:
+      DataTransferBucketName:
+        default: Data Transfer Bucket Name
+      DataTransferSqsQueueArn:
+        default: Data Transfer SQS Queue ARN
+      TranferResultSqsQueueArn:
+        default: Data Transfer Result SQS Queue ARN
+      TranferResultSqsQueueUrl:
+        default: Data Transfer Result SQS Queue URL
+      DataTransferLambdaStorageBucket:
+        default: Data Transfer Lambda Storage Bucket
+      DataTransferLambdaCodeKey:
+        default: Data Transfer Lambda Code Key
+      Cds1MappingId:
+        default: CDS_1 Mapping Id
+      Cds2MappingId:
+        default: CDS_2 Mapping Id
+      Cds3MappingId:
+        default: CDS_3 Mapping Id
+
+Parameters:
   DataTransferBucketName:
     Type: String
     Description: Name of the S3 data transfer bucket in the Validation Account
-    Default: pipeline-app-pipelinestack-558z-datatransferbucket-36gmzqd9mk7y
+    AllowedPattern: ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+    ConstraintDescription: Bucket name can include numbers, lowercase letters, and hyphens; and must start and end with a lowercase letter or number
 
   DataTransferSqsQueueArn:
     Type: String
-    Description: Arn of the Data Transfer SQS queue in the Validation Account
-    Default: arn:aws-us-gov:sqs:us-gov-west-1:303344244756:pipeline-app-PipelineStack-558Z0273LVJW-transferqueue-Gerl7cfYmLPD
+    Description: ARN of the Data Transfer SQS queue in the Validation Account
+    AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
+    ConstraintDescription: Must be a valid ARN of the Data Transfer SQS queue in the Validation Account
 
   TranferResultSqsQueueArn:
     Type: String
-    Description: Arn of the Transfer Result SQS queue in the Validation Account
-    Default: arn:aws-us-gov:sqs:us-gov-west-1:303344244756:pipeline-app-PipelineStack-558Z0273LVJW-TransferResultQueue-QOSiNb7cT0MZ
+    Description: ARN of the Data Transfer Result SQS queue in the Validation Account
+    AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
+    ConstraintDescription: Must be a valid ARN of the Data Transfer Result SQS queue in the Validation Account
 
   TranferResultSqsQueueUrl:
     Type: String
-    Description: Url of the Transfer Result SQS queue in the Validation Account
-    Default: https://sqs.us-gov-west-1.amazonaws.com/303344244756/pipeline-app-PipelineStack-558Z0273LVJW-TransferResultQueue-QOSiNb7cT0MZ
+    Description: URL of the Data Transfer Result SQS queue in the Validation Account
+    AllowedPattern: ^https:\/\/sqs\..+
+    ConstraintDescription: Must be a valid URL of the Data Transfer Result SQS queue in the Validation Account
+
+  DataTransferLambdaStorageBucket:
+    Type: String
+    Description: Name of the S3 Bucket that contains the Lambda code for data transfer
+    AllowedPattern: ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+    ConstraintDescription: Bucket name can include numbers, lowercase letters, and hyphens; and must start and end with a lowercase letter or number
 
   DataTransferLambdaCodeKey:
     Type: String
-    Description: S3 Key of the Lambda Code
+    Description: S3 Key of the Lambda code for data transfer
     Default: data_transfer.zip
-
-  LambdaStorageBucket:
-    Type: String
-    Description: S3 Bucket for Lambda Code
-    Default: lambda-functions-303369139906
 
   Cds1MappingId:
     Type: String
-    Description: CDS_1 Mapping Id
+    # Description: CDS_1 Mapping Id
     Default: 12346789-abcd-1234-abcd-123456789012
 
   Cds2MappingId:
     Type: String
-    Description: CDS_2 Mapping Id
+    # Description: CDS_2 Mapping Id
     Default: 12346789-abcd-1234-abcd-123456789012
 
   Cds3MappingId:
     Type: String
-    Description: CDS_3 Mapping Id
+    # Description: CDS_3 Mapping Id
     Default: 12346789-abcd-1234-abcd-123456789012
-
-  # DiodeMappingId:
-  #   Type: String
-  #   Description: Diode Mapping Id
 
 Resources:
   DataTransferLambdaRole:
@@ -71,6 +111,9 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
       Policies:
         - PolicyName: AFC2S_DataTransferLambdaPolicy
           PolicyDocument:
@@ -78,20 +121,20 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Resource: !GetAtt DataTransferLambdaFunctionLogGroup.Arn
+
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:GetObjectTagging
-                Resource:
-                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
-                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}
+                Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref TranferResultSqsQueueArn
+
               - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
@@ -99,14 +142,24 @@ Resources:
                   - sqs:GetQueueAttributes
                 Resource: !Ref DataTransferSqsQueueArn
 
+  DataTransferLambdaFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/AFC2S_DataTransferLambdaFunction
+      RetentionInDays: 90
+
   DataTransferLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: AFC2S_DataTransferLambdaFunction
+      LoggingConfig:
+        LogGroup: !Ref DataTransferLambdaFunctionLogGroup
       Handler: data_transfer.lambda_handler
       Role: !GetAtt DataTransferLambdaRole.Arn
       Code:
-        S3Bucket: !Ref LambdaStorageBucket
+        S3Bucket: !Ref DataTransferLambdaStorageBucket
         S3Key: !Ref DataTransferLambdaCodeKey
       Runtime: python3.11
       Timeout: 30
