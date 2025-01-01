@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from urllib.parse import unquote_plus
 
 import boto3  # type: ignore
@@ -43,7 +44,7 @@ def lambda_handler(event, context):
     filename = key.split("/")[-1][-100:]
 
     try:
-        logger.info("AttemptingTransfer")
+        logger.info(f"Creating a transfer request for {key}")
         transfer_response = DIODE_CLIENT.create_transfer(
             description=f"{filename}",
             mappingId=mapping_id,
@@ -52,39 +53,38 @@ def lambda_handler(event, context):
             includeS3ObjectTags=True
         )
 
-        diodeStatusCode = transfer_response["ResponseMetadata"]["HTTPStatusCode"]
-    except Exception as e:
-        logger.error(f"TRANSFER FAILURE - ERROR {key} -- {e}")
-        transfer_response = {"ResponseMetadata": {"HTTPStatusCode": 499}, "transfer": {
-            "mappingId": mapping_id, "transferId": "FailedTransfer", "s3Uri": key}}
-        diodeStatusCode = 499
-    logger.info(f"Diode transfer response: {transfer_response}")
+        # TODO: Replace this with a CW event-based transfer status check
+        time.sleep(10)
 
-    if diodeStatusCode == 200:
-        logger.info("successful transfer of key")
+        logger.info(f"Transfer request created: {transfer_response}")
+        status_code = transfer_response["ResponseMetadata"]["HTTPStatusCode"]
         status = "SUCCESS"
-    else:
-        logger.error(f"Failed transfer of {key}")
+    except ClientError as e:
+        logger.error(f"Transfer request could not be created for {key}: {e}")
+        transfer_response = {"transfer": {
+            "mappingId": mapping_id, "transferId": "FailedTransfer"
+        }}
+        status_code = 499
         status = "FAILURE"
 
-    send_transfer_status(src_bucket, key, diodeStatusCode,
+    send_transfer_status(src_bucket, key, status_code,
                          status, transfer_response)
 
 
-def send_transfer_status(src_bucket, key, diodeStatusCode, status, transfer_response):
-    logger.info("sending sqs")
-    response = SQS_CLIENT.send_message(
+def send_transfer_status(src_bucket, key, status_code, status, transfer_response):
+    logger.info("Sending a message on transfer status to SQS queue")
+    SQS_CLIENT.send_message(
         QueueUrl=QUEUE_URL,
         MessageBody=json.dumps({
             "bucket": src_bucket,
             "key": key,
-            "TransferStatusCode": diodeStatusCode,
+            "TransferStatusCode": status_code,
             "Status": status,
             "mappingId": transfer_response["transfer"]["mappingId"],
             "transferId": transfer_response["transfer"]["transferId"],
         })
     )
-    logger.info(response)
+    logger.info("Message sent successfully")
 
 
 def get_mapping(bucket, key):
