@@ -13,6 +13,8 @@ logger = logging.getLogger()
 region = "us-gov-west-1"
 SSM_CLIENT = boto3.client("ssm", region_name=region)
 S3_CLIENT = boto3.client("s3", region_name=region)
+SQS_CLIENT = boto3.client("sqs", region_name=region)
+SNS_CLIENT = boto3.client("sns", region_name=region)
 
 
 def scanner(bucket, key, receipt_handle):
@@ -131,11 +133,10 @@ def move_file(bucket, key, dest_bucket, msg, receipt_handle):
 
 
 def send_sqs(dest_bucket, key):
-    sqs_client = boto3.client("sqs", region_name="us-gov-west-1")
     transfer_queue = get_param_value("/pipeline/DataTransferQueueUrl")  # noqa: E501
     try:
         logger.info("Sending SQS Message....")
-        response = sqs_client.send_message(
+        response = SQS_CLIENT.send_message(
             QueueUrl=transfer_queue,
             MessageBody=json.dumps({
                 "bucket": dest_bucket,
@@ -185,11 +186,10 @@ def delete_file(bucket, key):
 
 
 def delete_sqs_message(receipt_handle):
-    sqs_client = boto3.client("sqs", region_name="us-gov-west-1")
     av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")  # noqa: E501
     try:
         logger.info("Deleting SQS Message....")
-        del_msg_response = sqs_client.delete_message(
+        del_msg_response = SQS_CLIENT.delete_message(
             QueueUrl=av_scan_queue_url,
             ReceiptHandle=receipt_handle
         )
@@ -206,10 +206,9 @@ def delete_sqs_message(receipt_handle):
 def publish_sns(bucket, key, file_status, exitstatus):
     try:
         logger.info("Publishing SNS Message for Quarantined file")
-        sns_client = boto3.client("sns", region_name="us-gov-west-1")
         quarantine_topic_arn = get_param_value("/pipeline/QuarantineTopicArn")  # noqa: E501
         message = f"A File has been quarantined due to the results of a ClamAV Scan.\nFile: {key}\nFile Status: {file_status}\nClamAV Exit Code: {exitstatus}\nFile Location: {bucket}/{key}"  # noqa: E501
-        response = sns_client.publish(
+        response = SNS_CLIENT.publish(
             TopicArn=quarantine_topic_arn,
             Message=message,
             MessageStructure="text",
