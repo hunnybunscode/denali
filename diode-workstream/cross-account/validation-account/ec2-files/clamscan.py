@@ -42,9 +42,7 @@ def scanner(bucket, key, receipt_handle):
             file_status = "INFECTED"
             exit_status = 999
             logger.warning(f"{key} is infected")
-            quarantine_bucket_response = SSM_CLIENT.get_parameter(
-                Name="/pipeline/QuarantineBucketName")
-            quarantine_bucket = quarantine_bucket_response["Parameter"]["Value"]
+            quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
             msg = f"Quarantined File: {key} stored in {bucket}"
             tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle)
             publish_sns(quarantine_bucket, key, file_status, exit_status)
@@ -83,15 +81,9 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
         # remove file from local storage
         subprocess.run(["rm", "-r", "/usr/bin/files/*"])
         if file_status == "CLEAN":
-            dest_bucket_response = SSM_CLIENT.get_parameter(
-                Name="/pipeline/DataTransferIngestBucketName",)
-            ingest_bucket = dest_bucket_response["Parameter"]["Value"]
-            dest_bucket = ingest_bucket
+            dest_bucket = get_param_value("/pipeline/DataTransferIngestBucketName")  # noqa: E501
         else:
-            dest_bucket_response = SSM_CLIENT.get_parameter(
-                Name="/pipeline/QuarantineBucketName",)
-            quarantine_bucket = dest_bucket_response["Parameter"]["Value"]
-            dest_bucket = quarantine_bucket
+            dest_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
         move_file(bucket, key, dest_bucket, msg, receipt_handle)
     except Exception as e:
         logger.error(f"Exception ocurred Tagging file: {e}")
@@ -140,9 +132,7 @@ def move_file(bucket, key, dest_bucket, msg, receipt_handle):
 
 def send_sqs(dest_bucket, key):
     sqs_client = boto3.client("sqs", region_name="us-gov-west-1")
-    transfer_queue_response = SSM_CLIENT.get_parameter(
-        Name="/pipeline/DataTransferQueueUrl")
-    transfer_queue = transfer_queue_response["Parameter"]["Value"]
+    transfer_queue = get_param_value("/pipeline/DataTransferQueueUrl")  # noqa: E501
     try:
         logger.info("Sending SQS Message....")
         response = sqs_client.send_message(
@@ -164,10 +154,8 @@ def send_sqs(dest_bucket, key):
 
 # Function to delete file from ingest bucket
 def delete_file(bucket, key):
-    lts_bucket_response = SSM_CLIENT.get_parameter(
-        Name="/pipeline/LongTermStorageBucketName")
-    lts_bucket_name = lts_bucket_response["Parameter"]["Value"]
-    lts_bucket = lts_bucket_name
+    lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
+
     try:
         logger.info(f"Moving file to {lts_bucket}")
         response = S3_CLIENT.copy_object(
@@ -198,9 +186,7 @@ def delete_file(bucket, key):
 
 def delete_sqs_message(receipt_handle):
     sqs_client = boto3.client("sqs", region_name="us-gov-west-1")
-    av_scan_queue_response = SSM_CLIENT.get_parameter(
-        Name="/pipeline/AvScanQueueUrl")
-    av_scan_queue_url = av_scan_queue_response["Parameter"]["Value"]
+    av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")  # noqa: E501
     try:
         logger.info("Deleting SQS Message....")
         del_msg_response = sqs_client.delete_message(
@@ -221,9 +207,7 @@ def publish_sns(bucket, key, file_status, exitstatus):
     try:
         logger.info("Publishing SNS Message for Quarantined file")
         sns_client = boto3.client("sns", region_name="us-gov-west-1")
-        quarantine_topic_response = SSM_CLIENT.get_parameter(
-            Name="/pipeline/QuarantineTopicArn")
-        quarantine_topic_arn = quarantine_topic_response["Parameter"]["Value"]
+        quarantine_topic_arn = get_param_value("/pipeline/QuarantineTopicArn")  # noqa: E501
         message = f"A File has been quarantined due to the results of a ClamAV Scan.\nFile: {key}\nFile Status: {file_status}\nClamAV Exit Code: {exitstatus}\nFile Location: {bucket}/{key}"  # noqa: E501
         response = sns_client.publish(
             TopicArn=quarantine_topic_arn,
@@ -238,3 +222,10 @@ def publish_sns(bucket, key, file_status, exitstatus):
             logger.info(f"FAILURE: Unable to Publish SNS Message.  StatusCode: {sns_publish_status_code}")  # noqa: E501
     except Exception as e:
         logger.error(f"An Exception ocurred publishing SNS: {e}")
+
+
+def get_param_value(name: str, with_decryption=False) -> str:
+    return SSM_CLIENT.get_parameter(
+        Name=name,
+        WithDecryption=with_decryption
+    )["Parameter"]["Value"]
