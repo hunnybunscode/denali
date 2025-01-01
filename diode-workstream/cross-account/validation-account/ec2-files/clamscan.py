@@ -4,6 +4,7 @@ import random
 import subprocess
 
 import boto3  # type: ignore
+from botocore.config import Config  # type: ignore
 
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
@@ -11,10 +12,11 @@ logger = logging.getLogger()
 
 # TODO: Set the region via environment variable or config file (https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html)
 region = "us-gov-west-1"
-SSM_CLIENT = boto3.client("ssm", region_name=region)
-S3_CLIENT = boto3.client("s3", region_name=region)
-SQS_CLIENT = boto3.client("sqs", region_name=region)
-SNS_CLIENT = boto3.client("sns", region_name=region)
+config = Config(retries={"max_attempts": 5, "mode": "standard"})
+SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
+S3_CLIENT = boto3.client("s3", config=config, region_name=region)
+SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
+SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 
 
 def scanner(bucket, key, receipt_handle):
