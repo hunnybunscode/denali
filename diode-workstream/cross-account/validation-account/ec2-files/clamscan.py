@@ -5,6 +5,7 @@ import subprocess
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
@@ -49,7 +50,7 @@ def scanner(bucket, key, receipt_handle):
             quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
             msg = f"Quarantined File: {key} stored in {bucket}"
             tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle)
-            publish_sns(quarantine_bucket, key, file_status, exit_status)
+            publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred scanning file: {e}")
 
@@ -205,24 +206,20 @@ def delete_sqs_message(receipt_handle):
             f"An Error Ocurred Deleting SQS Message queue.  Error: {e}")
 
 
-def publish_sns(bucket, key, file_status, exitstatus):
+def publish_quarantine_notification(bucket: str, key: str, file_status: str, exit_status: int):
+    logger.info("Publishing SNS message for a quarantined file")
     try:
-        logger.info("Publishing SNS Message for Quarantined file")
-        quarantine_topic_arn = get_param_value("/pipeline/QuarantineTopicArn")  # noqa: E501
-        message = f"A File has been quarantined due to the results of a ClamAV Scan.\nFile: {key}\nFile Status: {file_status}\nClamAV Exit Code: {exitstatus}\nFile Location: {bucket}/{key}"  # noqa: E501
-        response = SNS_CLIENT.publish(
-            TopicArn=quarantine_topic_arn,
-            Message=message,
-            MessageStructure="text",
-            Subject=f"A file  has been quarantined in the quarantin S3 Bucket following a ClamAV Scan"
-        )
-        sns_publish_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if sns_publish_status_code == 200:
-            logger.info(f"SUCCESS:  SNS Message Successfully published.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: Unable to Publish SNS Message.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"An Exception ocurred publishing SNS: {e}")
+        quarantine_topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
+        subject = "A file uploaded to the quarantine S3 Bucket following a ClamAV scan"
+        message = ("A file has been quarantined based on the results of a ClamAV scan:\n\n"
+                   f"File Name: {key}\n"
+                   f"File Status: {file_status}\n"
+                   f"File Location: {bucket}/{key}\n"
+                   f"ClamAV Exit Code: {exit_status}")
+        publish_sns_message(quarantine_topic_arn, subject, message)
+        logger.info(f"SNS message successfully published")
+    except ClientError as e:
+        logger.error(f"Could not publish an SNS message: {e}")
 
 
 def get_param_value(name: str, with_decryption=False) -> str:
@@ -230,3 +227,11 @@ def get_param_value(name: str, with_decryption=False) -> str:
         Name=name,
         WithDecryption=with_decryption
     )["Parameter"]["Value"]
+
+
+def publish_sns_message(topic_arn: str, subject: str, message: str):
+    SNS_CLIENT.publish(
+        TopicArn=topic_arn,
+        Subject=subject,
+        Message=message,
+    )
