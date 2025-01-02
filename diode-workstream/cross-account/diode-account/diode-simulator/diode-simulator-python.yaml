@@ -226,7 +226,15 @@ Resources:
     Properties:
       BucketName:
         !If [SuppliedLowBucketName, !Ref LowSideBucketName, !Ref "AWS::NoValue"]
-      AccessControl: Private
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      # AccessControl: Private
 
   HighSideBucket:
     Type: AWS::S3::Bucket
@@ -238,14 +246,30 @@ Resources:
           !Ref HighSideBucketName,
           !Ref "AWS::NoValue",
         ]
-      AccessControl: Private
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      # AccessControl: Private
 
   # add a bucket that is internal to the simulator to store manifests if using the SWAMS service
   ManifestGeneratorBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      AccessControl: Private
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      # AccessControl: Private
 
   TransferTable:
     Type: AWS::DynamoDB::Table
