@@ -20,7 +20,7 @@ S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 
 
-def get_file(bucket, key: str, receipt_handle, approved_filetypes, mime_mapping):
+def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
     logger.info("Getting File")
     file_path = "/usr/bin/files/"
     files = os.listdir(file_path)

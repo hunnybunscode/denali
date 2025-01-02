@@ -11,7 +11,7 @@ logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=lo
 logger = logging.getLogger()
 
 
-def validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping):
+def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
     logger.info("Validating Zip File Contents")
     ext = ""
     file_type = ""

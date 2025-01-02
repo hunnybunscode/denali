@@ -10,16 +10,16 @@ logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=lo
 logger = logging.getLogger()
 
 
-def validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping):
+def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
     logger.info("Attempting to validate file")
     # mime_mappings = {
     #   ".wav": "audio/x-wav",
-    #  ".wav": "audio/wav",
-    #  ".mp4": "video/mp4",
-    #  ".flac": "audio/flac",
-    #  ".txt": "text/plain",
-    #  ".json": "application/json"
-    #  }
+    #   ".wav": "audio/wav",
+    #   ".mp4": "video/mp4",
+    #   ".flac": "audio/flac",
+    #   ".txt": "text/plain",
+    #   ".json": "application/json"
+    # }
     new_tags = {}
     content_check = "FAILURE"
     ingested_file = "/usr/bin/files/file_to_scan"
