@@ -1,7 +1,7 @@
 import json
 import logging
 import random
-import subprocess
+import subprocess  # nosec B404
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore

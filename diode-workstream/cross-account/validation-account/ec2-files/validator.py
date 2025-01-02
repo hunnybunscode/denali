@@ -1,5 +1,5 @@
 import logging
-import os
+import subprocess  # nosec B404
 
 import boto3  # type: ignore
 import clamscan
@@ -136,7 +136,7 @@ def add_tags(bucket, key, new_tags):
 def quarantine_file(bucket, key, dest_bucket, receipt_handle):
     logger.info(f"Content-Type validation failed for {key}.  Quarantining File.")  # noqa: E501
     logger.info(f"Deleting {key} from Local Storage")
-    os.system(f"rm -r /usr/bin/files/*")
+    subprocess.run(["rm", "-r", "/usr/bin/files/*"])
     try:
         response = s3_client.copy_object(
             Bucket=dest_bucket,
