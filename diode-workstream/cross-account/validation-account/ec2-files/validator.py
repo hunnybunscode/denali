@@ -26,11 +26,13 @@ def validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping):
     try:
         ext = key.split(".")[-1]
         logger.info(ext)
-        file_data = puremagic.magic_file(f"/usr/bin/files/file_to_scan.{ext}")
-        logger.info(f"File Data: {file_data}")
-        file_type = file_data[0][2]
-        file_type = file_type.replace(".", "")
-        mime = file_data[0][3]
+        file_data_list: list = puremagic.magic_file(f"/usr/bin/files/file_to_scan.{ext}")  # noqa: E501
+        logger.info(f"File Data: {file_data_list}")
+        # The first one has the highest confidence
+        file_data = file_data_list[0]
+        # File type (or extension) without the dot
+        file_type = file_data[2].replace(".", "")
+        mime = file_data[3]
         logger.info("Attempting to validate filetype")
 
         if file_type.endswith("xml"):
