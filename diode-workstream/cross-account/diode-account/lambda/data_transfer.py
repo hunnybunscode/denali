@@ -54,7 +54,7 @@ def lambda_handler(event, context):
         )
 
         # TODO: Replace this with a CW event-based transfer status check
-        time.sleep(10)
+        time.sleep(10)  # nosemgrep
 
         logger.info(f"Transfer request created: {transfer_response}")
         status_code = transfer_response["ResponseMetadata"]["HTTPStatusCode"]

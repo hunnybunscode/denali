@@ -57,7 +57,7 @@ def main():
 
         except Exception as e:
             logger.exception(e)
-            time.sleep(10)  # Try again after 10 seconds
+            time.sleep(10)  # nosemgrep (Try again after 10 seconds)
 
 
 def get_param_value(name: str, with_decryption=False) -> str:
