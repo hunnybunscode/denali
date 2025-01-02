@@ -312,6 +312,7 @@ Resources:
                 inputs:
                   commands:
                     - mkdir /usr/bin/files
+                    - mkdir /usr/bin/zipfiles
 
   # TODO
   ImageBuilderTestComponent:
