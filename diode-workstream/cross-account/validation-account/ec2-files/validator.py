@@ -10,7 +10,7 @@ logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=lo
 logger = logging.getLogger()
 
 
-def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
+def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
     logger.info("Attempting to validate file")
     # mime_mappings = {
     #   ".wav": "audio/x-wav",
@@ -32,56 +32,56 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
         file_data = file_data_list[0]
         # File type (or extension) without the dot
         file_type = file_data[2].replace(".", "")
-        mime = file_data[3]
+        mime_type = file_data[3]
         logger.info("Attempting to validate filetype")
 
         if file_type.endswith("xml"):
             logger.info(f"File Processed Through DFDL. File Extension: {ext}")
-            if mime == "application/xml":
+            if mime_type == "application/xml":
                 logger.info(f"File: {key} validated successfully")
                 content_check = "SUCCESS"
                 new_tags = {
                     "ERROR_STATUS": "None",
-                    "MIME_TYPE": mime
+                    "MIME_TYPE": mime_type
                 }
             else:
-                logger.info(f"MIME type validation Failed for {key}.  MIME Type is: {mime}")  # noqa: E501
+                logger.info(f"MIME type validation Failed for {key}.  MIME Type is: {mime_type}")  # noqa: E501
                 new_tags = {
                     "ERROR_STATUS": "File Validation Failed",
-                    "MIME_TYPE": mime
+                    "MIME_TYPE": mime_type
                 }
 
         elif file_type.endswith(ext):
             logger.info(f"File Extension: {ext}")
             if file_type in approved_filetypes:
                 logger.info(f"File Type: {file_type} included in approved list")  # noqa: E501
-                for k, v in mime_mapping.items():
-                    logger.info(f"Validating MIME Type: {mime}")
-                    if k == f".{file_type}" and v == mime:
+                for file_ext, mime_types in mime_mapping.items():
+                    logger.info(f"Validating MIME Type: {mime_type}")
+                    if file_ext == file_type and mime_type in mime_types:
                         logger.info(f"File: {key} validated successfully")
                         content_check = "SUCCESS"
                         new_tags = {
                             "ERROR_STATUS": "None",
-                            "MIME_TYPE": mime
+                            "MIME_TYPE": mime_type
                         }
                         break
                     else:
                         new_tags = {
                             "ERROR_STATUS": "File Validation Failed",
-                            "MIME_TYPE": mime
+                            "MIME_TYPE": mime_type
                         }
 
             else:
                 logger.info(f"File Type ({file_type}) is not approved.")
                 new_tags = {
                     "ERROR_STATUS": "File Type is not approved",
-                    "MIME_TYPE": mime
+                    "MIME_TYPE": mime_type
                 }
         else:
             logger.info(f"File Type ({file_type}) does not match file extension ({ext}).")  # noqa: E501
             new_tags = {
                 "ERROR_STATUS": "FileType does not match File Extension",
-                "MIME_TYPE": mime
+                "MIME_TYPE": mime_type
             }
         add_tags(bucket, key, new_tags)
         if content_check == "SUCCESS":

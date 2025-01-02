@@ -11,11 +11,11 @@ logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=lo
 logger = logging.getLogger()
 
 
-def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
+def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
     logger.info("Validating Zip File Contents")
     ext = ""
     file_type = ""
-    mime = ""
+    mime_type = ""
     new_tags = {}
     content_check = "FAILURE"
     files = os.listdir("/usr/bin/files/")
@@ -28,49 +28,43 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
         file_data = file_data_list[0]
         # File type (or extension) without the dot
         file_type = file_data[2].replace(".", "")
-        mime = file_data[3]
+        mime_type = file_data[3]
         logger.info(f"Attempting to validate {f}")
         try:
             if file_type.endswith(ext):
                 logger.info(f"File Type: {file_type} matches File Extension {ext}")  # noqa: E501
                 if file_type in approved_filetypes:
                     logger.info(f"File Type {file_type} is an approved Type")
-                    for k, v in mime_mapping.items():
-                        print(k, file_type)
-                        print(v, mime)
-                        if k == f".{file_type}" and v == mime:
+                    for file_ext, mime_types in mime_mapping.items():
+                        if file_ext == file_type and mime_type in mime_types:
                             logger.info(f"File: {key} validated successfully")
-                            content_check = "SUCCESS"
                             new_tags = {
                                 "ERROR_STATUS": "None",
-                                "MIME_TYPE": mime
+                                "MIME_TYPE": mime_type
                             }
                             logger.info(f"Content Check: {new_tags}")
                             valid = True
                             break
                         else:
-                            print("1")
                             new_tags = {
                                 "ERROR_STATUS": "File Validation Failed",
-                                "MIME_TYPE": mime
+                                "MIME_TYPE": mime_type
                             }
                             valid = False
                 else:
-                    print("2")
                     logger.info(f"File Type ({file_type}) is not approved.")
                     new_tags = {
                         "ERROR_STATUS": "File Type Not Supported",
-                        "MIME_TYPE": mime
+                        "MIME_TYPE": mime_type
                     }
                     logger.error(f"Content Check: {new_tags}")
                     valid = False
 
             else:
-                print("3")
                 logger.info(f"File Type ({file_type}) does not match file extension ({ext}).")  # noqa: E501
                 new_tags = {
                     "ERROR_STATUS": "FileType does not match File Extension",
-                    "MIME_TYPE": mime
+                    "MIME_TYPE": mime_type
                 }
                 valid = False
                 logger.error(f"Content Check: {new_tags}")
@@ -83,17 +77,15 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             my_zipfile = "/usr/bin/zipfiles/zipfile.zip"
             zip_file_data = puremagic.magic_file(my_zipfile)
             ext = my_zipfile.split(".")[-1]
-            zip_file_type = zip_file_data[0][2]
-            zip_file_type = zip_file_type.replace(".", "")
+            zip_file_type = zip_file_data[0][2].replace(".", "")
             zip_mime = zip_file_data[0][3]
             if zip_file_type.endswith(ext):
                 logger.info(f"File Type: {zip_file_type} matches File Extension {ext}")  # noqa: E501
                 if zip_file_type in approved_filetypes:
                     logger.info(f"File Type {zip_file_type} is an approved Type")  # noqa: E501
-                    for k, v in mime_mapping.items():
-                        if k == f".{zip_file_type}" and v == zip_mime:
+                    for file_ext, mime_types in mime_mapping.items():
+                        if file_ext == zip_file_type and zip_mime in mime_types:
                             logger.info(f"File: {key} validated successfully")
-                            content_check = "SUCCESS"
                             new_tags = {
                                 "ERROR_STATUS": "None",
                                 "MIME_TYPE": zip_mime,
@@ -101,7 +93,6 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                             valid = True
                             break
                         else:
-                            print("4")
                             new_tags = {
                                 "ERROR_STATUS": "File Validation Failed",
                                 "MIME_TYPE": zip_mime
@@ -113,7 +104,6 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                         "ERROR_STATUS": "File Type Not Supported",
                         "MIME_TYPE": zip_mime
                     }
-                    print("5")
                     valid = False
             else:
                 logger.info(f"File Type ({zip_file_type}) does not match file extension ({ext}).")  # noqa: E501
@@ -121,14 +111,13 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                     "ERROR_STATUS": "FileType does not match File Extension",
                     "MIME_TYPE": zip_mime
                 }
-                print("6")
                 valid = False
 
         except Exception as e:
             logger.error(f"Exception ocurred validating zipfile: {e}")
 
     add_tags(bucket, key, new_tags)
-    print(f"alskdjaksdf {valid}")
+
     if valid:
         logger.info(f"Content Check: {new_tags}")
         clamscan.scanner(bucket, key, receipt_handle)
