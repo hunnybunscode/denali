@@ -21,11 +21,13 @@ def validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping):
     valid = True
     for f in files:
         ext = f.split(".")[-1]
-        file_data = puremagic.magic_file(f"/usr/bin/files/{f}")
-        logger.info(f"File Data: {file_data}")
-        file_type = file_data[0][2]
-        file_type = file_type.replace(".", "")
-        mime = file_data[0][3]
+        file_data_list: list = puremagic.magic_file(f"/usr/bin/files/{f}")
+        logger.info(f"File Data: {file_data_list}")
+        # The first one has the highest confidence
+        file_data = file_data_list[0]
+        # File type (or extension) without the dot
+        file_type = file_data[2].replace(".", "")
+        mime = file_data[3]
         logger.info(f"Attempting to validate {f}")
         try:
             if file_type.endswith(ext):
