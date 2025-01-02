@@ -44,6 +44,7 @@ Metadata:
           - PipelineStackLambdaMappingRoleArn
           - PipelineStackObjectTaggerRoleARN
           # - PipelineStackInvokeTaggerRoleARN
+          - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
           default: Logging Stack Parameters
@@ -132,6 +133,8 @@ Metadata:
         default: Pipeline Stack Lambda Mapping Role ARN
       PipelineStackObjectTaggerRoleARN:
         default: Pipeline Stack Object Tagger Role ARN
+      PipelineStackDiodeSimulatorInstanceRole:
+        default: Pipeline Stack Diode Simulator Instance Role
       # PipelineStackInvokeTaggerRoleARN:
       #   default: Pipeline Stack Invoke Tagger Role ARN
       LambdaStorageBucket:
@@ -286,8 +289,8 @@ Parameters:
 
   PipelineStackEc2ScannerInstanceProfileARN:
     Type: String
-    Description: The ARN of the EC2 Scanner Role
-    Default: arn:aws-us-gov:iam::073653673774:instance-profile/my-iam-stack-Ec2ScannerInstanceProfile-1ZNMFT1U011
+    Description: The ARN of the EC2 Scanner Instance Profile
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:instance-profile/.*
 
   PipelineStackPrivateSubnetIds:
     Type: CommaDelimitedList
@@ -302,7 +305,7 @@ Parameters:
   PipelineStackTransferResultServiceRole:
     Type: String
     Description: The ARN of the IAM role for the TransferResult Lambda
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferResultLambdaRole-rcTfF0po1uRc
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
 
   PipelineStackLambdaMappingRoleArn:
     Type: String
@@ -311,12 +314,19 @@ Parameters:
   PipelineStackObjectTaggerRoleARN:
     Type: String
     Description: The ARN of the Object Tagger Role
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-ObjectTaggerRole-E6MbNFWh2nhl
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
 
   # PipelineStackInvokeTaggerRoleARN:
   #   Type: String
   #   Description: The ARN of the Invoke Tagger Role
   #   Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-InvokeTaggerRole-PAzxCua6YczE
+
+  PipelineStackDiodeSimulatorInstanceRole:
+    Type: String
+    Description: >
+      If using a Diode Simulator, the ARN of the role associated with the instance profile for the Diode Simulator instance.
+      Otherwise, leave it blank.
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
 
   SftpServerStackSftpBucketDataOwner:
     Type: String
@@ -430,6 +440,7 @@ Resources:
         TransferResultServiceRole: !Ref PipelineStackTransferResultServiceRole
         LambdaStorageBucket: !Ref LambdaStorageBucket
         ApprovedFileTypes: !Ref ApprovedFileTypes
+        DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
         DfdlApprovedFileTypes: !Ref DfdlApprovedFileTypes
     DependsOn:
       - IngestStack
