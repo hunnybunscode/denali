@@ -35,22 +35,20 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 logger.info(f"File Type: {file_type} matches File Extension {ext}")  # noqa: E501
                 if file_type in approved_filetypes:
                     logger.info(f"File Type {file_type} is an approved Type")
-                    for file_ext, mime_types in mime_mapping.items():
-                        if file_ext == file_type and mime_type in mime_types:
-                            logger.info(f"File: {key} validated successfully")
-                            new_tags = {
-                                "ERROR_STATUS": "None",
-                                "MIME_TYPE": mime_type
-                            }
-                            logger.info(f"Content Check: {new_tags}")
-                            valid = True
-                            break
-                        else:
-                            new_tags = {
-                                "ERROR_STATUS": "File Validation Failed",
-                                "MIME_TYPE": mime_type
-                            }
-                            valid = False
+                    if mime_type in mime_mapping.get(file_type, []):
+                        logger.info(f"File: {key} validated successfully")
+                        new_tags = {
+                            "ERROR_STATUS": "None",
+                            "MIME_TYPE": mime_type
+                        }
+                        logger.info(f"Content Check: {new_tags}")
+                        valid = True
+                    else:
+                        new_tags = {
+                            "ERROR_STATUS": "File Validation Failed",
+                            "MIME_TYPE": mime_type
+                        }
+                        valid = False
                 else:
                     logger.info(f"File Type ({file_type}) is not approved.")
                     new_tags = {
@@ -71,6 +69,7 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 break
         except Exception as e:
             logger.error(f"Exception ocurred validating file: {e}")
+
     if valid:
         logger.info("Validating Zip File")
         try:
@@ -83,21 +82,20 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 logger.info(f"File Type: {zip_file_type} matches File Extension {ext}")  # noqa: E501
                 if zip_file_type in approved_filetypes:
                     logger.info(f"File Type {zip_file_type} is an approved Type")  # noqa: E501
-                    for file_ext, mime_types in mime_mapping.items():
-                        if file_ext == zip_file_type and zip_mime in mime_types:
-                            logger.info(f"File: {key} validated successfully")
-                            new_tags = {
-                                "ERROR_STATUS": "None",
-                                "MIME_TYPE": zip_mime,
-                            }
-                            valid = True
-                            break
-                        else:
-                            new_tags = {
-                                "ERROR_STATUS": "File Validation Failed",
-                                "MIME_TYPE": zip_mime
-                            }
-                            valid = False
+                    if zip_mime in mime_mapping.get(zip_file_type, []):
+                        logger.info(f"File: {key} validated successfully")
+                        new_tags = {
+                            "ERROR_STATUS": "None",
+                            "MIME_TYPE": zip_mime,
+                        }
+                        valid = True
+                    else:
+                        new_tags = {
+                            "ERROR_STATUS": "File Validation Failed",
+                            "MIME_TYPE": zip_mime
+                        }
+                        valid = False
+
                 else:
                     logger.info(f"File Type ({zip_file_type}) is not approved.")  # noqa: E501
                     new_tags = {
