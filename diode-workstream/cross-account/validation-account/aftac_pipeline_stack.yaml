@@ -50,9 +50,17 @@ Parameters:
     Type: String
     Description: The list of approved file types for DFDL
 
+  DiodeSimulatorInstanceRole:
+    Type: String
+    Description: ARN of the IAM role associated with the Diode Simulator instance profile
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
+
   LambdaMappingRoleArn:
     Type: String
     Description: The ARN of the Lambda Mapping Role
+
+Conditions:
+  UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
 
 Resources:
   LongTermStorageBucket:
@@ -465,6 +473,9 @@ Resources:
 
   DataTransferBucket:
     Type: AWS::S3::Bucket
+    DependsOn: transferqueuePolicy
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -475,11 +486,6 @@ Resources:
         QueueConfigurations:
           - Event: s3:ObjectCreated:*
             Queue: !GetAtt transferqueue.Arn
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
-    DependsOn:
-      - transferqueue
-      - transferqueuePolicy
 
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -508,6 +514,19 @@ Resources:
               ArnEquals:
                 aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
 
+          ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
+          - !If
+            - UseDiodeSimulator
+            - Sid: AllowS3PermissionsForDiodeSimulatorInstance
+              Effect: Allow
+              Principal:
+                AWS: !Ref DiodeSimulatorInstanceRole
+              Action:
+                - s3:GetObject
+                - s3:GetObjectTagging
+              Resource: !Sub ${DataTransferBucket.Arn}/*
+            - !Ref AWS::NoValue
+
           # The Below Lines required the Lambda Mapping Role ARN
           # Has not been tested yet...
           # - Action:
@@ -526,16 +545,6 @@ Resources:
           #               - DataTransferBucket
           #               - Arn
           #           - /*
-
-          ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
-          ##### REMOVE PRIOR TO AFTAC DEPLOYMENT
-          - Effect: Allow
-            Principal:
-              AWS: arn:aws-us-gov:iam::062339239041:role/diode-simulator-EC2ExecutionRole-EZfwaxNhT8S9
-            Action:
-              - s3:GetObject
-              - s3:GetObjectTagging
-            Resource: !Sub ${DataTransferBucket.Arn}/*
 
   ApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
