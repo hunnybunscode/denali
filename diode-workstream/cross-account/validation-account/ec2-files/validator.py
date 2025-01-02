@@ -40,16 +40,10 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             if mime_type == "application/xml":
                 logger.info(f"File: {key} validated successfully")
                 content_check = "SUCCESS"
-                new_tags = {
-                    "ERROR_STATUS": "None",
-                    "MIME_TYPE": mime_type
-                }
+                new_tags = create_tags("None", mime_type)
             else:
                 logger.info(f"MIME type validation Failed for {key}.  MIME Type is: {mime_type}")  # noqa: E501
-                new_tags = {
-                    "ERROR_STATUS": "File Validation Failed",
-                    "MIME_TYPE": mime_type
-                }
+                new_tags = create_tags("File Validation Failed", mime_type)
 
         elif file_type.endswith(ext):
             logger.info(f"File Extension: {ext}")
@@ -58,28 +52,16 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 if mime_type in mime_mapping.get(file_type, []):
                     logger.info(f"File: {key} validated successfully")
                     content_check = "SUCCESS"
-                    new_tags = {
-                        "ERROR_STATUS": "None",
-                        "MIME_TYPE": mime_type
-                    }
+                    new_tags = create_tags("None", mime_type)
                 else:
-                    new_tags = {
-                        "ERROR_STATUS": "File Validation Failed",
-                        "MIME_TYPE": mime_type
-                    }
+                    new_tags = create_tags("File Validation Failed", mime_type)
 
             else:
                 logger.info(f"File Type ({file_type}) is not approved.")
-                new_tags = {
-                    "ERROR_STATUS": "File Type is not approved",
-                    "MIME_TYPE": mime_type
-                }
+                new_tags = create_tags("File Type is not approved", mime_type)
         else:
             logger.info(f"File Type ({file_type}) does not match file extension ({ext}).")  # noqa: E501
-            new_tags = {
-                "ERROR_STATUS": "FileType does not match File Extension",
-                "MIME_TYPE": mime_type
-            }
+            new_tags = create_tags("FileType does not match File Extension", mime_type)  # noqa: E501
 
         add_tags(bucket, key, new_tags)
 
@@ -199,3 +181,10 @@ def delete_file(bucket, key):
         logger.info(f"Delete Object Response: {response}")
     except Exception as e:
         logger.error(f"Exception ocurred deleting object: {e}")
+
+
+def create_tags(error_status: str, mime_type: str):
+    return {
+        "ERROR_STATUS": error_status,
+        "MIME_TYPE": mime_type
+    }

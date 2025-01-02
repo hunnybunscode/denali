@@ -37,33 +37,21 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                     logger.info(f"File Type {file_type} is an approved Type")
                     if mime_type in mime_mapping.get(file_type, []):
                         logger.info(f"File: {key} validated successfully")
-                        new_tags = {
-                            "ERROR_STATUS": "None",
-                            "MIME_TYPE": mime_type
-                        }
+                        new_tags = create_tags("None", mime_type)
                         logger.info(f"Content Check: {new_tags}")
                         valid = True
                     else:
-                        new_tags = {
-                            "ERROR_STATUS": "File Validation Failed",
-                            "MIME_TYPE": mime_type
-                        }
+                        new_tags = create_tags("File Validation Failed", mime_type)  # noqa: E501
                         valid = False
                 else:
                     logger.info(f"File Type ({file_type}) is not approved.")
-                    new_tags = {
-                        "ERROR_STATUS": "File Type Not Supported",
-                        "MIME_TYPE": mime_type
-                    }
+                    new_tags = create_tags("File Type Not Supported", mime_type)  # noqa: E501
                     logger.error(f"Content Check: {new_tags}")
                     valid = False
 
             else:
                 logger.info(f"File Type ({file_type}) does not match file extension ({ext}).")  # noqa: E501
-                new_tags = {
-                    "ERROR_STATUS": "FileType does not match File Extension",
-                    "MIME_TYPE": mime_type
-                }
+                new_tags = create_tags("FileType does not match File Extension", mime_type)  # noqa: E501
                 valid = False
                 logger.error(f"Content Check: {new_tags}")
                 break
@@ -84,31 +72,19 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                     logger.info(f"File Type {zip_file_type} is an approved Type")  # noqa: E501
                     if zip_mime in mime_mapping.get(zip_file_type, []):
                         logger.info(f"File: {key} validated successfully")
-                        new_tags = {
-                            "ERROR_STATUS": "None",
-                            "MIME_TYPE": zip_mime,
-                        }
+                        new_tags = create_tags("None", zip_mime)
                         valid = True
                     else:
-                        new_tags = {
-                            "ERROR_STATUS": "File Validation Failed",
-                            "MIME_TYPE": zip_mime
-                        }
+                        new_tags = create_tags("File Validation Failed", zip_mime)  # noqa: E501
                         valid = False
 
                 else:
                     logger.info(f"File Type ({zip_file_type}) is not approved.")  # noqa: E501
-                    new_tags = {
-                        "ERROR_STATUS": "File Type Not Supported",
-                        "MIME_TYPE": zip_mime
-                    }
+                    new_tags = create_tags("File Type Not Supported", zip_mime)  # noqa: E501
                     valid = False
             else:
                 logger.info(f"File Type ({zip_file_type}) does not match file extension ({ext}).")  # noqa: E501
-                new_tags = {
-                    "ERROR_STATUS": "FileType does not match File Extension",
-                    "MIME_TYPE": zip_mime
-                }
+                new_tags = create_tags("FileType does not match File Extension", zip_mime)  # noqa: E501
                 valid = False
 
         except Exception as e:
@@ -224,3 +200,10 @@ def delete_file(bucket, key):
         logger.info(f"Delete Object Response: {response}")
     except Exception as e:
         logger.error(f"Exception ocurred deleting object: {e}")
+
+
+def create_tags(error_status: str, mime_type: str):
+    return {
+        "ERROR_STATUS": error_status,
+        "MIME_TYPE": mime_type
+    }
