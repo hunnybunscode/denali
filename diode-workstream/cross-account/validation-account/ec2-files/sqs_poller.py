@@ -17,10 +17,7 @@ SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 
 def main():
-    # TODO: There are three keys that are the same in mime mapping, so `mime_mapping` will only keep the last one
-    # Turn the mime_list.json into a dict (from a list), with `str` keys and `list` values
-    # What kind of checks do we do with mime mapping? It seems to check for keys only, not values
-    # Should this be stored in parameter store?
+    # TODO: Should this be stored in parameter store?
     mime_mapping = get_mime_mapping("/usr/bin/validation-pipeline/mime_list.json")  # noqa: E501
     logger.info(mime_mapping)
 
@@ -66,8 +63,8 @@ def get_param_value(name: str, with_decryption=False) -> str:
 def get_mime_mapping(filepath: str):
     logger.info("Loading Mime Mapping")
     with open(filepath, "r", encoding="utf-8") as file:
-        mime_list: list[dict] = json.load(file)
-    return {k: v for d in mime_list for k, v in d.items()}
+        mime_list: dict = json.load(file)
+    return mime_list
 
 
 main()

@@ -38,6 +38,7 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
         handle_non_approved_filetypes(bucket, key, receipt_handle, file_ext)
         return
 
+    # TODO: Why not validate the file for CSV file?
     if file_ext == "csv":
         logger.info(f"File {key} is a .csv file.  Proceeding to scanner.")
         clamscan.scanner(bucket, key, receipt_handle)
