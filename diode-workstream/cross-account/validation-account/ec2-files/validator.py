@@ -55,21 +55,18 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             logger.info(f"File Extension: {ext}")
             if file_type in approved_filetypes:
                 logger.info(f"File Type: {file_type} included in approved list")  # noqa: E501
-                for file_ext, mime_types in mime_mapping.items():
-                    logger.info(f"Validating MIME Type: {mime_type}")
-                    if file_ext == file_type and mime_type in mime_types:
-                        logger.info(f"File: {key} validated successfully")
-                        content_check = "SUCCESS"
-                        new_tags = {
-                            "ERROR_STATUS": "None",
-                            "MIME_TYPE": mime_type
-                        }
-                        break
-                    else:
-                        new_tags = {
-                            "ERROR_STATUS": "File Validation Failed",
-                            "MIME_TYPE": mime_type
-                        }
+                if mime_type in mime_mapping.get(file_type, []):
+                    logger.info(f"File: {key} validated successfully")
+                    content_check = "SUCCESS"
+                    new_tags = {
+                        "ERROR_STATUS": "None",
+                        "MIME_TYPE": mime_type
+                    }
+                else:
+                    new_tags = {
+                        "ERROR_STATUS": "File Validation Failed",
+                        "MIME_TYPE": mime_type
+                    }
 
             else:
                 logger.info(f"File Type ({file_type}) is not approved.")
@@ -83,7 +80,9 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 "ERROR_STATUS": "FileType does not match File Extension",
                 "MIME_TYPE": mime_type
             }
+
         add_tags(bucket, key, new_tags)
+
         if content_check == "SUCCESS":
             logger.info(f"Content Check: {new_tags}")
             clamscan.scanner(bucket, key, receipt_handle)
