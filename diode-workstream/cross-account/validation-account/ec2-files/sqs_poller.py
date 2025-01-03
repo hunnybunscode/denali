@@ -21,12 +21,13 @@ def main():
     mime_mapping = get_mime_mapping("/usr/bin/validation-pipeline/mime_list.json")  # noqa: E501
     logger.info(mime_mapping)
 
-    while True:
-        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
-        approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
-        dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
-        approved_filetypes.extend(dfdl_approved_filetypes)
+    # TODO: Implement a way to get updated values, without restarting the service
+    queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+    approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
+    dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
+    approved_filetypes.extend(dfdl_approved_filetypes)
 
+    while True:
         try:
             response: dict = SQS_CLIENT.receive_message(
                 QueueUrl=queue_url,
