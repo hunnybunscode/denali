@@ -8,9 +8,6 @@ import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
 DDB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
 DATA_TRANSFER_BUCKET = os.environ["DATA_TRANSFER_BUCKET"]
 FAILED_TRANSFER_TOPIC_ARN = os.environ["FAILED_TRANSFER_TOPIC_ARN"]
@@ -22,7 +19,8 @@ DDB_CLIENT = boto3.client("dynamodb", config=config)
 S3_CLIENT = boto3.client("s3", config=config)
 SNS_CLIENT = boto3.client("sns", config=config)
 
-# TODO: Add handling for Failed Transfers - Delete Object From Pitcher, Move object to failed transfer bucket, Send SNS Message
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 def lambda_handler(event, context):
@@ -31,13 +29,14 @@ def lambda_handler(event, context):
     data = json.loads(event["Records"][0]["body"])
     bucket = data["bucket"]
     key = data["key"]
+    status = data["status"]
 
     data_owner, gov_poc, key_owner = get_object_tagging(bucket, key)
     timestamp = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
 
     put_item_in_ddb(data, timestamp, data_owner, gov_poc, key_owner)
 
-    if data["TransferStatusCode"] != 200:
+    if status != "SUCCEEDED":
         logger.info(
             f"Data transfer failed; moving {bucket}/{key} to {FAILED_TRANSFER_BUCKET}"  # noqa: E501
         )
@@ -48,10 +47,7 @@ def lambda_handler(event, context):
 
     delete_object(DATA_TRANSFER_BUCKET, key)
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps("Result Successfully Captured")
-    }
+    logger.info("Result Successfully Captured")
 
 
 def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
@@ -97,9 +93,8 @@ def put_item_in_ddb(data: dict, timestamp: datetime, data_owner: str, gov_poc: s
             Item={
                 "s3Key": {"S": data["key"]},  # partition key
                 "mappingId": {"S": data["mappingId"]},  # sort key
-                "status": {"S": data["Status"]},
+                "status": {"S": data["status"]},
                 "transferId": {"S": data["transferId"]},
-                "transferStatusCode": {"S": str(data["TransferStatusCode"])},
                 "timestamp": {"S": str(timestamp)},
                 "dataOwner": {"S": data_owner},
                 "govPoc": {"S": gov_poc},
@@ -114,15 +109,15 @@ def put_item_in_ddb(data: dict, timestamp: datetime, data_owner: str, gov_poc: s
         raise
 
 
-def send_transfer_error_message(obj_key: str):
-    logger.info("Sending SNS Message due to failed status code")
+def send_transfer_error_message(key: str):
+    logger.info("Sending SNS Message due to failed transfer status")
 
     SNS_CLIENT.publish(
         TopicArn=FAILED_TRANSFER_TOPIC_ARN,
         Subject="Failed Cross Domain Transfer",
-        Message=(f"The file {obj_key} was NOT successfully transferred.\n"
+        Message=(f"The file {key} was NOT successfully transferred.\n"
                  "It has been moved from the Data Transfer bucket to "
-                 f"the following location:\n{FAILED_TRANSFER_BUCKET}/{obj_key}"),
+                 f"the following location:\n{FAILED_TRANSFER_BUCKET}/{key}"),
     )
 
 

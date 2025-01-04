@@ -28,6 +28,12 @@ Metadata:
           - Cds2MappingId
           - Cds3MappingId
 
+      - Label:
+          default: Diode Simulator
+        Parameters:
+          - UseDiodeSimulator
+          - DiodeSimulatorEndpoint
+
     ParameterLabels:
       DataTransferBucketName:
         default: Data Transfer Bucket Name
@@ -47,6 +53,10 @@ Metadata:
         default: CDS_2 Mapping Id
       Cds3MappingId:
         default: CDS_3 Mapping Id
+      UseDiodeSimulator:
+        default: Use Diode Simulator
+      DiodeSimulatorEndpoint:
+        default: Diode Simulator Endpoint
 
 Parameters:
   DataTransferBucketName:
@@ -99,6 +109,22 @@ Parameters:
     # Description: CDS_3 Mapping Id
     Default: 12346789-abcd-1234-abcd-123456789012
 
+  UseDiodeSimulator:
+    Type: String
+    Description: Select "True" if using a Diode simulator; otherwise, select "False".
+    Default: "False"
+    AllowedValues: ["True", "False"]
+    ConstraintDescription: Must be True or False
+
+  DiodeSimulatorEndpoint:
+    Type: String
+    Description: If using a Diode simulator, enter the simulator endpoint that starts with "http://"; otherwise, leave it blank.
+    AllowedPattern: ^$|^http:\/\/[a-zA-Z0-9-\.]+(:\d{1,5})?\/?$
+    ConstraintDescription: Must be either blank or a valid URL of the Diode simulator endpoint
+
+Conditions:
+  UseDiodeSimulator: !Equals [!Ref UseDiodeSimulator, "True"]
+
 Resources:
   DataTransferLambdaRole:
     Type: AWS::IAM::Role
@@ -140,7 +166,9 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
-                Resource: !Ref DataTransferSqsQueueArn
+                Resource:
+                  - !Ref DataTransferSqsQueueArn
+                  - !GetAtt TransferStatusQueue.Arn
 
   DataTransferLambdaFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -169,6 +197,8 @@ Resources:
           CDS1_MAPPING: !Ref Cds1MappingId
           CDS2_MAPPING: !Ref Cds2MappingId
           CDS3_MAPPING: !Ref Cds3MappingId
+          USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
+          DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
 
   DataTransferLambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
@@ -185,3 +215,65 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: sqs.amazonaws.com
       SourceArn: !Ref DataTransferSqsQueueArn
+
+  DiodeEventBridgeEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Diode events rule
+      State: ENABLED
+      EventPattern:
+        source:
+          - !If [UseDiodeSimulator, diode.simulator, aws.diode]
+        detail-type:
+          - Diode Transfer Status
+        detail:
+          # mappingId:
+          #   - !Ref Cds1MappingId
+          #   - !Ref Cds2MappingId
+          #   - !Ref Cds3MappingId
+          status:
+            # - IN_TRANSIT
+            - SUCCEEDED
+            - FAILED
+            - REJECTED
+          s3Bucket:
+            - !Ref DataTransferBucketName
+      Targets:
+        - Arn: !GetAtt TransferStatusQueue.Arn
+          Id: !GetAtt TransferStatusQueue.QueueName
+          # RetryPolicy:
+          #   MaximumRetryAttempts: 4
+          #   MaximumEventAgeInSeconds: 300
+          # DeadLetterConfig:
+          #   Arn: DeadLetterQueueArn
+
+  TransferStatusQueue:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 345600 # Default value (4 days)
+      ReceiveMessageWaitTimeSeconds: 20
+
+  TransferStatusQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref TransferStatusQueue
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt TransferStatusQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt DiodeEventBridgeEventsRule.Arn
+
+  TransferStatusEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt TransferStatusQueue.Arn
+      FunctionName: !Ref DataTransferLambdaFunction
