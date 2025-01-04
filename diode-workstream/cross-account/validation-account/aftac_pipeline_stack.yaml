@@ -1,12 +1,9 @@
 Parameters:
-  DataTransferLambdaRoleArn:
-    Type: String
-    Description: The ARN of the Data Transfer Lambda Role
-
   PipelineAmiId:
     Type: String
-    Description: The AMI ID to use for the pipeline.
-    Default: ami-0d5355919bf9f9b1e
+    Description: The AMI ID to use for the pipeline
+    AllowedPattern: ^ami-[0-9a-f]{17}$
+    ConstraintDescription: Must be a valid AMI ID
 
   DiodeAccountId:
     Type: String
@@ -55,9 +52,9 @@ Parameters:
     Description: ARN of the IAM role associated with the Diode Simulator instance profile
     AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
 
-  LambdaMappingRoleArn:
-    Type: String
-    Description: The ARN of the Lambda Mapping Role
+  # LambdaMappingRoleArn:
+  #   Type: String
+  #   Description: The ARN of the Lambda Mapping Role
 
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]

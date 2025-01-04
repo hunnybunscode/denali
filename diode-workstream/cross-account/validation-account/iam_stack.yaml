@@ -1,7 +1,38 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Parameters
+        Parameters:
+          - pIamPrefix
+          - pPermissionsBoundaryPolicyArn
+
+    ParameterLabels:
+      pIamPrefix:
+        default: IAM Prefix
+      pPermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
+
+Parameters:
+  pIamPrefix:
+    Type: String
+    Description: Prefix for IAM resources
+    Default: AFC2S_
+    AllowedValues: [AFC2S_]
+    ConstraintDescription: Must be "AFC2S_"
+
+  pPermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
 Resources:
   TrailLogsRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}TrailLogsRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -10,7 +41,7 @@ Resources:
               Service: cloudtrail.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: trailLogsRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}trailLogsRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -23,9 +54,9 @@ Resources:
   Ec2ScannerCwLogsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: ""
-      Path: /
+      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerCwLogsPolicy
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
           - Action:
               - logs:CreateLogGroup
@@ -36,31 +67,30 @@ Resources:
               - cloudwatch:PutMetricData
             Effect: Allow
             Resource: "*"
-        Version: 2012-10-17
 
   Ec2ScannerSqsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: ""
-      Path: /
+      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerSqsPolicy
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action:
+          - Effect: Allow
+            Action:
               - sqs:DeleteMessage
               - sqs:ReceiveMessage
               - sqs:SendMessage
-            Effect: Allow
             Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-        Version: 2012-10-17
 
   Ec2ScannerS3Policy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: ""
-      Path: /
+      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerS3Policy
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action:
+          - Effect: Allow
+            Action:
               - s3:DeleteObject
               - s3:GetBucketAcl
               - s3:GetObject
@@ -68,91 +98,93 @@ Resources:
               - s3:ListBucket
               - s3:PutObject
               - s3:PutObjectTagging
-            Effect: Allow
             Resource: "*"
-        Version: 2012-10-17
 
   Ec2ScannerSnsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: ""
-      Path: /
+      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerSnsPolicy
       PolicyDocument:
-        Statement:
-          - Action:
-              - sns:Publish
-            Effect: Allow
-            Resource: "*"
         Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sns:Publish
+            Resource: "*"
 
   Ec2ScannerEc2Policy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: ""
-      Path: /
+      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerEc2Policy
       PolicyDocument:
-        Statement:
-          - Action:
-              - ec2:DescribeTags
-            Effect: Allow
-            Resource: "*"
         Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: ec2:DescribeTags
+            Resource: "*"
 
   Ec2ScannerRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}Ec2ScannerRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+      Description: Role to be assumed by EC2 Anti-Virus Scanner instances
       AssumeRolePolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: ec2.amazonaws.com
-        Version: 2012-10-17
-      Description: Role to be assumed by EC2 Anti-Virus Scanner instances
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
-        - Ref: Ec2ScannerCwLogsPolicy
-        - Ref: Ec2ScannerSqsPolicy
-        - Ref: Ec2ScannerS3Policy
-        - Ref: Ec2ScannerEc2Policy
-        - Ref: Ec2ScannerSnsPolicy
+        - !Ref Ec2ScannerCwLogsPolicy
+        - !Ref Ec2ScannerSqsPolicy
+        - !Ref Ec2ScannerS3Policy
+        - !Ref Ec2ScannerEc2Policy
+        - !Ref Ec2ScannerSnsPolicy
 
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles: [!Ref Ec2ScannerRole]
 
-  FailedTransferServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: FailedTransferServiceRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Should be locked down to only necessary SQS queue and SNS Topic
-              - Effect: Allow
-                Action:
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:ReceiveMessage
-                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-              - Effect: Allow
-                Action: sns:Publish
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+  ## Commented out as this does not seem to be used
+  # FailedTransferServiceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub ${pIamPrefix}FailedTransferServiceRole
+  #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: lambda.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     ManagedPolicyArns:
+  #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+  #     Policies:
+  #       - PolicyName: !Sub ${pIamPrefix}FailedTransferServiceRoleDefaultPolicy
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             # Should be locked down to only necessary SQS queue and SNS Topic
+  #             - Effect: Allow
+  #               Action:
+  #                 - sqs:DeleteMessage
+  #                 - sqs:GetQueueAttributes
+  #                 - sqs:ReceiveMessage
+  #               Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+
+  #             - Effect: Allow
+  #               Action: sns:Publish
+  #               Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
 
   TransferResultLambdaRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}TransferResultLambdaRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -163,7 +195,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: TransferResultLambdaRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}TransferResultLambdaRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -174,12 +206,15 @@ Resources:
                   - sqs:GetQueueAttributes
                   - sqs:ReceiveMessage
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+
               - Effect: Allow
                 Action: sns:Publish
                 Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+
               - Effect: Allow
                 Action: dynamodb:PutItem
                 Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -191,9 +226,11 @@ Resources:
                   - s3:ListBucket
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 
-  DatatransferServiceRole:
+  DataTransferServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}DataTransferServiceRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -204,7 +241,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: datatransferServiceRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}DataTransferServiceRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -217,10 +254,12 @@ Resources:
                   - sqs:GetQueueUrl
                   - sqs:ReceiveMessage
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+
                 # Should be locked down to only necessary DynamoDB Table
               - Effect: Allow
                 Action: dynamodb:PutItem
                 Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+
                 # Should be locked down to only necessary S3 Buckets
               - Effect: Allow
                 Action:
@@ -236,6 +275,8 @@ Resources:
   ObjectTaggerRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}ObjectTaggerRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -246,7 +287,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: objectTaggerRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}ObjectTaggerRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -254,10 +295,12 @@ Resources:
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+
               # Should be locked down to only necessary DynamoDB Table
               - Effect: Allow
                 Action: dynamodb:PutItem
                 Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+
               - Effect: Allow
                 Action:
                   - s3:GetObjectTagging
@@ -267,6 +310,8 @@ Resources:
   InvokeTaggerRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}InvokeTaggerRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -275,7 +320,7 @@ Resources:
               Service: events.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: invokeTaggerPolicy
+        - PolicyName: !Sub ${pIamPrefix}InvokeTaggerPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -286,6 +331,8 @@ Resources:
   PresignGeneratorServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}PresignGeneratorServiceRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -296,13 +343,14 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: presigngeneratorServiceRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}PresignGeneratorServiceRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
+
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -313,6 +361,8 @@ Resources:
   LoggingRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}LoggingRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -321,7 +371,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: LoggingRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}LoggingRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -332,9 +382,11 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
-  FileuploaderCloudWatchRole:
+  FileUploaderCloudWatchRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}FileUploaderCloudWatchRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -344,12 +396,12 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
 
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}APILambdaInvokeRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -358,7 +410,7 @@ Resources:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: APILambdaInvokeRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}APILambdaInvokeRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -368,36 +420,42 @@ Resources:
                   - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
                   - !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*
 
-  PresignGeneratorServiceRole2:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: presigngeneratorServiceRoleDefaultPolicy2
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: s3:PutObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+  ## Commented out as this does not seem to be used
+  # PresignGeneratorServiceRole2:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub ${pIamPrefix}PresignGeneratorServiceRole2
+  #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: lambda.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     ManagedPolicyArns:
+  #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+  #     Policies:
+  #       - PolicyName: !Sub ${pIamPrefix}PresignGeneratorServiceRoleDefaultPolicy2
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             - Effect: Allow
+  #               Action: s3:PutObject
+  #               Resource: !Sub arn:${AWS::Partition}:s3:::*
+
+  #             - Effect: Allow
+  #               Action:
+  #                 - logs:CreateLogGroup
+  #                 - logs:CreateLogStream
+  #                 - logs:PutLogEvents
+  #               Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
   IngestWAFRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}IngestWAFRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -406,7 +464,7 @@ Resources:
               Service: wafv2.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: IngestWAFRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}IngestWAFRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -424,6 +482,8 @@ Resources:
   TransferLoggingRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}TransferLoggingRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -432,7 +492,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: TransferLoggingPolicy
+        - PolicyName: !Sub ${pIamPrefix}TransferLoggingPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -442,7 +502,7 @@ Resources:
                   - s3:GetBucketAcl
                   - s3:PutBucketAcl
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
-        - PolicyName: AWSTransferLoggingAccess
+        - PolicyName: !Sub ${pIamPrefix}AWSTransferLoggingAccess
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -456,6 +516,8 @@ Resources:
   TransferUserRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${pIamPrefix}TransferUserRole
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -464,7 +526,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: TransferUserPolicy
+        - PolicyName: !Sub ${pIamPrefix}TransferUserPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -483,92 +545,92 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 
 Outputs:
-  # LogicalID:
-  #   Description: Description about the value
-  #   Value: Value to Return
-  #   Export:
-  #     Name: Name of resource to Export
-
   TransferLoggingRoleExport:
     Description: Cloudtrail Logs Role ARN for SFTP
     Value: !GetAtt TransferLoggingRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-TransferLoggingRole
+      Name: TransferLoggingRoleArn
 
   TransferUserRoleExport:
     Description: SFTP Transfer User Role ARN
     Value: !GetAtt TransferUserRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-TransferUserRole
+      Name: TransferUserRoleArn
 
   TrailLogsRoleExport:
     Description: Cloudtrail Logs Role ARN
     Value: !GetAtt TrailLogsRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-TrailLogsRole
+      Name: TrailLogsRoleArn
 
   Ec2ScannerInstanceProfileExport:
     Description: Ec2ScannerInstanceProfile ARN
     Value: !GetAtt Ec2ScannerInstanceProfile.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-Ec2ScannerInstanceProfile
+      Name: Ec2ScannerInstanceProfile
 
-  FailedTransferServiceRoleExport:
-    Description: FailedTransferServiceRole ARN
-    Value: !GetAtt FailedTransferServiceRole.Arn
-    Export:
-      Name: !Sub ${AWS::StackName}-FailedTransferServiceRole
+  # FailedTransferServiceRoleExport:
+  #   Description: FailedTransferServiceRole ARN
+  #   Value: !GetAtt FailedTransferServiceRole.Arn
+  #   Export:
+  #     Name: FailedTransferServiceRole
 
-  DatatransferServiceRoleExport:
+  DataTransferServiceRoleExport:
     Description: DatatransferServiceRole ARN
-    Value: !GetAtt DatatransferServiceRole.Arn
+    Value: !GetAtt DataTransferServiceRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-DatatransferServiceRole
+      Name: DataTransferServiceRoleArn
+
+  TransferResultLambdaRoleExport:
+    Description: TransferResultLambdaRole ARN
+    Value: !GetAtt TransferResultLambdaRole.Arn
+    Export:
+      Name: TransferResultLambdaRoleArn
 
   ObjectTaggerRoleExport:
     Description: ObjectTaggerRole ARN
     Value: !GetAtt ObjectTaggerRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-ObjectTaggerRole
+      Name: ObjectTaggerRoleArn
 
   InvokeTaggerRoleExport:
     Description: InvokeTaggerRole ARN
     Value: !GetAtt InvokeTaggerRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-InvokeTaggerRole
+      Name: InvokeTaggerRole
 
   PresignGeneratorServiceRoleExport:
     Description: PresignGeneratorServiceRole ARN
     Value: !GetAtt PresignGeneratorServiceRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-PresignGeneratorServiceRole
+      Name: PresignGeneratorServiceRoleArn
 
   LoggingRoleExport:
     Description: LoggingRole ARN
     Value: !GetAtt LoggingRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-LoggingRole
+      Name: LoggingRoleArn
 
-  FileuploaderCloudWatchRoleExport:
+  FileUploaderCloudWatchRoleExport:
     Description: FileuploaderCloudWatchRole ARN
-    Value: !GetAtt FileuploaderCloudWatchRole.Arn
+    Value: !GetAtt FileUploaderCloudWatchRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-FileuploaderCloudWatchRole
+      Name: FileUploaderCloudWatchRoleArn
 
   APILambdaInvokeRoleExport:
     Description: APILambdaInvokeRole ARN
     Value: !GetAtt APILambdaInvokeRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-APILambdaInvokeRole
+      Name: APILambdaInvokeRoleArn
 
-  PresignGeneratorServiceRole2Export:
-    Description: PresignGeneratorServiceRole2 ARN
-    Value: !GetAtt PresignGeneratorServiceRole2.Arn
-    Export:
-      Name: !Sub ${AWS::StackName}-PresignGeneratorServiceRole2
+  # PresignGeneratorServiceRole2Export:
+  #   Description: PresignGeneratorServiceRole2 ARN
+  #   Value: !GetAtt PresignGeneratorServiceRole2.Arn
+  #   Export:
+  #     Name: PresignGeneratorServiceRole2
 
   IngestWAFRoleExport:
     Description: IngestWAFRole ARN
     Value: !GetAtt IngestWAFRole.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-IngestWAFRole
+      Name: IngestWAFRoleArn

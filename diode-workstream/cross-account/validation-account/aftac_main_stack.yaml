@@ -15,11 +15,8 @@ Metadata:
           - TemplateURLIngestStack
           - IngestStackBucket1CDSProfile
           - IngestStackBucket2CDSProfile
-          - IngestStackpresigngeneratorServiceRole
           - IngestStackObjectTaggerLambdaCodeKey
           - IngestStackApiGwLambdaCodeKey
-          - IngestStackfileuploaderCloudWatchRole
-          - IngestStackAPILambdaInvokeRole
 
       - Label:
           default: Pipeline Stack Parameters
@@ -37,12 +34,8 @@ Metadata:
           - PipelineStackBucketTwoGovPoc
           - PipelineStackBucketTwoDataOwner
           - PipelineStackBucketTwoKeyOwner
-          - PipelineStackEc2ScannerInstanceProfileARN
           - PipelineStackTransferResultLambdaCodeKey
-          - PipelineStackTransferResultServiceRole
-          - PipelineStackDataTransferLambdaRoleArn
-          - PipelineStackLambdaMappingRoleArn
-          - PipelineStackObjectTaggerRoleARN
+          # - PipelineStackLambdaMappingRoleArn
           # - PipelineStackInvokeTaggerRoleARN
           - PipelineStackDiodeSimulatorInstanceRole
 
@@ -57,8 +50,6 @@ Metadata:
         Parameters:
           - TemplateURLSftpServerStack
           - SftpServerStackSftpUserName
-          - SftpServerStackTransferUserRoleArn
-          - SftpServerStackTransferLoggingRoleArn
           - SftpServerStackSftpServerSubnetIds
           - SftpServerStackSftpBucketDataOwner
           - SftpServerStackSftpBucketGovPoc
@@ -69,8 +60,6 @@ Metadata:
         default: Ingest Stack Bucket 1 CDS Profile
       IngestStackBucket2CDSProfile:
         default: Ingest Stack Bucket 2 CDS Profile
-      PipelineStackDataTransferLambdaRoleArn:
-        default: Pipeline Stack Data Transfer Lambda Role ARN
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
       TemplateURLIngestStack:
@@ -83,10 +72,6 @@ Metadata:
         default: SFTP Server Stack Template URL
       SftpServerStackSftpUserName:
         default: SFTP Server Stack SFTP User Name
-      SftpServerStackTransferUserRoleArn:
-        default: SFTP Server Stack Transfer User Role ARN
-      SftpServerStackTransferLoggingRoleArn:
-        default: SFTP Server Stack Transfer Logging Role ARN
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerStackSftpBucketDataOwner:
@@ -101,16 +86,10 @@ Metadata:
         default: Pipeline Stack VPC CIDR
       PipelineStackPrivateSubnetIds:
         default: Pipeline Stack Private Subnet IDs
-      IngestStackpresigngeneratorServiceRole:
-        default: Ingest Stack Presign Generator Service Role
       IngestStackObjectTaggerLambdaCodeKey:
         default: Ingest Stack Object Tagger Lambda Code Key
       IngestStackApiGwLambdaCodeKey:
         default: Ingest Stack API Gateway Lambda Code Key
-      IngestStackfileuploaderCloudWatchRole:
-        default: Ingest Stack File Uploader CloudWatch Role
-      IngestStackAPILambdaInvokeRole:
-        default: Ingest Stack API Lambda Invoke Role
       PipelineStackBucketOneGovPoc:
         default: Pipeline Stack Bucket One Gov POC
       PipelineStackBucketOneDataOwner:
@@ -123,16 +102,10 @@ Metadata:
         default: Pipeline Stack Bucket Two Data Owner
       PipelineStackBucketTwoKeyOwner:
         default: Pipeline Stack Bucket Two Key Owner
-      PipelineStackEc2ScannerInstanceProfileARN:
-        default: Pipeline Stack EC2 Scanner Instance Profile ARN
       PipelineStackTransferResultLambdaCodeKey:
         default: Pipeline Stack Transfer Result Lambda Code Key
-      PipelineStackTransferResultServiceRole:
-        default: Pipeline Stack Transfer Result Service Role ARN
-      PipelineStackLambdaMappingRoleArn:
-        default: Pipeline Stack Lambda Mapping Role ARN
-      PipelineStackObjectTaggerRoleARN:
-        default: Pipeline Stack Object Tagger Role ARN
+      # PipelineStackLambdaMappingRoleArn:
+      #   default: Pipeline Stack Lambda Mapping Role ARN
       PipelineStackDiodeSimulatorInstanceRole:
         default: Pipeline Stack Diode Simulator Instance Role
       # PipelineStackInvokeTaggerRoleARN:
@@ -158,10 +131,6 @@ Parameters:
     Type: String
     Description: CDS Profile for IngestBucket2
     AllowedValues: [CDS_1, CDS_2, CDS_3]
-
-  PipelineStackDataTransferLambdaRoleArn:
-    Type: String
-    Description: ARN for Data Transfer Lambda in Diode Account
 
   PipelineStackDiodeAccountId:
     Type: String
@@ -192,16 +161,6 @@ Parameters:
     Description: Username for SFTP user
     Default: sftpuser
 
-  SftpServerStackTransferUserRoleArn:
-    Type: String
-    Description: Role ARN for Transfer user
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferUserRole-0pQEMV7bs5oB
-
-  SftpServerStackTransferLoggingRoleArn:
-    Type: String
-    Description: Role ARN for Transfer logging
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TransferLoggingRole-Wfe9l4IHH9mZ
-
   AftacVpcId:
     Type: String
     Description: VPC ID for AFTAC Cloud
@@ -217,11 +176,6 @@ Parameters:
   #   Description: ARN of the role that CloudTrail will assume to put logs into the log bucket.
   #   Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-TrailLogsRole-rBO5JjPMv9i2
 
-  IngestStackpresigngeneratorServiceRole:
-    Type: String
-    Description: ARN of the service role for the presign generator lambda
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-PresignGeneratorServiceRole-ULoKi3d6jtk1
-
   LambdaStorageBucket:
     Type: String
     Description: S3 bucket where the lambda code is stored
@@ -236,16 +190,6 @@ Parameters:
     Type: String
     Description: S3 key for the API Gateway lambda code
     Default: lambda_functions/api_gw_lambda_functions.zip
-
-  IngestStackfileuploaderCloudWatchRole:
-    Type: String
-    Description: ARN of the file uploader CloudWatch role
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-FileuploaderCloudWatchRole-xhEQq0tIEvVk
-
-  IngestStackAPILambdaInvokeRole:
-    Type: String
-    Description: ARN of the API Lambda invoke role
-    Default: arn:aws-us-gov:iam::073653673774:role/my-iam-stack-APILambdaInvokeRole-1nh0H5T3vvAr
 
   PipelineStackPipelineAmiId:
     Type: String
@@ -287,11 +231,6 @@ Parameters:
     Description: The CIDR block of the existing VPC
     Default: 10.161.64.0/20
 
-  PipelineStackEc2ScannerInstanceProfileARN:
-    Type: String
-    Description: The ARN of the EC2 Scanner Instance Profile
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:instance-profile/.*
-
   PipelineStackPrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
@@ -302,19 +241,9 @@ Parameters:
     Description: The S3 key of the pipeline lambda code
     Default: lambda_functions/transfer_result.zip
 
-  PipelineStackTransferResultServiceRole:
-    Type: String
-    Description: The ARN of the IAM role for the TransferResult Lambda
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
-
-  PipelineStackLambdaMappingRoleArn:
-    Type: String
-    Description: The ARN of the Lambda Mapping Role
-
-  PipelineStackObjectTaggerRoleARN:
-    Type: String
-    Description: The ARN of the Object Tagger Role
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
+  # PipelineStackLambdaMappingRoleArn:
+  #   Type: String
+  #   Description: The ARN of the Lambda Mapping Role
 
   # PipelineStackInvokeTaggerRoleARN:
   #   Type: String
@@ -372,8 +301,8 @@ Resources:
       TemplateURL: !Ref TemplateURLSftpServerStack
       Parameters:
         SftpUserName: !Ref SftpServerStackSftpUserName
-        TransferUserRoleArn: !Ref SftpServerStackTransferUserRoleArn
-        TransferLoggingRoleArn: !Ref SftpServerStackTransferLoggingRoleArn
+        TransferUserRoleArn: !ImportValue TransferUserRoleArn
+        TransferLoggingRoleArn: !ImportValue TransferLoggingRoleArn
         AftacVpcId: !Ref AftacVpcId
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
@@ -381,7 +310,7 @@ Resources:
         SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
         SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
         LambdaStorageBucket: !Ref LambdaStorageBucket
-        ObjectTaggerRoleARN: !Ref PipelineStackObjectTaggerRoleARN
+        ObjectTaggerRoleARN: !ImportValue ObjectTaggerRoleArn
         PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
         # TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
@@ -401,12 +330,12 @@ Resources:
     Properties:
       TemplateURL: !Ref TemplateURLIngestStack
       Parameters:
-        ObjectTaggerRoleARN: !Ref PipelineStackObjectTaggerRoleARN
-        presigngeneratorServiceRole: !Ref IngestStackpresigngeneratorServiceRole
+        ObjectTaggerRoleARN: !ImportValue ObjectTaggerRoleArn
+        presigngeneratorServiceRole: !ImportValue PresignGeneratorServiceRoleArn
         LambdaStorageBucket: !Ref LambdaStorageBucket
         ApiGwLambdaCodeKey: !Ref IngestStackApiGwLambdaCodeKey
-        fileuploaderCloudWatchRole: !Ref IngestStackfileuploaderCloudWatchRole
-        APILambdaInvokeRole: !Ref IngestStackAPILambdaInvokeRole
+        fileuploaderCloudWatchRole: !ImportValue FileUploaderCloudWatchRoleArn
+        APILambdaInvokeRole: !ImportValue APILambdaInvokeRoleArn
         AftacVpcId: !Ref AftacVpcId
         PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         BucketOneGovPoc: !Ref PipelineStackBucketOneGovPoc
@@ -428,16 +357,15 @@ Resources:
     Properties:
       TemplateURL: !Ref TemplateURLPipelineStack
       Parameters:
-        LambdaMappingRoleArn: !Ref PipelineStackLambdaMappingRoleArn
-        DataTransferLambdaRoleArn: !Ref PipelineStackDataTransferLambdaRoleArn
+        # LambdaMappingRoleArn: !Ref PipelineStackLambdaMappingRoleArn
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         VpcCidr: !Ref PipelineStackVpcCidr
-        Ec2ScannerInstanceProfileARN: !Ref PipelineStackEc2ScannerInstanceProfileARN
+        Ec2ScannerInstanceProfileARN: !ImportValue Ec2ScannerInstanceProfile
         PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
         AftacVpcId: !Ref AftacVpcId
         TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
-        TransferResultServiceRole: !Ref PipelineStackTransferResultServiceRole
+        TransferResultServiceRole: !ImportValue TransferResultLambdaRoleArn
         LambdaStorageBucket: !Ref LambdaStorageBucket
         ApprovedFileTypes: !Ref ApprovedFileTypes
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
