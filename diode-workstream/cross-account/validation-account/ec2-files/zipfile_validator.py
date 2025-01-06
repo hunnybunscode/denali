@@ -5,6 +5,8 @@ import boto3  # type: ignore
 import clamscan
 import puremagic  # type: ignore
 from utils import empty_dir
+from utils import create_tags
+from utils import delete_object
 
 s3_client = boto3.client("s3", region_name="us-gov-west-1")
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
@@ -152,7 +154,7 @@ def quarantine_file(bucket, key, dest_bucket, receipt_handle):
             logger.info(f"SUCCESS: {key} successfully transferred to {dest_bucket} with HTTPStatusCode: {copy_status_code}")  # noqa: E501
             clamscan.delete_sqs_message(receipt_handle)
             send_sns(dest_bucket, key)
-            delete_file(bucket, key)
+            delete_object(bucket, key)
 
         else:
             logger.error(f"FAILURE: Unable to Copy Object: {key} to {dest_bucket}.  StatusCode: {copy_status_code}")  # noqa: E501
@@ -186,27 +188,3 @@ def send_sns(bucket, key):
             logger.error(f"FAILURE: Unable to Publish SNS Message.  StatusCode: {sns_publish_status_code}")  # noqa: E501
     except Exception as e:
         logger.error(f"An Exception ocurred publishing SNS: {e}")
-
-
-def delete_file(bucket, key):
-    try:
-        logger.info(f"Deleting file: {key} from Bucket: {bucket}")
-        response = s3_client.delete_object(
-            Bucket=bucket,
-            Key=key
-        )
-        delete_object_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if delete_object_status_code == 204:
-            logger.info(f"SUCCESS:  {key} successfully deleted from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to delete {key} from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        logger.info(f"Delete Object Response: {response}")
-    except Exception as e:
-        logger.error(f"Exception ocurred deleting object: {e}")
-
-
-def create_tags(error_status: str, mime_type: str):
-    return {
-        "ERROR_STATUS": error_status,
-        "MIME_TYPE": mime_type
-    }
