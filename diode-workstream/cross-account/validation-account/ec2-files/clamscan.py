@@ -6,7 +6,7 @@ import subprocess  # nosec B404
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
-
+from utils import empty_dir
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -19,6 +19,8 @@ S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 
+INGESTION_DIR = "/usr/bin/files"
+
 
 def scanner(bucket, key, receipt_handle):
 
@@ -27,7 +29,7 @@ def scanner(bucket, key, receipt_handle):
         # exitstatus = subprocess.run(["clamdscan", "/usr/bin/files"]).returncode
 
         logger.info("Performing Fake clamdscan")
-        exitstatus = random.choice(([0] * 18) + [1, 512])
+        exitstatus = random.choice(([0] * 18) + [1, 512])  # nosec B311
 
         logger.info(f"File {key} ClamAV Scan Exit Code: {exitstatus}")
         if exitstatus == 0:
@@ -84,7 +86,7 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
         else:
             logger.info(f"FAILURE: Unable to tag {key}.  HTTPStatusCode: {tag_status_code}")  # noqa: E501
         # remove file from local storage
-        subprocess.run(["rm", "-r", "/usr/bin/files/*"])
+        empty_dir(INGESTION_DIR)
         if file_status == "CLEAN":
             dest_bucket = get_param_value("/pipeline/DataTransferIngestBucketName")  # noqa: E501
         else:

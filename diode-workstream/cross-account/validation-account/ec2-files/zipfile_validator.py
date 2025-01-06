@@ -1,14 +1,16 @@
 import logging
 import os
-import subprocess  # nosec B404
 
 import boto3  # type: ignore
 import clamscan
 import puremagic  # type: ignore
+from utils import empty_dir
 
 s3_client = boto3.client("s3", region_name="us-gov-west-1")
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
+
+INGESTION_DIR = "/usr/bin/files"
 
 
 def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
@@ -18,11 +20,11 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
     mime_type = ""
     new_tags = {}
     content_check = "FAILURE"
-    files = os.listdir("/usr/bin/files/")
+    files = os.listdir(f"{INGESTION_DIR}/")
     valid = True
     for f in files:
         ext = f.split(".")[-1]
-        file_data_list: list = puremagic.magic_file(f"/usr/bin/files/{f}")
+        file_data_list: list = puremagic.magic_file(f"{INGESTION_DIR}/{f}")
         logger.info(f"File Data: {file_data_list}")
         # The first one has the highest confidence
         file_data = file_data_list[0]
@@ -136,7 +138,8 @@ def add_tags(bucket, key, new_tags):
 def quarantine_file(bucket, key, dest_bucket, receipt_handle):
     logger.info(f"Content-Type validation failed for {key}.  Quarantining File.")  # noqa: E501
     logger.info(f"Deleting {key} from Local Storage")
-    subprocess.run(["rm", "-r", "/usr/bin/files/*"])
+    empty_dir(INGESTION_DIR)
+
     try:
         response = s3_client.copy_object(
             Bucket=dest_bucket,
