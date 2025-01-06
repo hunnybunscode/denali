@@ -189,7 +189,7 @@ Parameters:
   IngestStackApiGwLambdaCodeKey:
     Type: String
     Description: S3 key for the API Gateway lambda code
-    Default: lambda_functions/api_gw_lambda_functions.zip
+    Default: lambda_functions/presigner.zip
 
   PipelineStackPipelineAmiId:
     Type: String
