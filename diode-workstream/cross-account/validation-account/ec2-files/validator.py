@@ -1,13 +1,22 @@
 import logging
-import subprocess  # nosec B404
 
 import boto3  # type: ignore
 import clamscan
 import puremagic  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
+from utils import delete_object
+from utils import copy_object
+from utils import create_tags
+from utils import send_file_quarantined_msg
+from utils import delete_sqs_message
+from utils import empty_dir
+from utils import get_param_value
 
 s3_client = boto3.client("s3", region_name="us-gov-west-1")
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
+
+INGESTION_DIR = "/usr/bin/files"
 
 
 def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
@@ -22,11 +31,11 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
     # }
     new_tags = {}
     content_check = "FAILURE"
-    ingested_file = "/usr/bin/files/file_to_scan"
+
     try:
         ext = key.split(".")[-1]
         logger.info(ext)
-        file_data_list: list = puremagic.magic_file(f"/usr/bin/files/file_to_scan.{ext}")  # noqa: E501
+        file_data_list: list = puremagic.magic_file(f"{INGESTION_DIR}/file_to_scan.{ext}")  # noqa: E501
         logger.info(f"File Data: {file_data_list}")
         # The first one has the highest confidence
         file_data = file_data_list[0]
@@ -76,7 +85,7 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             )
             quarantine_bucket = quarantine_bucket_parameter["Parameter"]["Value"]
             dest_bucket = quarantine_bucket
-            quarantine_file(bucket, key, dest_bucket, receipt_handle)
+            quarantine_file(bucket, dest_bucket, key, receipt_handle)
     except Exception as e:
         logger.error(f"Exception ocurred validating file: {e}")
         ssm_client = boto3.client("ssm", region_name="us-gov-west-1")
@@ -84,7 +93,7 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             Name="/pipeline/QuarantineBucketName"
         )
         quarantine_bucket = quarantine_bucket_parameter["Parameter"]["Value"]
-        quarantine_file(bucket, key, quarantine_bucket, receipt_handle)
+        quarantine_file(bucket, quarantine_bucket, key, receipt_handle)
 
 
 def add_tags(bucket, key, new_tags):
@@ -114,77 +123,22 @@ def add_tags(bucket, key, new_tags):
         logger.error(f"Exception ocurred Tagging file with Content-Type Data: {e}")  # noqa: E501
 
 
-def quarantine_file(bucket, key, dest_bucket, receipt_handle):
-    logger.info(f"Content-Type validation failed for {key}.  Quarantining File.")  # noqa: E501
-    logger.info(f"Deleting {key} from Local Storage")
-    subprocess.run(["rm", "-r", "/usr/bin/files/*"])
+def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
+    # Delete the `key` from local storage by emptying the ingestion directory
+    empty_dir(INGESTION_DIR)
+
+    logger.info(f"Content-Type validation failed for {key}. Quarantining the file")  # noqa: E501
+
     try:
-        response = s3_client.copy_object(
-            Bucket=dest_bucket,
-            CopySource=f"{bucket}/{key}",
-            Key=key
-        )
-        copy_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        logger.info(f"Copy Object Response {response}")
-        if copy_status_code == 200:
-            logger.info(f"SUCCESS: {key} successfully transferred to {dest_bucket} with HTTPStatusCode: {copy_status_code}")  # noqa: E501
-            clamscan.delete_sqs_message(receipt_handle)
-            send_sns(dest_bucket, key)
-            delete_file(bucket, key)
+        copy_object(src_bucket, dest_bucket, key)
+        delete_object(src_bucket, key)
+        obj_location = dest_bucket
+    except ClientError:
+        obj_location = src_bucket
 
-        else:
-            logger.error(f"FAILURE: Unable to Copy Object: {key} to {dest_bucket}.  StatusCode: {copy_status_code}")  # noqa: E501
-            logger.info(f"File: {key} remains located at {bucket}/{key}")
-            send_sns(bucket, key)
-    except Exception as e:
-        logger.error(f"Exception ocurred copying object to {dest_bucket}: {e}")  # noqa: E501
-        logger.info(f"File: {key} remains located at {bucket}/{key}")
-
-
-def send_sns(bucket, key):
-    ssm_client = boto3.client("ssm", region_name="us-gov-west-1")
-    sns_topic_parameter = ssm_client.get_parameter(
-        Name="/pipeline/QuarantineTopicArn"
-    )
-    quarantine_topic = sns_topic_parameter["Parameter"]["Value"]
     try:
-        logger.info("Publishing SNS Message for Quarantined file")
-        sns_client = boto3.client("sns", region_name="us-gov-west-1")
-        message = f"A File has been quarantined due to Content-Type Validation Failure.\nFile: {key}\nFile Location: {bucket}/{key}"  # noqa: E501
-        response = sns_client.publish(
-            TopicArn=quarantine_topic,
-            Message=message,
-            MessageStructure="text",
-            Subject=f"Content-Type Validation Failure"
-        )
-        sns_publish_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if sns_publish_status_code == 200:
-            logger.info(f"SUCCESS:  SNS Message Successfully published.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to Publish SNS Message.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"An Exception ocurred publishing SNS: {e}")
-
-
-def delete_file(bucket, key):
-    try:
-        logger.info(f"Deleting file: {key} from Bucket: {bucket}")
-        response = s3_client.delete_object(
-            Bucket=bucket,
-            Key=key
-        )
-        delete_object_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if delete_object_status_code == 204:
-            logger.info(f"SUCCESS:  {key} successfully deleted from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to delete {key} from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        logger.info(f"Delete Object Response: {response}")
-    except Exception as e:
-        logger.error(f"Exception ocurred deleting object: {e}")
-
-
-def create_tags(error_status: str, mime_type: str):
-    return {
-        "ERROR_STATUS": error_status,
-        "MIME_TYPE": mime_type
-    }
+        av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+        delete_sqs_message(av_scan_queue_url, receipt_handle)
+        send_file_quarantined_msg(obj_location, key, "Content-Type Validation Failure")  # noqa: E501
+    except ClientError:
+        pass
