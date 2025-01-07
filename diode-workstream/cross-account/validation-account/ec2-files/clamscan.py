@@ -7,6 +7,8 @@ import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from utils import empty_dir
+from utils import get_param_value
+from utils import delete_sqs_message
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -41,7 +43,8 @@ def scanner(bucket, key, receipt_handle):
         # If file does not exist
         elif exitstatus == 512:
             logger.info(f"File {key} not found. Unable to scan.")
-            delete_sqs_message(receipt_handle)
+            queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+            delete_sqs_message(queue_url, receipt_handle)
 
         # TODO: Handle exit statuses other than 0 and 512
         # If scan does not return a "CLEAN" result
@@ -96,26 +99,6 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
         logger.error(f"Exception ocurred Tagging file: {e}")
 
 
-def quarantine_file(bucket, key, dest_bucket, msg, receipt_handle):
-    logger.info(f"Quarantining {key}")
-    try:
-        S3_CLIENT.copy_object(
-            Bucket=dest_bucket,
-            CopySource=f"{bucket}/{key}",
-            Key=key,
-        )
-        delete_sqs_message(receipt_handle)
-        send_sqs(dest_bucket, key)
-
-        S3_CLIENT.delete_object(
-            Bucket=bucket,
-            Key=key
-        )
-    except Exception as e:
-        logger.error(f"Exception ocurring quarantining file ---{e}")
-# Copies file to proper destination bucket
-
-
 def move_file(bucket, key, dest_bucket, msg, receipt_handle):
     logger.info(msg)
     try:
@@ -128,7 +111,8 @@ def move_file(bucket, key, dest_bucket, msg, receipt_handle):
         logger.info(f"Copy Object Response {response}")
         if copy_status_code == 200:
             logger.info(f"SUCCESS: {key} successfully transferred to {dest_bucket} with HTTPStatusCode: {copy_status_code}")  # noqa: E501
-            delete_sqs_message(receipt_handle)
+            queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+            delete_sqs_message(queue_url, receipt_handle)
             # send_sqs(dest_bucket,key)
             delete_file(bucket, key)
         else:
@@ -188,24 +172,6 @@ def delete_file(bucket, key):
         logger.info(f"Delete Object Response: {response}")
     except Exception as e:
         logger.error(f"Exception ocurred deleting object: {e}")
-
-
-def delete_sqs_message(receipt_handle):
-    av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")  # noqa: E501
-    try:
-        logger.info("Deleting SQS Message....")
-        del_msg_response = SQS_CLIENT.delete_message(
-            QueueUrl=av_scan_queue_url,
-            ReceiptHandle=receipt_handle
-        )
-        del_msg_status_code = del_msg_response["ResponseMetadata"]["HTTPStatusCode"]
-        if del_msg_status_code == 200:
-            logger.info(f"SUCCESS:  SQS Message successfully deleted from Queue.  StatusCode: {del_msg_status_code}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: Unable to delete SQS Message from Queue.  StatusCode: {del_msg_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.info(
-            f"An Error Ocurred Deleting SQS Message queue.  Error: {e}")
 
 
 def publish_quarantine_notification(bucket: str, key: str, file_status: str, exit_status: int):
