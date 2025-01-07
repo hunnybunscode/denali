@@ -348,7 +348,7 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${pResourcePrefix}-image-recipe
-      Version: "1.0.6"
+      Version: "1.0.7"
       # Description: Testing ec2 scanner recipe
       ParentImage: !Ref pParentImage
       # WorkingDirectory: String # The default path is `/tmp`
@@ -386,7 +386,7 @@ Resources:
         - ComponentArn: !Ref BuildComponentEnableSQSPollerService
         - ComponentArn: !Ref BuildComponentPerformOtherTasks
         - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux-kernel-ml/x.x.x
+        # - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux-kernel-ml/x.x.x
 
       # BlockDeviceMappings:
       #   - DeviceName: String
