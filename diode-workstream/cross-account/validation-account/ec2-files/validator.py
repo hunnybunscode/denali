@@ -11,6 +11,7 @@ from utils import send_file_quarantined_sns_msg
 from utils import delete_sqs_message
 from utils import empty_dir
 from utils import get_param_value
+from utils import add_tags
 
 s3_client = boto3.client("s3", region_name="us-gov-west-1")
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
@@ -21,14 +22,6 @@ INGESTION_DIR = "/usr/bin/files"
 
 def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
     logger.info("Attempting to validate file")
-    # mime_mappings = {
-    #   ".wav": "audio/x-wav",
-    #   ".wav": "audio/wav",
-    #   ".mp4": "video/mp4",
-    #   ".flac": "audio/flac",
-    #   ".txt": "text/plain",
-    #   ".json": "application/json"
-    # }
     new_tags = {}
     content_check = "FAILURE"
 
@@ -94,33 +87,6 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
         )
         quarantine_bucket = quarantine_bucket_parameter["Parameter"]["Value"]
         quarantine_file(bucket, quarantine_bucket, key, receipt_handle)
-
-
-def add_tags(bucket, key, new_tags):
-    try:
-        get_tags_response = s3_client.get_object_tagging(
-            Bucket=bucket,
-            Key=key
-        )
-        existing_tags = get_tags_response["TagSet"]
-        combined_tags = existing_tags + \
-            [{"Key": k, "Value": v} for k, v in new_tags.items()]
-
-        logger.info(f"Tagging {key} with content-type data")
-        response = s3_client.put_object_tagging(
-            Bucket=bucket,
-            Key=key,
-            Tagging={
-                "TagSet": combined_tags
-            },
-        )
-        tag_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if tag_status_code == 200:
-            logger.info(f"SUCCESS: {key} Successfully Tagged with HTTPStatusCode {tag_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to tag {key}.  HTTPStatusCode: {tag_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"Exception ocurred Tagging file with Content-Type Data: {e}")  # noqa: E501
 
 
 def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):

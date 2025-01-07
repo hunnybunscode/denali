@@ -3,6 +3,7 @@ from pathlib import Path
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -44,6 +45,50 @@ def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: s
 
     S3_CLIENT.copy_object(**params)
     logger.info("Successfully copied the object")
+
+
+def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -> dict[str, str]:
+    logger.info(f"Getting tags for {bucket}/{key}")
+    params = dict(
+        Bucket=bucket,
+        Key=key
+    )
+    if bucket_owner:
+        params["ExpectedBucketOwner"] = bucket_owner
+
+    tag_set = S3_CLIENT.get_object_tagging(**params)["TagSet"]
+    logger.info("Successfully retrieved the tags")
+    return {tag["Key"]: tag["Value"] for tag in tag_set}
+
+
+def put_object_tagging(bucket: str, key: str, tags: dict[str, str], bucket_owner: str | None = None) -> dict[str, str]:
+    logger.info(f"Putting tags for {bucket}/{key}")
+    tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
+    params = dict(
+        Bucket=bucket,
+        Key=key,
+        Tagging={"TagSet": tag_set}
+    )
+    if bucket_owner:
+        params["ExpectedBucketOwner"] = bucket_owner
+
+    S3_CLIENT.put_object_tagging(**params)
+    logger.info("Successfully put the tags")
+
+
+def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: str | None = None):
+    """
+    `ClientError`s are logged, but ignored
+    """
+    try:
+        logger.info(f"Adding tags to {bucket}/{key}")
+        existing_tags = get_object_tagging(bucket, key, bucket_owner)
+        combined_tags = existing_tags | tags_to_add
+        put_object_tagging(bucket, key, combined_tags, bucket_owner)
+        logger.info("Successfully added the tags")
+    except ClientError as e:
+        logger.warning(f"ERROR: Exception ocurred while adding tags: {e}")
+        pass
 
 
 def publish_sns_message(topic_arn: str, message: str, subject: str | None = None):
