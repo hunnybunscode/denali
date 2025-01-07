@@ -12,6 +12,7 @@ from utils import delete_sqs_message
 from utils import publish_sns_message
 from utils import copy_object
 from utils import delete_object
+from utils import add_tags
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -64,31 +65,11 @@ def scanner(bucket, key, receipt_handle):
 # Function to tag file depending on scan result
 def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
     try:
-        get_tags_response = S3_CLIENT.get_object_tagging(
-            Bucket=bucket,
-            Key=key
-        )
-        existing_tags = get_tags_response["TagSet"]
-        logger.info(f"Existing Object TagSet: {existing_tags}")
         new_tags = {
             "AV_SCAN_STATUS": file_status,
             "CLAM_AV_EXIT_CODE": str(exitstatus)
         }
-        combined_tags = existing_tags + \
-            [{"Key": k, "Value": v} for k, v in new_tags.items()]
-        logger.info(f"Tagging {key} in Bucket {bucket}")
-        response = S3_CLIENT.put_object_tagging(
-            Bucket=bucket,
-            Key=key,
-            Tagging={
-                "TagSet": combined_tags
-            },
-        )
-        tag_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if tag_status_code == 200:
-            logger.info(f"SUCCESS: {key} Successfully Tagged with HTTPStatusCode {tag_status_code}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: Unable to tag {key}.  HTTPStatusCode: {tag_status_code}")  # noqa: E501
+        add_tags(bucket, key, new_tags)
         # remove file from local storage
         empty_dir(INGESTION_DIR)
         if file_status == "CLEAN":
@@ -136,8 +117,8 @@ def send_sqs(dest_bucket, key):
 # Function to delete file from ingest bucket
 def delete_file(bucket, key):
     try:
-        logger.info(f"Moving file to {lts_bucket}")
         lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
+        logger.info(f"Moving file to {lts_bucket}")
         copy_object(bucket, lts_bucket, key)
 
         logger.info(f"Deleting file: {key} from Bucket: {bucket}")

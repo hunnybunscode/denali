@@ -7,6 +7,8 @@ import puremagic  # type: ignore
 from utils import empty_dir
 from utils import create_tags_for_file_validation
 from utils import delete_object
+from utils import add_tags
+from utils import send_file_quarantined_sns_msg
 
 s3_client = boto3.client("s3", region_name="us-gov-west-1")
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
@@ -110,33 +112,6 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
         quarantine_file(bucket, key, dest_bucket, receipt_handle)
 
 
-def add_tags(bucket, key, new_tags):
-    try:
-        get_tags_response = s3_client.get_object_tagging(
-            Bucket=bucket,
-            Key=key
-        )
-        existing_tags = get_tags_response["TagSet"]
-        combined_tags = existing_tags + \
-            [{"Key": k, "Value": v} for k, v in new_tags.items()]
-
-        logger.info(f"Tagging {key} with content-type data")
-        response = s3_client.put_object_tagging(
-            Bucket=bucket,
-            Key=key,
-            Tagging={
-                "TagSet": combined_tags
-            },
-        )
-        tag_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if tag_status_code == 200:
-            logger.info(f"SUCCESS: {key} Successfully Tagged with HTTPStatusCode {tag_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to tag {key}.  HTTPStatusCode: {tag_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"Exception ocurred Tagging file with Content-Type Data: {e}")  # noqa: E501
-
-
 def quarantine_file(bucket, key, dest_bucket, receipt_handle):
     logger.info(f"Content-Type validation failed for {key}.  Quarantining File.")  # noqa: E501
     logger.info(f"Deleting {key} from Local Storage")
@@ -153,38 +128,13 @@ def quarantine_file(bucket, key, dest_bucket, receipt_handle):
         if copy_status_code == 200:
             logger.info(f"SUCCESS: {key} successfully transferred to {dest_bucket} with HTTPStatusCode: {copy_status_code}")  # noqa: E501
             clamscan.delete_sqs_message(receipt_handle)
-            send_sns(dest_bucket, key)
+            send_file_quarantined_sns_msg(dest_bucket, key, "Content-Type Validation Failure")  # noqa: E501
             delete_object(bucket, key)
 
         else:
             logger.error(f"FAILURE: Unable to Copy Object: {key} to {dest_bucket}.  StatusCode: {copy_status_code}")  # noqa: E501
             logger.info(f"File: {key} remains located at {bucket}/{key}")
-            send_sns(bucket, key)
+            send_file_quarantined_sns_msg(bucket, key, "Content-Type Validation Failure")  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred copying object to {dest_bucket}: {e}")  # noqa: E501
         logger.info(f"File: {key} remains located at {bucket}/{key}")
-
-
-def send_sns(bucket, key):
-    ssm_client = boto3.client("ssm", region_name="us-gov-west-1")
-    sns_topic_parameter = ssm_client.get_parameter(
-        Name="/pipeline/QuarantineTopicArn"
-    )
-    quarantine_topic = sns_topic_parameter["Parameter"]["Value"]
-    try:
-        logger.info("Publishing SNS Message for Quarantined file")
-        sns_client = boto3.client("sns", region_name="us-gov-west-1")
-        message = f"A File has been quarantined due to Content-Type Validation Failure.\nFile: {key}\nFile Location: {bucket}/{key}"  # noqa: E501
-        response = sns_client.publish(
-            TopicArn=quarantine_topic,
-            Message=message,
-            MessageStructure="text",
-            Subject=f"Content-Type Validation Failure"
-        )
-        sns_publish_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if sns_publish_status_code == 200:
-            logger.info(f"SUCCESS:  SNS Message Successfully published.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-        else:
-            logger.error(f"FAILURE: Unable to Publish SNS Message.  StatusCode: {sns_publish_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"An Exception ocurred publishing SNS: {e}")
