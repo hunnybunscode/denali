@@ -1,22 +1,15 @@
 import logging
 import zipfile
 
-import boto3  # type: ignore
-from botocore.config import Config  # type: ignore
 import clamscan
 import validator
 import zipfile_validator
 from utils import empty_dir
 from utils import get_param_value
+from utils import download_file
 
-logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
-
-# TODO: Do not hard-code the region
-region = "us-gov-west-1"
-config = Config(retries={"max_attempts": 5, "mode": "standard"})
-S3_CLIENT = boto3.client("s3", config=config, region_name=region)
-SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 
 INGESTION_DIR = "/usr/bin/files"
 
@@ -41,18 +34,13 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
 
     if file_ext == "zip":
         try:
-            logger.info(f"Downloading {key} to local directory")
-            S3_CLIENT.download_file(
-                Bucket=bucket,
-                Key=key,
-                Filename="/usr/bin/zipfiles/zipfile.zip"
-            )
-            logger.info(f"Attempting to unzip {key} from {bucket}...")
+            download_file(bucket, key, "/usr/bin/zipfiles/zipfile.zip")
         except Exception as e:
-            logger.error(
-                f"Exception ocurred copying file to local storage: {e}"
-            )
+            logger.error(f"Exception ocurred copying file to local storage: {e}")  # noqa: E501
+            # Can't proceed if download failed
+            return
 
+        logger.info(f"Attempting to unzip {key} from {bucket}...")
         try:
             with zipfile.ZipFile("/usr/bin/zipfiles/zipfile.zip") as zip_file:
                 # extact files from zip into tmp location
@@ -72,11 +60,7 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
     )
     try:
         # Copy file to Local Storage
-        S3_CLIENT.download_file(
-            Bucket=bucket,
-            Key=key,
-            Filename=f"{INGESTION_DIR}/file_to_scan.{file_ext}"
-        )
+        download_file(bucket, key, f"{INGESTION_DIR}/file_to_scan.{file_ext}")
         validator.validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
     except Exception as e:
         logger.error(
@@ -89,6 +73,6 @@ def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, fi
     )
     try:
         quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
-        validator.quarantine_file(bucket, key, quarantine_bucket, receipt_handle)  # noqa: E501
+        validator.quarantine_file(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred quarantining file: {e}")

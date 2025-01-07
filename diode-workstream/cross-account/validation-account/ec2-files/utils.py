@@ -2,10 +2,11 @@ import logging
 from pathlib import Path
 
 import boto3  # type: ignore
+import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
-logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
 
@@ -16,19 +17,6 @@ S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
-
-
-def delete_object(bucket: str, key: str, bucket_owner: str | None = None):
-    logger.info(f"Deleting {bucket}/{key}")
-    params = dict(
-        Bucket=bucket,
-        Key=key
-    )
-    if bucket_owner:
-        params["ExpectedBucketOwner"] = bucket_owner
-
-    S3_CLIENT.delete_object(**params)
-    logger.info("Successfully deleted the object")
 
 
 def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: str | None = None, dest_bucket_owner: str | None = None):
@@ -45,6 +33,19 @@ def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: s
 
     S3_CLIENT.copy_object(**params)
     logger.info("Successfully copied the object")
+
+
+def delete_object(bucket: str, key: str, bucket_owner: str | None = None):
+    logger.info(f"Deleting {bucket}/{key}")
+    params = dict(
+        Bucket=bucket,
+        Key=key
+    )
+    if bucket_owner:
+        params["ExpectedBucketOwner"] = bucket_owner
+
+    S3_CLIENT.delete_object(**params)
+    logger.info("Successfully deleted the object")
 
 
 def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -> dict[str, str]:
@@ -76,6 +77,20 @@ def put_object_tagging(bucket: str, key: str, tags: dict[str, str], bucket_owner
     logger.info("Successfully put the tags")
 
 
+def download_file(bucket: str, key: str, filename: str, bucket_owner: str | None = None):
+    logger.info(f"Downloading {bucket}/{key} to {filename}")
+    params = dict(
+        Bucket=bucket,
+        Key=key,
+        Filename=filename
+    )
+    if bucket_owner:
+        params["ExtraArgs"] = {"ExpectedBucketOwner": bucket_owner}
+
+    S3_CLIENT.download_file(**params)
+    logger.info("Successfully downloaded the file")
+
+
 def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: str | None = None):
     """
     `ClientError`s are logged, but ignored
@@ -104,8 +119,36 @@ def publish_sns_message(topic_arn: str, message: str, subject: str | None = None
     logger.info("Successfully published the message")
 
 
+def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = None):
+    queue_name = queue_url.split("/")[-1]
+    logger.info(f"Sending a message to {queue_name} SQS queue")
+    params = dict(
+        QueueUrl=queue_url,
+        MessageBody=message
+    )
+    if delay_seconds is not None:
+        params["DelaySeconds"] = delay_seconds
+
+    SQS_CLIENT.send_message(**params)
+    logger.info("Successfully sent the message")
+
+
+def receive_sqs_message(queue_url: str, max_num_of_messages=1):
+    queue_name = queue_url.split("/")[-1]
+    logger.info(f"Checking for messages from {queue_name}")
+    response: dict = SQS_CLIENT.receive_message(
+        QueueUrl=queue_url,
+        MaxNumberOfMessages=max_num_of_messages
+    )
+    messages: list = response.get("Messages")
+    if not messages:
+        logger.info("No messages were retrieved")
+    return messages
+
+
 def delete_sqs_message(queue_url: str, receipt_handle: str):
-    logger.info(f"Deleting a message from {queue_url} SQS queue with {receipt_handle}")  # noqa: E501
+    queue_name = queue_url.split("/")[-1]
+    logger.info(f"Deleting a message from {queue_name} SQS queue with {receipt_handle}")  # noqa: E501
     SQS_CLIENT.delete_message(
         QueueUrl=queue_url,
         ReceiptHandle=receipt_handle
@@ -174,3 +217,27 @@ def empty_dir(dir: str):
         logger.info("Successfully emptied the directory")
     except Exception as e:
         logger.error(f"Could not empty the directory: {e}")
+
+
+def get_file_identity(file_path: str) -> tuple[str, str]:
+    """
+    Returns: (file_type, mime_type)\n
+    Note: `file_type` is stripped of any dots.
+    """
+    logger.info(f"Getting file data for {file_path}")
+
+    file_data_list: list = puremagic.magic_file(file_path)
+    logger.info(f"File Data: {file_data_list}")
+
+    if not file_data_list:
+        logger.warning("Could not determine the file type")
+        return "Unknown", "Unknown"
+
+    # Get the first one, which has the highest confidence
+    file_data = file_data_list[0]
+    # File type: Remove the dot from the extension
+    file_type = file_data[2].replace(".", "")
+    mime_type = file_data[3]
+
+    logger.info(f"File Type: {file_type}, MIME Type: {mime_type}")
+    return file_type, mime_type

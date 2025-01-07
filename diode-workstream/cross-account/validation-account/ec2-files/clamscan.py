@@ -3,25 +3,17 @@ import logging
 import random
 import subprocess  # nosec B404
 
-import boto3  # type: ignore
-from botocore.config import Config  # type: ignore
-from botocore.exceptions import ClientError  # type: ignore
 from utils import empty_dir
 from utils import get_param_value
+from utils import send_sqs_message
 from utils import delete_sqs_message
 from utils import publish_sns_message
 from utils import copy_object
 from utils import delete_object
 from utils import add_tags
 
-logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
-
-# TODO: Set the region via environment variable or config file (https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html)
-region = "us-gov-west-1"
-config = Config(retries={"max_attempts": 5, "mode": "standard"})
-S3_CLIENT = boto3.client("s3", config=config, region_name=region)
-SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 INGESTION_DIR = "/usr/bin/files"
 
@@ -89,29 +81,19 @@ def move_file(bucket, key, dest_bucket, msg, receipt_handle):
         delete_sqs_message(queue_url, receipt_handle)
         # send_sqs(dest_bucket,key)
         delete_file(bucket, key)
-    except ClientError as e:
+    except Exception as e:
         logger.error(f"Exception ocurred moving object to {dest_bucket}: {e}")  # noqa: E501
 
 
+# TODO: This seems like a dead code
 def send_sqs(dest_bucket, key):
     transfer_queue = get_param_value("/pipeline/DataTransferQueueUrl")  # noqa: E501
+    message = json.dumps({"bucket": dest_bucket, "key": key})
+
     try:
-        logger.info("Sending SQS Message....")
-        response = SQS_CLIENT.send_message(
-            QueueUrl=transfer_queue,
-            MessageBody=json.dumps({
-                "bucket": dest_bucket,
-                "key": key
-            })
-        )
-        send_sqs_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if send_sqs_status_code == 200:
-            logger.info(f"SUCCESS: SQS Message Successfully sent to Diode Transfer Account.  HTTPStatusCode: {send_sqs_status_code}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: SQS Message Unable to send to Diode Transfer Account.  HTTPStatusCode: {send_sqs_status_code}")  # noqa: E501
-        logger.info(f"SQS Response: {response}")
+        send_sqs_message(transfer_queue, message)
     except Exception as e:
-        logger.info(f"Error Occurred sending SQS Message.  Exception: {e}")
+        logger.error(f"Error Occurred sending SQS Message.  Exception: {e}")
 
 
 # Function to delete file from ingest bucket
@@ -123,7 +105,7 @@ def delete_file(bucket, key):
 
         logger.info(f"Deleting file: {key} from Bucket: {bucket}")
         delete_object(bucket, key)
-    except ClientError as e:
+    except Exception as e:
         logger.error(f"Exception ocurred deleting object: {e}")
 
 
@@ -141,5 +123,5 @@ def publish_quarantine_notification(bucket: str, key: str, file_status: str, exi
         )
         publish_sns_message(topic_arn, message, subject)
         logger.info(f"SNS message successfully published")
-    except ClientError as e:
+    except Exception as e:
         logger.error(f"Could not publish an SNS message: {e}")
