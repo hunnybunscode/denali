@@ -6,8 +6,8 @@ import puremagic  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from utils import delete_object
 from utils import copy_object
-from utils import create_tags
-from utils import send_file_quarantined_msg
+from utils import create_tags_for_file_validation
+from utils import send_file_quarantined_sns_msg
 from utils import delete_sqs_message
 from utils import empty_dir
 from utils import get_param_value
@@ -49,10 +49,10 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
             if mime_type == "application/xml":
                 logger.info(f"File: {key} validated successfully")
                 content_check = "SUCCESS"
-                new_tags = create_tags("None", mime_type)
+                new_tags = create_tags_for_file_validation("None", mime_type)
             else:
                 logger.info(f"MIME type validation Failed for {key}.  MIME Type is: {mime_type}")  # noqa: E501
-                new_tags = create_tags("File Validation Failed", mime_type)
+                new_tags = create_tags_for_file_validation("File Validation Failed", mime_type)  # noqa: E501
 
         elif file_type.endswith(ext):
             logger.info(f"File Extension: {ext}")
@@ -61,16 +61,16 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
                 if mime_type in mime_mapping.get(file_type, []):
                     logger.info(f"File: {key} validated successfully")
                     content_check = "SUCCESS"
-                    new_tags = create_tags("None", mime_type)
+                    new_tags = create_tags_for_file_validation("None", mime_type)  # noqa: E501
                 else:
-                    new_tags = create_tags("File Validation Failed", mime_type)
+                    new_tags = create_tags_for_file_validation("File Validation Failed", mime_type)  # noqa: E501
 
             else:
                 logger.info(f"File Type ({file_type}) is not approved.")
-                new_tags = create_tags("File Type is not approved", mime_type)
+                new_tags = create_tags_for_file_validation("File Type is not approved", mime_type)  # noqa: E501
         else:
             logger.info(f"File Type ({file_type}) does not match file extension ({ext}).")  # noqa: E501
-            new_tags = create_tags("FileType does not match File Extension", mime_type)  # noqa: E501
+            new_tags = create_tags_for_file_validation("FileType does not match File Extension", mime_type)  # noqa: E501
 
         add_tags(bucket, key, new_tags)
 
@@ -139,6 +139,6 @@ def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle:
     try:
         av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")
         delete_sqs_message(av_scan_queue_url, receipt_handle)
-        send_file_quarantined_msg(obj_location, key, "Content-Type Validation Failure")  # noqa: E501
+        send_file_quarantined_sns_msg(obj_location, key, "Content-Type Validation Failure")  # noqa: E501
     except ClientError:
         pass
