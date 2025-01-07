@@ -9,6 +9,9 @@ from botocore.exceptions import ClientError  # type: ignore
 from utils import empty_dir
 from utils import get_param_value
 from utils import delete_sqs_message
+from utils import publish_sns_message
+from utils import copy_object
+from utils import delete_object
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -16,10 +19,8 @@ logger = logging.getLogger()
 # TODO: Set the region via environment variable or config file (https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html)
 region = "us-gov-west-1"
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
-SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
-SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 
 INGESTION_DIR = "/usr/bin/files"
 
@@ -102,23 +103,13 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
 def move_file(bucket, key, dest_bucket, msg, receipt_handle):
     logger.info(msg)
     try:
-        response = S3_CLIENT.copy_object(
-            Bucket=dest_bucket,
-            CopySource=f"{bucket}/{key}",
-            Key=key,
-        )
-        copy_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        logger.info(f"Copy Object Response {response}")
-        if copy_status_code == 200:
-            logger.info(f"SUCCESS: {key} successfully transferred to {dest_bucket} with HTTPStatusCode: {copy_status_code}")  # noqa: E501
-            queue_url = get_param_value("/pipeline/AvScanQueueUrl")
-            delete_sqs_message(queue_url, receipt_handle)
-            # send_sqs(dest_bucket,key)
-            delete_file(bucket, key)
-        else:
-            logger.error(f"FAILURE: Unable to Copy Object: {key} to {dest_bucket}.  StatusCode: {copy_status_code}")  # noqa: E501
-    except Exception as e:
-        logger.error(f"Exception ocurred copying object to {dest_bucket}: {e}")  # noqa: E501
+        copy_object(bucket, dest_bucket, key)
+        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+        delete_sqs_message(queue_url, receipt_handle)
+        # send_sqs(dest_bucket,key)
+        delete_file(bucket, key)
+    except ClientError as e:
+        logger.error(f"Exception ocurred moving object to {dest_bucket}: {e}")  # noqa: E501
 
 
 def send_sqs(dest_bucket, key):
@@ -144,62 +135,30 @@ def send_sqs(dest_bucket, key):
 
 # Function to delete file from ingest bucket
 def delete_file(bucket, key):
-    lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
-
     try:
         logger.info(f"Moving file to {lts_bucket}")
-        response = S3_CLIENT.copy_object(
-            Bucket=lts_bucket,
-            CopySource=f"{bucket}/{key}",
-            Key=key
-        )
-        copy_object_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if copy_object_status_code == 200:
-            logger.info(
-                f"SUCCESS: {key} successfully transferred to storage bucket: {lts_bucket}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: {key} transfer to {lts_bucket} received StatusCode: {copy_object_status_code}")  # noqa: E501
+        lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
+        copy_object(bucket, lts_bucket, key)
+
         logger.info(f"Deleting file: {key} from Bucket: {bucket}")
-        response = S3_CLIENT.delete_object(
-            Bucket=bucket,
-            Key=key
-        )
-        delete_object_status_code = response["ResponseMetadata"]["HTTPStatusCode"]
-        if delete_object_status_code == 204:
-            logger.info(f"SUCCESS:  {key} successfully deleted from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        else:
-            logger.info(f"FAILURE: Unable to delete {key} from {bucket}.  StatusCode: {delete_object_status_code}")  # noqa: E501
-        logger.info(f"Delete Object Response: {response}")
-    except Exception as e:
+        delete_object(bucket, key)
+    except ClientError as e:
         logger.error(f"Exception ocurred deleting object: {e}")
 
 
 def publish_quarantine_notification(bucket: str, key: str, file_status: str, exit_status: int):
     logger.info("Publishing SNS message for a quarantined file")
     try:
-        quarantine_topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
+        topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
         subject = "A file uploaded to the quarantine S3 Bucket following a ClamAV scan"
-        message = ("A file has been quarantined based on the results of a ClamAV scan:\n\n"
-                   f"File Name: {key}\n"
-                   f"File Status: {file_status}\n"
-                   f"File Location: {bucket}/{key}\n"
-                   f"ClamAV Exit Code: {exit_status}")
-        publish_sns_message(quarantine_topic_arn, subject, message)
+        message = (
+            "A file has been quarantined based on the results of a ClamAV scan:\n\n"
+            f"File Name: {key}\n"
+            f"File Status: {file_status}\n"
+            f"File Location: {bucket}/{key}\n"
+            f"ClamAV Exit Code: {exit_status}"
+        )
+        publish_sns_message(topic_arn, message, subject)
         logger.info(f"SNS message successfully published")
     except ClientError as e:
         logger.error(f"Could not publish an SNS message: {e}")
-
-
-def get_param_value(name: str, with_decryption=False) -> str:
-    return SSM_CLIENT.get_parameter(
-        Name=name,
-        WithDecryption=with_decryption
-    )["Parameter"]["Value"]
-
-
-def publish_sns_message(topic_arn: str, subject: str, message: str):
-    SNS_CLIENT.publish(
-        TopicArn=topic_arn,
-        Subject=subject,
-        Message=message,
-    )

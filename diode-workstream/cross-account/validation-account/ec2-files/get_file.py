@@ -7,6 +7,7 @@ import clamscan
 import validator
 import zipfile_validator
 from utils import empty_dir
+from utils import get_param_value
 
 logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -91,10 +92,3 @@ def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, fi
         validator.quarantine_file(bucket, key, quarantine_bucket, receipt_handle)  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred quarantining file: {e}")
-
-
-def get_param_value(name: str, with_decryption=False) -> str:
-    return SSM_CLIENT.get_parameter(
-        Name=name,
-        WithDecryption=with_decryption
-    )["Parameter"]["Value"]
