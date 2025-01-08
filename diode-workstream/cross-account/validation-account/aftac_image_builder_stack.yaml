@@ -291,7 +291,7 @@ Resources:
       Description: Performs other tasks
       #############################################
       # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.1"
+      Version: "1.0.2"
       ChangeDescription: Initial version
       #############################################
       Platform: Linux
