@@ -12,6 +12,7 @@ from utils import quarantine_file
 logger = logging.getLogger()
 
 INGESTION_DIR = "/usr/bin/files"
+ZIP_INGESTION_DIR = "/usr/bin/zipfiles"
 
 
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
@@ -35,7 +36,7 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
 
     if file_ext == "zip":
         try:
-            download_file(bucket, key, "/usr/bin/zipfiles/zipfile.zip")
+            download_file(bucket, key, f"{ZIP_INGESTION_DIR}/zipfile.zip")
         except Exception as e:
             logger.error(f"Exception ocurred copying file to local storage: {e}")  # noqa: E501
             # Can't proceed if download failed
@@ -43,7 +44,7 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
 
         logger.info(f"Attempting to unzip {key} from {bucket}...")
         try:
-            with zipfile.ZipFile("/usr/bin/zipfiles/zipfile.zip") as zip_file:
+            with zipfile.ZipFile(f"{ZIP_INGESTION_DIR}/zipfile.zip") as zip_file:
                 # extact files from zip into tmp location
                 zip_file.extractall(path=f"{INGESTION_DIR}/")
 
