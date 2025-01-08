@@ -2,23 +2,18 @@ import logging
 import os
 
 import clamscan
-from utils import empty_dir
 from utils import create_tags_for_file_validation
-from utils import copy_object
-from utils import delete_object
 from utils import add_tags
-from utils import send_file_quarantined_sns_msg
 from utils import get_param_value
-from utils import delete_sqs_message
 from utils import get_file_identity
+from utils import quarantine_file
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
 INGESTION_DIR = "/usr/bin/files"
 
 
-def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
+def validate(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
     logger.info("Validating Zip File Contents")
 
     new_tags = {}
@@ -95,26 +90,8 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
 
     if valid:
         logger.info(f"Content Check: {new_tags}")
-        clamscan.scanner(bucket, key, receipt_handle)
+        clamscan.scan(bucket, key, receipt_handle)
     else:
         logger.warning(f"Content Check: {new_tags}")
         quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
         quarantine_file(bucket, quarantine_bucket, key, receipt_handle)
-
-
-def quarantine_file(bucket, dest_bucket, key, receipt_handle):
-    logger.info(f"Content-Type validation failed for {key}.  Quarantining File.")  # noqa: E501
-    logger.info(f"Deleting {key} from Local Storage")
-    empty_dir(INGESTION_DIR)
-
-    try:
-        copy_object(bucket, dest_bucket, key)
-        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
-        delete_sqs_message(queue_url, receipt_handle)
-        send_file_quarantined_sns_msg(dest_bucket, key, "Content-Type Validation Failure")  # noqa: E501
-        delete_object(bucket, key)
-
-    except Exception as e:
-        logger.error(f"Exception ocurred copying object to {dest_bucket}: {e}")  # noqa: E501
-        logger.info(f"File: {key} remains located at {bucket}/{key}")
-        send_file_quarantined_sns_msg(bucket, key, "Content-Type Validation Failure")  # noqa: E501
