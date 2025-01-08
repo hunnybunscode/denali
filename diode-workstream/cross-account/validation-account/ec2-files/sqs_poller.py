@@ -2,18 +2,12 @@ import json
 import logging
 import time
 
-import boto3  # type: ignore
-from botocore.config import Config  # type: ignore
 import get_file
+from utils import get_param_value
+from utils import receive_sqs_message
 
-logging.basicConfig(format="%(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
-
-# TODO: Should not have to hard-code the region
-region = "us-gov-west-1"
-config = Config(retries={"max_attempts": 5, "mode": "standard"})
-SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
-SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 
 def main():
@@ -26,18 +20,12 @@ def main():
     approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     approved_filetypes.extend(dfdl_approved_filetypes)
+    sleep_period = 5
 
     while True:
         try:
-            response: dict = SQS_CLIENT.receive_message(
-                QueueUrl=queue_url,
-                MaxNumberOfMessages=1
-            )
-
-            messages = response.get("Messages")
-
+            messages = receive_sqs_message(queue_url, 1)
             if not messages:
-                logger.info("No messages were received")
                 continue
 
             message = messages[0]
@@ -51,14 +39,8 @@ def main():
 
         except Exception as e:
             logger.exception(e)
-            time.sleep(10)  # nosemgrep (Try again after 10 seconds)
-
-
-def get_param_value(name: str, with_decryption=False) -> str:
-    return SSM_CLIENT.get_parameter(
-        Name=name,
-        WithDecryption=with_decryption
-    )["Parameter"]["Value"]
+            logger.warning(f"Exception encountered. Sleeping for {sleep_period}...")  # noqa: E501
+            time.sleep(sleep_period)
 
 
 def get_mime_mapping(filepath: str):
