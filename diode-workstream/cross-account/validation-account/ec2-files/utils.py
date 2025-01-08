@@ -6,9 +6,9 @@ import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
+INGESTION_DIR = "/usr/bin/files"
 
 # TODO: Do not hard-code the region
 region = "us-gov-west-1"
@@ -19,33 +19,49 @@ SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 
-def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: str | None = None, dest_bucket_owner: str | None = None):
-    logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
-    params = dict(
-        CopySource={"Bucket": src_bucket, "Key": key},
-        Bucket=dest_bucket,
-        Key=key,
-    )
-    if src_bucket_owner:
-        params["ExpectedSourceBucketOwner"] = src_bucket_owner
-    if dest_bucket_owner:
-        params["ExpectedBucketOwner"] = dest_bucket_owner
+def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: str | None = None, dest_bucket_owner: str | None = None, raise_error=True):
+    try:
+        logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
+        params = dict(
+            CopySource={"Bucket": src_bucket, "Key": key},
+            Bucket=dest_bucket,
+            Key=key,
+        )
+        if src_bucket_owner:
+            params["ExpectedSourceBucketOwner"] = src_bucket_owner
+        if dest_bucket_owner:
+            params["ExpectedBucketOwner"] = dest_bucket_owner
 
-    S3_CLIENT.copy_object(**params)
-    logger.info("Successfully copied the object")
+        S3_CLIENT.copy_object(**params)
+        logger.info("Successfully copied the object")
+        return True
+    except Exception as e:
+        if raise_error:
+            raise e
+
+        logger.error(f"Failed to copy the object: {e}")
+        return False
 
 
-def delete_object(bucket: str, key: str, bucket_owner: str | None = None):
-    logger.info(f"Deleting {bucket}/{key}")
-    params = dict(
-        Bucket=bucket,
-        Key=key
-    )
-    if bucket_owner:
-        params["ExpectedBucketOwner"] = bucket_owner
+def delete_object(bucket: str, key: str, bucket_owner: str | None = None, raise_error=True):
+    try:
+        logger.info(f"Deleting {bucket}/{key}")
+        params = dict(
+            Bucket=bucket,
+            Key=key
+        )
+        if bucket_owner:
+            params["ExpectedBucketOwner"] = bucket_owner
 
-    S3_CLIENT.delete_object(**params)
-    logger.info("Successfully deleted the object")
+        S3_CLIENT.delete_object(**params)
+        logger.info("Successfully deleted the object")
+        return True
+    except Exception as e:
+        if raise_error:
+            raise e
+
+        logger.error(f"Failed to delete the object: {e}")
+        return False
 
 
 def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -> dict[str, str]:
@@ -135,7 +151,7 @@ def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = N
 
 def receive_sqs_message(queue_url: str, max_num_of_messages=1):
     queue_name = queue_url.split("/")[-1]
-    logger.info(f"Checking for messages from {queue_name}")
+    logger.info(f"Checking for messages from {queue_name} SQS queue")
     response: dict = SQS_CLIENT.receive_message(
         QueueUrl=queue_url,
         MaxNumberOfMessages=max_num_of_messages
@@ -241,3 +257,24 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
 
     logger.info(f"File Type: {file_type}, MIME Type: {mime_type}")
     return file_type, mime_type
+
+
+def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
+    # Delete the `key` from the ingestion directory
+    # TODO: Empty the Zip file ingestion dir?
+    empty_dir(INGESTION_DIR)
+
+    guarantine_reason = "Content-Type Validation Failure"
+    logger.warning(f"Quarantining the file, {key}: {guarantine_reason}")  # noqa: E501
+
+    copied = copy_object(src_bucket, dest_bucket, key, raise_error=False)
+    obj_location = dest_bucket if copied else src_bucket
+    delete_object(src_bucket, key, raise_error=False)
+
+    try:
+        logger.info("Deleting the message from SQS queue and sending notification")  # noqa: E501
+        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+        delete_sqs_message(queue_url, receipt_handle)
+        send_file_quarantined_sns_msg(obj_location, key, guarantine_reason)  # noqa: E501
+    except Exception as e:
+        logger.warning(e)

@@ -1,23 +1,18 @@
 import logging
 
 import clamscan
-from utils import delete_object
-from utils import copy_object
 from utils import create_tags_for_file_validation
-from utils import send_file_quarantined_sns_msg
-from utils import delete_sqs_message
-from utils import empty_dir
 from utils import get_param_value
 from utils import add_tags
 from utils import get_file_identity
+from utils import quarantine_file
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
 INGESTION_DIR = "/usr/bin/files"
 
 
-def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
+def validate(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict[str, list]):
     logger.info(f"Validating file, {key}")
 
     new_tags = {}
@@ -60,7 +55,7 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
 
         if content_check == "SUCCESS":
             logger.info(f"Content Check: {new_tags}")
-            clamscan.scanner(bucket, key, receipt_handle)
+            clamscan.scan(bucket, key, receipt_handle)
         else:
             logger.warning(f"Content Check: {new_tags}")
             quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
@@ -69,24 +64,3 @@ def validator(bucket: str, key: str, receipt_handle: str, approved_filetypes: li
         logger.error(f"Exception ocurred validating file: {e}")
         quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
         quarantine_file(bucket, quarantine_bucket, key, receipt_handle)
-
-
-def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
-    # Delete the `key` from local storage by emptying the ingestion directory
-    empty_dir(INGESTION_DIR)
-
-    logger.info(f"Content-Type validation failed for {key}. Quarantining the file")  # noqa: E501
-
-    try:
-        copy_object(src_bucket, dest_bucket, key)
-        delete_object(src_bucket, key)
-        obj_location = dest_bucket
-    except Exception:
-        obj_location = src_bucket
-
-    try:
-        av_scan_queue_url = get_param_value("/pipeline/AvScanQueueUrl")
-        delete_sqs_message(av_scan_queue_url, receipt_handle)
-        send_file_quarantined_sns_msg(obj_location, key, "Content-Type Validation Failure")  # noqa: E501
-    except Exception:
-        pass

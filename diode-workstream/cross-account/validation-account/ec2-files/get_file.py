@@ -7,16 +7,17 @@ import zipfile_validator
 from utils import empty_dir
 from utils import get_param_value
 from utils import download_file
+from utils import quarantine_file
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
 INGESTION_DIR = "/usr/bin/files"
 
 
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
-    logger.info("Getting File")
+    logger.info(f"Getting {key} object from {bucket} bucket")
 
+    # TODO: Is is necessary to empty the ingestion directory at this point?
     empty_dir(INGESTION_DIR)
 
     file_ext = key.split(".")[-1]
@@ -29,7 +30,7 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
     # TODO: Test if puremagic can validate CSV files
     if file_ext == "csv":
         logger.info(f"File {key} is a .csv file.  Proceeding to scanner.")
-        clamscan.scanner(bucket, key, receipt_handle)
+        clamscan.scan(bucket, key, receipt_handle)
         return
 
     if file_ext == "zip":
@@ -50,29 +51,24 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
         except zipfile.BadZipFile as bzf:
             logger.error(f"BadZipFile exception ocurred: {bzf}")
 
-        zipfile_validator.validator(
-            bucket, key, receipt_handle, approved_filetypes, mime_mapping)
+        zipfile_validator.validate(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
         return
 
     # If file extension is not zip or csv
-    logger.info(
-        f"Attempting to copy {key} to local storage from {bucket}..."
-    )
+    logger.info(f"Downloading {bucket}/{key} to local storage")
     try:
-        # Copy file to Local Storage
+        # Download file to local storage
         download_file(bucket, key, f"{INGESTION_DIR}/file_to_scan.{file_ext}")
-        validator.validator(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
+        validator.validate(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
     except Exception as e:
-        logger.error(
-            f"Exception ocurred copying file to local storage: {e}")
+        logger.error(f"Exception ocurred copying file to local storage: {e}")  # noqa: E501
 
 
 def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, file_ext: str):
-    logger.info(
-        f"Extension {file_ext} is NOT one of the allowed filetypes"
-    )
+    logger.warning(f"Extension {file_ext} is NOT one of the allowed file types")  # noqa: E501
+
     try:
         quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
-        validator.quarantine_file(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
+        quarantine_file(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred quarantining file: {e}")

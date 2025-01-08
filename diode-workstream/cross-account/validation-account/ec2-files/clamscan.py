@@ -12,30 +12,30 @@ from utils import copy_object
 from utils import delete_object
 from utils import add_tags
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
 
 INGESTION_DIR = "/usr/bin/files"
 
 
-def scanner(bucket, key, receipt_handle):
+def scan(bucket, key, receipt_handle):
 
     try:
         # perform AV scan and capture result
-        # exitstatus = subprocess.run(["clamdscan", "/usr/bin/files"]).returncode
+        # exit_status = subprocess.run(["clamdscan", "/usr/bin/files"]).returncode  # noqa: E501
 
-        logger.info("Performing Fake clamdscan")
-        exitstatus = random.choice(([0] * 18) + [1, 512])  # nosec B311
+        logger.info("Simulating clamdscan")
+        exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
 
-        logger.info(f"File {key} ClamAV Scan Exit Code: {exitstatus}")
-        if exitstatus == 0:
+        logger.info(f"File {key} ClamAV Scan Exit Code: {exit_status}")
+
+        if exit_status == 0:
             file_status = "CLEAN"
             logger.info(f"{key} is clean")
             logger.info({"eventName": "ObjectTagged", "TagValue": [{"Key": "FILE_STATUS"}, {"Value": "CLEAN"}]})  # noqa: E501
             msg = f"Moving file: {key} to Data Transfer bucket..."
-            tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle)
+            tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
         # If file does not exist
-        elif exitstatus == 512:
+        elif exit_status == 512:
             logger.info(f"File {key} not found. Unable to scan.")
             queue_url = get_param_value("/pipeline/AvScanQueueUrl")
             delete_sqs_message(queue_url, receipt_handle)
@@ -44,11 +44,11 @@ def scanner(bucket, key, receipt_handle):
         # If scan does not return a "CLEAN" result
         else:
             file_status = "INFECTED"
-            exit_status = 999
+            # exit_status = 999
             logger.warning(f"{key} is infected")
             quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
             msg = f"Quarantined File: {key} stored in {bucket}"
-            tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle)
+            tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
             publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
     except Exception as e:
         logger.error(f"Exception ocurred scanning file: {e}")
