@@ -221,7 +221,7 @@ Resources:
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
-        Version: !GetAtt AutoScalingGroupLaunchTemplate.LatestVersionNumber
+        Version: !GetAtt AutoScalingGroupLaunchTemplate.DefaultVersionNumber
       MaxSize: "12"
       MinSize: "2"
       Tags:
