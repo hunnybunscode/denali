@@ -436,9 +436,11 @@ Resources:
       BillingMode: PAY_PER_REQUEST # On-Demand Mode, for unpredictable workloads
       SSESpecification:
         SSEEnabled: true
-      ### Added Below: Anything you use in the GlobalSecondaryIndexes KeySchema must be added to AttributeDefinitions
+      ### AttributeDefinitions need to include all attributes that describe the key schema for the table and indexes
       AttributeDefinitions:
         - AttributeName: s3Key
+          AttributeType: S
+        - AttributeName: timestamp
           AttributeType: S
         - AttributeName: mappingId
           AttributeType: S
@@ -447,7 +449,7 @@ Resources:
       KeySchema:
         - AttributeName: s3Key
           KeyType: HASH # partition key
-        - AttributeName: mappingId
+        - AttributeName: timestamp
           KeyType: RANGE # sort key
       GlobalSecondaryIndexes:
         - IndexName: mappingId-index
