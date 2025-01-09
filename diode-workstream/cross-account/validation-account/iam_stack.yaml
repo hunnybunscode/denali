@@ -16,10 +16,10 @@ Metadata:
 Parameters:
   pIamPrefix:
     Type: String
-    Description: Prefix for IAM resources
-    Default: AFC2S_
-    AllowedValues: [AFC2S_]
-    ConstraintDescription: Must be "AFC2S_"
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
 
   pPermissionsBoundaryPolicyArn:
     Type: String
@@ -36,7 +36,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}TrailLogsRole
+      RoleName: !Sub ${pIamPrefix}_TrailLogsRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -46,7 +46,7 @@ Resources:
               Service: cloudtrail.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}trailLogsRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_TrailLogsRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -64,7 +64,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerCwLogsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerCwLogsPolicy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -86,7 +86,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerSqsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerSqsPolicy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -105,7 +105,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerS3Policy
+      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerS3Policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -128,7 +128,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerSnsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerSnsPolicy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -144,7 +144,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}Ec2ScannerEc2Policy
+      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerEc2Policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -160,7 +160,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}Ec2ScannerRole
+      RoleName: !Sub ${pIamPrefix}_Ec2ScannerRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       Description: Role to be assumed by EC2 Anti-Virus Scanner instances
       AssumeRolePolicyDocument:
@@ -181,13 +181,14 @@ Resources:
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
+      InstanceProfileName: !Sub ${pIamPrefix}_Ec2ScannerInstanceProfile
       Roles: [!Ref Ec2ScannerRole]
 
   ## Commented out as this does not seem to be used
   # FailedTransferServiceRole:
   #   Type: AWS::IAM::Role
   #   Properties:
-  #     RoleName: !Sub ${pIamPrefix}FailedTransferServiceRole
+  #     RoleName: !Sub ${pIamPrefix}_FailedTransferServiceRole
   #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
   #     AssumeRolePolicyDocument:
   #       Version: 2012-10-17
@@ -199,7 +200,7 @@ Resources:
   #     ManagedPolicyArns:
   #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
   #     Policies:
-  #       - PolicyName: !Sub ${pIamPrefix}FailedTransferServiceRoleDefaultPolicy
+  #       - PolicyName: !Sub ${pIamPrefix}_FailedTransferServiceRoleDefaultPolicy
   #         PolicyDocument:
   #           Version: 2012-10-17
   #           Statement:
@@ -223,7 +224,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}TransferResultLambdaRole
+      RoleName: !Sub ${pIamPrefix}_TransferResultLambdaRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -235,7 +236,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}TransferResultLambdaRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_TransferResultLambdaRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -274,7 +275,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}DataTransferServiceRole
+      RoleName: !Sub ${pIamPrefix}_DataTransferServiceRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -286,7 +287,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}DataTransferServiceRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_DataTransferServiceRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -325,7 +326,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}ObjectTaggerRole
+      RoleName: !Sub ${pIamPrefix}_ObjectTaggerRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -337,7 +338,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}ObjectTaggerRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_ObjectTaggerRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -365,7 +366,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}InvokeTaggerRole
+      RoleName: !Sub ${pIamPrefix}_InvokeTaggerRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -375,7 +376,7 @@ Resources:
               Service: events.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}InvokeTaggerPolicy
+        - PolicyName: !Sub ${pIamPrefix}_InvokeTaggerPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -391,7 +392,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}PresignGeneratorServiceRole
+      RoleName: !Sub ${pIamPrefix}_PresignGeneratorServiceRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -403,7 +404,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}PresignGeneratorServiceRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_PresignGeneratorServiceRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -426,7 +427,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}LoggingRole
+      RoleName: !Sub ${pIamPrefix}_LoggingRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -436,7 +437,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}LoggingRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_LoggingRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -455,7 +456,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}FileUploaderCloudWatchRole
+      RoleName: !Sub ${pIamPrefix}_FileUploaderCloudWatchRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -475,7 +476,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}APILambdaInvokeRole
+      RoleName: !Sub ${pIamPrefix}_APILambdaInvokeRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -485,7 +486,7 @@ Resources:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}APILambdaInvokeRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_APILambdaInvokeRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -499,7 +500,7 @@ Resources:
   # PresignGeneratorServiceRole2:
   #   Type: AWS::IAM::Role
   #   Properties:
-  #     RoleName: !Sub ${pIamPrefix}PresignGeneratorServiceRole2
+  #     RoleName: !Sub ${pIamPrefix}_PresignGeneratorServiceRole2
   #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
   #     AssumeRolePolicyDocument:
   #       Version: 2012-10-17
@@ -511,7 +512,7 @@ Resources:
   #     ManagedPolicyArns:
   #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
   #     Policies:
-  #       - PolicyName: !Sub ${pIamPrefix}PresignGeneratorServiceRoleDefaultPolicy2
+  #       - PolicyName: !Sub ${pIamPrefix}_PresignGeneratorServiceRoleDefaultPolicy2
   #         PolicyDocument:
   #           Version: 2012-10-17
   #           Statement:
@@ -534,7 +535,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}IngestWAFRole
+      RoleName: !Sub ${pIamPrefix}_IngestWAFRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -544,7 +545,7 @@ Resources:
               Service: wafv2.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}IngestWAFRoleDefaultPolicy
+        - PolicyName: !Sub ${pIamPrefix}_IngestWAFRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -567,7 +568,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}TransferLoggingRole
+      RoleName: !Sub ${pIamPrefix}_TransferLoggingRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -577,7 +578,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}TransferLoggingPolicy
+        - PolicyName: !Sub ${pIamPrefix}_TransferLoggingPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -587,7 +588,7 @@ Resources:
                   - s3:GetBucketAcl
                   - s3:PutBucketAcl
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
-        - PolicyName: !Sub ${pIamPrefix}AWSTransferLoggingAccess
+        - PolicyName: !Sub ${pIamPrefix}_AWSTransferLoggingAccess
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -606,7 +607,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}TransferUserRole
+      RoleName: !Sub ${pIamPrefix}_TransferUserRole
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -616,7 +617,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}TransferUserPolicy
+        - PolicyName: !Sub ${pIamPrefix}_TransferUserPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
