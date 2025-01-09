@@ -1,11 +1,8 @@
-import json
 import logging
 import random
 import subprocess  # nosec B404
 
-from utils import empty_dir
 from utils import get_param_value
-from utils import send_sqs_message
 from utils import delete_sqs_message
 from utils import publish_sns_message
 from utils import copy_object
@@ -30,26 +27,27 @@ def scan(bucket, key, receipt_handle):
 
         if exit_status == 0:
             file_status = "CLEAN"
-            logger.info(f"{key} is clean")
-            logger.info({"eventName": "ObjectTagged", "TagValue": [{"Key": "FILE_STATUS"}, {"Value": "CLEAN"}]})  # noqa: E501
-            msg = f"Moving file: {key} to Data Transfer bucket..."
+            logger.info(f"{key} is {file_status}")
+            msg = f"Moving {key} file to Data Transfer bucket"
             tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
+            return
+
         # If file does not exist
-        elif exit_status == 512:
-            logger.info(f"File {key} not found. Unable to scan.")
+        if exit_status == 512:
+            logger.warning(f"File {key} NOT FOUND. Unable to scan")
             queue_url = get_param_value("/pipeline/AvScanQueueUrl")
             delete_sqs_message(queue_url, receipt_handle)
+            return
 
         # TODO: Handle exit statuses other than 0 and 512
-        # If scan does not return a "CLEAN" result
-        else:
-            file_status = "INFECTED"
-            # exit_status = 999
-            logger.warning(f"{key} is infected")
-            quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
-            msg = f"Quarantined File: {key} stored in {bucket}"
-            tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
-            publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
+        file_status = "INFECTED"
+        # exit_status = 999
+        logger.warning(f"{key} is {file_status}")
+        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+        msg = f"Quarantined File: {key} stored in {bucket}"
+        tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
+        publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
+
     except Exception as e:
         logger.error(f"Exception ocurred scanning file: {e}")
 
@@ -62,48 +60,36 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
             "CLAM_AV_EXIT_CODE": str(exitstatus)
         }
         add_tags(bucket, key, new_tags)
-        # remove file from local storage
-        empty_dir(INGESTION_DIR)
+
         if file_status == "CLEAN":
             dest_bucket = get_param_value("/pipeline/DataTransferIngestBucketName")  # noqa: E501
         else:
             dest_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
-        move_file(bucket, key, dest_bucket, msg, receipt_handle)
+
+        move_file(bucket, dest_bucket, key, msg, receipt_handle)
     except Exception as e:
         logger.error(f"Exception ocurred Tagging file: {e}")
 
 
-def move_file(bucket, key, dest_bucket, msg, receipt_handle):
+def move_file(bucket, dest_bucket, key, msg, receipt_handle):
     logger.info(msg)
     try:
         copy_object(bucket, dest_bucket, key)
         queue_url = get_param_value("/pipeline/AvScanQueueUrl")
         delete_sqs_message(queue_url, receipt_handle)
-        # send_sqs(dest_bucket,key)
-        delete_file(bucket, key)
+        move_object_to_lts_bucket(bucket, key)
     except Exception as e:
         logger.error(f"Exception ocurred moving object to {dest_bucket}: {e}")  # noqa: E501
 
 
-# TODO: This seems like a dead code
-def send_sqs(dest_bucket, key):
-    transfer_queue = get_param_value("/pipeline/DataTransferQueueUrl")  # noqa: E501
-    message = json.dumps({"bucket": dest_bucket, "key": key})
-
-    try:
-        send_sqs_message(transfer_queue, message)
-    except Exception as e:
-        logger.error(f"Error Occurred sending SQS Message.  Exception: {e}")
-
-
-# Function to delete file from ingest bucket
-def delete_file(bucket, key):
+def move_object_to_lts_bucket(bucket, key):
+    """
+    Moves `key` from ingestion bucket to long term storage bucket
+    """
     try:
         lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
         logger.info(f"Moving file to {lts_bucket}")
         copy_object(bucket, lts_bucket, key)
-
-        logger.info(f"Deleting file: {key} from Bucket: {bucket}")
         delete_object(bucket, key)
     except Exception as e:
         logger.error(f"Exception ocurred deleting object: {e}")
