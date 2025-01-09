@@ -1,5 +1,5 @@
 import logging
-import os
+from pathlib import Path
 
 import clamscan
 from utils import get_param_value
@@ -33,11 +33,10 @@ def validate_zipfile(bucket: str, key: str, receipt_handle: str, approved_filety
 
         # TODO: What files are allowed to be in a zip file? For example, is an XML allowed?
 
-        # TODO: Use pathlib to list files
-        files = os.listdir(f"{INGESTION_DIR}/")
-        for file in files:
+        file_paths = [str(item) for item in Path(INGESTION_DIR).rglob("*") if item.is_file()]  # noqa: E501
+        for file_path in file_paths:
             # Do not allow nested zip files (at least for now)
-            if get_file_extension(file) == "zip":
+            if get_file_extension(file_path) == "zip":
                 logger.warning("Nested zip files are not allowed")
                 error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "application/zip")  # noqa: E501
                 add_tags(bucket, key, error_tags)
@@ -45,7 +44,6 @@ def validate_zipfile(bucket: str, key: str, receipt_handle: str, approved_filety
                 send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
                 return
 
-            file_path = f"{INGESTION_DIR}/{file}"
             valid, _ = validate_filetype(file_path, approved_filetypes, mime_mapping)  # noqa: E501
             if not valid:
                 # If one file fails validation, move the entire zip file to quarantine bucket
