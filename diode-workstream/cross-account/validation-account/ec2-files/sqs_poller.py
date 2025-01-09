@@ -28,6 +28,7 @@ def main():
             if not messages:
                 continue
 
+            logger.info("-" * 100)
             logger.info("A message has been received")
             message = messages[0]
             receipt_handle = message["ReceiptHandle"]
@@ -35,6 +36,7 @@ def main():
             bucket = message_body["detail"]["requestParameters"]["bucketName"]
             key = message_body["detail"]["requestParameters"]["key"]
             get_file.get_file(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
+            logger.info("-" * 100)
 
         except Exception as e:
             logger.exception(e)
