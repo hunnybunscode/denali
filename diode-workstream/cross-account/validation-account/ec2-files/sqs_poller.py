@@ -20,7 +20,7 @@ def main():
     approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     approved_filetypes.extend(dfdl_approved_filetypes)
-    sleep_period = 5
+    sleep_period = 1
 
     while True:
         try:
@@ -38,7 +38,7 @@ def main():
 
         except Exception as e:
             logger.exception(e)
-            logger.warning(f"Exception encountered. Sleeping for {sleep_period}...")  # noqa: E501
+            logger.info(f"Sleeping for {sleep_period} second(s) before retrieving the next message")  # noqa: E501
             time.sleep(sleep_period)
 
 

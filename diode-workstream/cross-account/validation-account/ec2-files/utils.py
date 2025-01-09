@@ -1,4 +1,5 @@
 import logging
+import zipfile
 from pathlib import Path
 
 import boto3  # type: ignore
@@ -6,9 +7,8 @@ import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
-logger = logging.getLogger()
 
-INGESTION_DIR = "/usr/bin/files"
+logger = logging.getLogger()
 
 # TODO: Do not hard-code the region
 region = "us-gov-west-1"
@@ -65,7 +65,7 @@ def delete_object(bucket: str, key: str, bucket_owner: str | None = None, raise_
 
 
 def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -> dict[str, str]:
-    logger.info(f"Getting tags for {bucket}/{key}")
+    logger.info(f"Getting existing tags for {bucket}/{key}")
     params = dict(
         Bucket=bucket,
         Key=key
@@ -74,7 +74,7 @@ def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -
         params["ExpectedBucketOwner"] = bucket_owner
 
     tag_set = S3_CLIENT.get_object_tagging(**params)["TagSet"]
-    logger.info("Successfully retrieved the tags")
+    logger.info(f"Successfully retrieved the existing tags: {tag_set}")
     return {tag["Key"]: tag["Value"] for tag in tag_set}
 
 
@@ -93,18 +93,18 @@ def put_object_tagging(bucket: str, key: str, tags: dict[str, str], bucket_owner
     logger.info("Successfully put the tags")
 
 
-def download_file(bucket: str, key: str, filename: str, bucket_owner: str | None = None):
-    logger.info(f"Downloading {bucket}/{key} to {filename}")
+def download_file(bucket: str, key: str, file_path: str, bucket_owner: str | None = None):
+    logger.info(f"Downloading {bucket}/{key} to {file_path}")
     params = dict(
         Bucket=bucket,
         Key=key,
-        Filename=filename
+        Filename=file_path
     )
     if bucket_owner:
         params["ExtraArgs"] = {"ExpectedBucketOwner": bucket_owner}
 
     S3_CLIENT.download_file(**params)
-    logger.info("Successfully downloaded the file")
+    logger.info("Successfully downloaded the object")
 
 
 def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: str | None = None):
@@ -112,18 +112,18 @@ def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: s
     `ClientError`s are logged, but ignored
     """
     try:
-        logger.info(f"Adding tags to {bucket}/{key}")
+        logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
         existing_tags = get_object_tagging(bucket, key, bucket_owner)
         combined_tags = existing_tags | tags_to_add
         put_object_tagging(bucket, key, combined_tags, bucket_owner)
-        logger.info("Successfully added the tags")
+        logger.info("Successfully added the new tags")
     except ClientError as e:
         logger.warning(f"ERROR: Exception ocurred while adding tags: {e}")
         pass
 
 
 def publish_sns_message(topic_arn: str, message: str, subject: str | None = None):
-    logger.info(f"Publishing a message to {topic_arn.split(':')[5]} SNS topic")  # noqa: E501
+    logger.info(f"Publishing a message to SNS topic: {topic_arn.split(':')[5]}")  # noqa: E501
     params = dict(
         TopicArn=topic_arn,
         Message=message
@@ -164,7 +164,7 @@ def receive_sqs_message(queue_url: str, max_num_of_messages=1):
 
 def delete_sqs_message(queue_url: str, receipt_handle: str):
     queue_name = queue_url.split("/")[-1]
-    logger.info(f"Deleting a message from {queue_name} SQS queue with {receipt_handle}")  # noqa: E501
+    logger.info(f"Deleting message from {queue_name} SQS queue")
     SQS_CLIENT.delete_message(
         QueueUrl=queue_url,
         ReceiptHandle=receipt_handle
@@ -173,17 +173,17 @@ def delete_sqs_message(queue_url: str, receipt_handle: str):
 
 
 def get_param_value(name: str, with_decryption=False) -> str:
-    logger.info(f"Getting the value of {name} parameter")
+    logger.info(f"Getting the value for {name} parameter")
     value = SSM_CLIENT.get_parameter(
         Name=name,
         WithDecryption=with_decryption
     )["Parameter"]["Value"]
-    logger.info("Successfully retrieved the value")
+    logger.info("Successfully retrieved the parameter value")
     return value
 
 
 def send_file_quarantined_sns_msg(bucket: str, key: str, quarantine_reason: str):
-    logger.info(f"Sending a message regarding the quarantined file, {key}")
+    logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
     topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
     message = (
         "A file has been quarantined.\n\n"
@@ -192,18 +192,20 @@ def send_file_quarantined_sns_msg(bucket: str, key: str, quarantine_reason: str)
         f"File Location: {bucket}/{key}"
     )
     publish_sns_message(topic_arn, message, quarantine_reason)
-    logger.info("Successfully sent the message")
+    logger.info("Successfully sent the SNS message")
 
 
-def create_tags_for_file_validation(error_status: str, mime_type: str):
+def create_tags_for_file_validation(error_status: str, file_type: str, mime_type: str):
     """
     Returns: {
         "ERROR_STATUS": error_status,
+        "FILE_TYPE": file_type,
         "MIME_TYPE": mime_type
     }
     """
     return {
         "ERROR_STATUS": error_status,
+        "FILE_TYPE": file_type,
         "MIME_TYPE": mime_type
     }
 
@@ -237,33 +239,37 @@ def empty_dir(dir: str):
 
 def get_file_identity(file_path: str) -> tuple[str, str]:
     """
-    Returns: (file_type, mime_type)\n
+    Uses the puremagic library to determine file type and mime type.\n
+    Returns (file_type, mime_type)\n
+    If puremagic can't determine the file type and mime type, returns empty strings ("", "")\n
+    In case of any errors, returns ("Unknown", "Unknown")\n
     Note: `file_type` is stripped of any dots.
     """
     logger.info(f"Getting file data for {file_path}")
 
-    file_data_list: list = puremagic.magic_file(file_path)
-    logger.info(f"File Data: {file_data_list}")
+    try:
+        file_data_list: list = puremagic.magic_file(file_path)
+        logger.info(f"File data: {file_data_list}")
 
-    if not file_data_list:
-        logger.warning("Could not determine the file type")
+        if not file_data_list:
+            logger.warning("Could not determine the file type")
+            return "", ""
+
+        # Get the first one, which has the highest confidence
+        file_data = file_data_list[0]
+        # File type: Remove the dot from the extension
+        file_type = file_data[2].replace(".", "")
+        mime_type = file_data[3]
+
+        logger.info(f"File Type: {file_type}; MIME Type: {mime_type}")
+        return file_type, mime_type
+    except Exception as e:
+        logger.error(f"Could not get file data: {e}")
         return "Unknown", "Unknown"
 
-    # Get the first one, which has the highest confidence
-    file_data = file_data_list[0]
-    # File type: Remove the dot from the extension
-    file_type = file_data[2].replace(".", "")
-    mime_type = file_data[3]
 
-    logger.info(f"File Type: {file_type}, MIME Type: {mime_type}")
-    return file_type, mime_type
-
-
-def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
-    # Delete the `key` from the ingestion directory
-    # TODO: Empty the Zip file ingestion dir?
-    empty_dir(INGESTION_DIR)
-
+# TODO: Break up this function
+def send_to_quarantine_bucket(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
     guarantine_reason = "Content-Type Validation Failure"
     logger.warning(f"Quarantining the file, {key}: {guarantine_reason}")  # noqa: E501
 
@@ -278,3 +284,71 @@ def quarantine_file(src_bucket: str, dest_bucket: str, key: str, receipt_handle:
         send_file_quarantined_sns_msg(obj_location, key, guarantine_reason)  # noqa: E501
     except Exception as e:
         logger.warning(e)
+
+
+def validate_filetype(file_path: str, approved_filetypes: list, mime_mapping: dict) -> tuple[bool, dict[str, str]]:
+    """
+    Validates a single file and returns the validation status and tags
+    """
+    # File types that puremagic cannot validate
+    special_file_types = {
+        "csv": {
+            "file_type": "csv",
+            "mime_type": "text/csv"
+        }
+    }
+
+    logger.info(f"Validating file: {file_path}")
+
+    file_ext = get_file_extension(file_path)
+    file_type, mime_type = get_file_identity(file_path)
+
+    if not file_type and file_ext in special_file_types:
+        logger.info(f"File {file_path} has the extension of {file_ext}. Performing AV scan only")  # noqa: E501
+        file_type, mime_type = special_file_types[file_ext].values()
+        tags = create_tags_for_file_validation("None", file_type, mime_type)  # noqa: E501
+        return True, tags
+
+    if file_type != file_ext:
+        logger.warning(f"File type ({file_type}) does NOT match file extension ({file_ext})")  # noqa: E501
+        tags = create_tags_for_file_validation("FileTypeNotMatched", file_type, mime_type)  # noqa: E501
+        return False, tags
+
+    logger.info(f"File type ({file_type}) matches file extension ({file_ext})")  # noqa: E501
+    if file_type not in approved_filetypes:
+        logger.warning(f"File type ({file_type}) is NOT approved")
+        tags = create_tags_for_file_validation("FileTypeNotApproved", file_type, mime_type)  # noqa: E501
+        return False, tags
+
+    logger.info(f"File type ({file_type}) is an approved type")
+    if mime_type not in mime_mapping.get(file_type, []):
+        logger.warning(f"Mime type ({mime_type}) is NOT approved")
+        tags = create_tags_for_file_validation("MimeTypeNotApproved", file_type, mime_type)  # noqa: E501
+        return False, tags
+
+    logger.info(f"Successfully validated file: {file_path}")
+    tags = create_tags_for_file_validation("None", file_type, mime_type)
+    return True, tags
+
+
+def get_file_extension(file_path: str):
+    """
+    Extracts and returns the file extension (in lowercase) without the leading dot.\n
+    In case of any errors, returns "Unknown".
+    """
+    try:
+        return file_path.lower().split(".")[-1]
+    except Exception as e:
+        logger.error(f"Could not get file extension: {e}")
+        return "Unknown"
+
+
+def extract_zipfile(zipfile_path: str, extract_dir: str):
+    """
+    Extracts a zip file to a given directory.
+    """
+    logger.info(f"Extracting {zipfile_path} to {extract_dir}")
+
+    with zipfile.ZipFile(zipfile_path) as zip_file:
+        zip_file.extractall(extract_dir)
+    logger.info("Successfully extracted the zip file")
