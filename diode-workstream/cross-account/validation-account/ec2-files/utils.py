@@ -7,6 +7,7 @@ import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
+from config import mime_mapping
 
 logger = logging.getLogger()
 
@@ -286,7 +287,7 @@ def send_to_quarantine_bucket(src_bucket: str, dest_bucket: str, key: str, recei
         logger.warning(e)
 
 
-def validate_filetype(file_path: str, approved_filetypes: list, mime_mapping: dict) -> tuple[bool, dict[str, str]]:
+def validate_filetype(file_path: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
