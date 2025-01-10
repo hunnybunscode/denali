@@ -15,7 +15,7 @@ INGESTION_DIR = "/usr/bin/files"
 ZIP_INGESTION_DIR = "/usr/bin/zipfiles"
 
 
-def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list, mime_mapping: dict):
+def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list):
     empty_dir(INGESTION_DIR)
     empty_dir(ZIP_INGESTION_DIR)
 
@@ -32,13 +32,13 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
         zipfile_path = f"{ZIP_INGESTION_DIR}/zipfile.zip"
         download_file(bucket, key, zipfile_path)
         extract_zipfile(zipfile_path, INGESTION_DIR)
-        validate_zipfile(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
+        validate_zipfile(bucket, key, receipt_handle, approved_filetypes)
         return
 
     # At this point, the file is of an approved type and is not a zip file
     file_path = f"{INGESTION_DIR}/file_to_scan.{file_ext}"
     download_file(bucket, key, file_path)
-    validate_file(bucket, key, receipt_handle, approved_filetypes, mime_mapping)  # noqa: E501
+    validate_file(bucket, key, receipt_handle, approved_filetypes)
 
 
 def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, file_ext: str):
