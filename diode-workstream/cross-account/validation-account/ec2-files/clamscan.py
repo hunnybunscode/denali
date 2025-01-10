@@ -11,8 +11,6 @@ from utils import add_tags
 
 logger = logging.getLogger()
 
-INGESTION_DIR = "/usr/bin/files"
-
 
 def scan(bucket, key, receipt_handle):
 
@@ -43,9 +41,9 @@ def scan(bucket, key, receipt_handle):
         file_status = "INFECTED"
         # exit_status = 999
         logger.warning(f"{key} is {file_status}")
-        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
         msg = f"Quarantined File: {key} stored in {bucket}"
-        tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)  # noqa: E501
+        tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)
         publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
 
     except Exception as e:

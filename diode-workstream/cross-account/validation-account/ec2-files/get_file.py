@@ -1,5 +1,6 @@
 import logging
 
+from config import INGESTION_DIR, ZIP_INGESTION_DIR
 from utils import empty_dir
 from utils import get_param_value
 from utils import download_file
@@ -10,9 +11,6 @@ from validation import validate_file
 from validation import validate_zipfile
 
 logger = logging.getLogger()
-
-INGESTION_DIR = "/usr/bin/files"
-ZIP_INGESTION_DIR = "/usr/bin/zipfiles"
 
 
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list):

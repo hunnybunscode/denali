@@ -1,4 +1,7 @@
 
+INGESTION_DIR = "/usr/bin/files"
+ZIP_INGESTION_DIR = "/usr/bin/zipfiles"
+
 mime_mapping = {
     "txt": ["text/plain"],
     "json": ["application/json"],

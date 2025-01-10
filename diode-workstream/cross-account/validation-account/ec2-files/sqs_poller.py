@@ -14,6 +14,7 @@ def main():
     logger.info("Starting SQS Poller")
 
     # TODO: Implement a way to get updated values, without restarting the service
+    # https://stackoverflow.com/questions/57260724/how-to-call-a-function-only-once-every-x-time-in-an-infinite-loop-in-python
     queue_url = get_param_value("/pipeline/AvScanQueueUrl")
     approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
