@@ -287,7 +287,7 @@ def send_to_quarantine_bucket(src_bucket: str, dest_bucket: str, key: str, recei
         logger.warning(e)
 
 
-def validate_filetype(file_path: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
+def validate_filetype(file_path: str, file_ext: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
@@ -301,10 +301,9 @@ def validate_filetype(file_path: str, approved_filetypes: list) -> tuple[bool, d
 
     logger.info(f"Validating file: {file_path}")
 
-    file_ext = get_file_extension(file_path)
     file_type, mime_type = get_file_identity(file_path)
 
-    if not file_type and file_ext in special_file_types:
+    if (not file_type) and (file_ext in special_file_types):
         logger.info(f"File {file_path} has the extension of {file_ext}. Performing AV scan only")  # noqa: E501
         file_type, mime_type = special_file_types[file_ext].values()
         tags = create_tags_for_file_validation("None", file_type, mime_type)  # noqa: E501

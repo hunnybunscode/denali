@@ -12,16 +12,19 @@ from utils import add_tags
 logger = logging.getLogger()
 
 
-def scan(bucket, key, receipt_handle):
+def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
 
     try:
-        # perform AV scan and capture result
-        # exit_status = subprocess.run(["clamdscan", "/usr/bin/files"]).returncode  # noqa: E501
+        # TODO: Set this via SSM parameter store
+        testing = True
+        if testing:
+            logger.info(f"Testing mode enabled. Simulating clamdscan for {key}")  # noqa: E501
+            exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
+        else:
+            logger.info(f"Scanning {key}")
+            exit_status = subprocess.run(["clamdscan", file_path]).returncode
 
-        logger.info("Simulating clamdscan")
-        exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
-
-        logger.info(f"File {key} ClamAV Scan Exit Code: {exit_status}")
+        logger.info(f"ClamAV Scan Exit Code: {exit_status}")
 
         if exit_status == 0:
             file_status = "CLEAN"

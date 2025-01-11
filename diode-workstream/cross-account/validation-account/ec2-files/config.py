@@ -1,6 +1,4 @@
 
-INGESTION_DIR = "/usr/bin/files"
-
 mime_mapping = {
     "txt": ["text/plain"],
     "json": ["application/json"],
