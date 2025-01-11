@@ -1,12 +1,11 @@
 import logging
 
-from config import INGESTION_DIR, ZIP_INGESTION_DIR
+from config import INGESTION_DIR
 from utils import empty_dir
 from utils import get_param_value
 from utils import download_file
 from utils import send_to_quarantine_bucket
 from utils import get_file_extension
-from utils import extract_zipfile
 from validation import validate_file
 from validation import validate_zipfile
 
@@ -15,7 +14,6 @@ logger = logging.getLogger()
 
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list):
     empty_dir(INGESTION_DIR)
-    empty_dir(ZIP_INGESTION_DIR)
 
     logger.info(f"Getting {bucket}/{key} object")
 
@@ -26,15 +24,14 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
         handle_non_approved_filetypes(bucket, key, receipt_handle, file_ext)
         return
 
+    file_path = f"{INGESTION_DIR}/file_to_scan.{file_ext}"
+
     if file_ext == "zip":
-        file_path = f"{ZIP_INGESTION_DIR}/zipfile.zip"
         download_file(bucket, key, file_path)
-        extract_zipfile(file_path, INGESTION_DIR)
         validate_zipfile(bucket, key, file_path, receipt_handle, approved_filetypes)  # noqa: E501
         return
 
     # At this point, the file is of an approved type and is not a zip file
-    file_path = f"{INGESTION_DIR}/file_to_scan.{file_ext}"
     download_file(bucket, key, file_path)
     validate_file(bucket, key, file_path, receipt_handle, approved_filetypes)
 

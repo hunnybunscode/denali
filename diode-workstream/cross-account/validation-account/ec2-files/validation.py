@@ -1,14 +1,15 @@
 import logging
 from pathlib import Path
+import tempfile
 
 import clamscan
-from config import INGESTION_DIR
 from utils import get_param_value
 from utils import send_to_quarantine_bucket
 from utils import get_file_extension
 from utils import validate_filetype
 from utils import add_tags
 from utils import create_tags_for_file_validation
+from utils import extract_zipfile
 
 
 logger = logging.getLogger()
@@ -30,28 +31,31 @@ def validate_zipfile(bucket: str, key: str, file_path: str, receipt_handle: str,
         logger.info("Validating the zip file contents")
 
         # TODO: What files are allowed to be in a zip file? For example, is an XML allowed?
-        # TODO: Unzip the file here, which would allow nested zip files, if supported
 
-        file_paths = [str(item) for item in Path(INGESTION_DIR).rglob("*") if item.is_file()]  # noqa: E501
-        for _file_path in file_paths:
-            # Nested zip files are not allowed, for now
-            if get_file_extension(_file_path) == "zip":
-                logger.warning("Nested zip files are not allowed")
-                error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "application/zip")  # noqa: E501
-                add_tags(bucket, key, error_tags)
-                quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
-                send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
-                return
+        with tempfile.TemporaryDirectory() as tmpdir:
+            extract_zipfile(file_path, tmpdir)
 
-            valid, _ = validate_filetype(_file_path, approved_filetypes)
-            if not valid:
-                # If one file fails validation, move the entire zip file to quarantine bucket
-                error_tags = create_tags_for_file_validation("ZipFileWithInvalidFile", "zip", "application/zip")  # noqa: E501
-                add_tags(bucket, key, error_tags)
-                quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
-                send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
-                return
+            file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]  # noqa: E501
+            for _file_path in file_paths:
+                # Nested zip files are not allowed, for now
+                if get_file_extension(_file_path) == "zip":
+                    logger.warning(f"Nested zip files are not allowed: {_file_path}")  # noqa: E501
+                    error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "application/zip")  # noqa: E501
+                    add_tags(bucket, key, error_tags)
+                    quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+                    send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
+                    return
 
+                valid, _ = validate_filetype(_file_path, approved_filetypes)
+                if not valid:
+                    # If one file fails validation, move the entire zip file to quarantine bucket
+                    error_tags = create_tags_for_file_validation("ZipFileWithInvalidFile", "zip", "application/zip")  # noqa: E501
+                    add_tags(bucket, key, error_tags)
+                    quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+                    send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
+                    return
+
+        # TODO: Should we scan the file for virus first, before doing the content type check?
         # Zip file has been validated, scan it for viruses
         clamscan.scan(bucket, key, receipt_handle)
 

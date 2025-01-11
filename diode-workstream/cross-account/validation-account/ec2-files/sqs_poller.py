@@ -15,6 +15,10 @@ def main():
 
     # TODO: Implement a way to get updated values, without restarting the service
     # https://stackoverflow.com/questions/57260724/how-to-call-a-function-only-once-every-x-time-in-an-infinite-loop-in-python
+    # TODO: Explore using SSM Document to update the values when changes occur
+    # TODO: Use signal to gracefully exit in case of instance termination
+    # TODO: Implement a health check
+
     queue_url = get_param_value("/pipeline/AvScanQueueUrl")
     approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
     dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
@@ -43,4 +47,5 @@ def main():
             time.sleep(sleep_period)
 
 
-main()
+if __name__ == "__main__":
+    main()
