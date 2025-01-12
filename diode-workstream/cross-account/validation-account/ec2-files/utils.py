@@ -8,6 +8,7 @@ from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
 from config import mime_mapping
+from config import ssm_params
 
 logger = logging.getLogger()
 
@@ -179,13 +180,32 @@ def get_param_value(name: str, with_decryption=False) -> str:
         Name=name,
         WithDecryption=with_decryption
     )["Parameter"]["Value"]
-    logger.info("Successfully retrieved the parameter value")
+    logger.info("Successfully retrieved the value")
     return value
 
 
-def send_file_quarantined_sns_msg(bucket: str, key: str, quarantine_reason: str):
+def get_params_values(ssm_params: dict[str, str], with_decryption=False) -> dict[str, str]:
+    """
+    Retrieves the values specified by `ssm_params` dictionary keys, 
+    updates their values in place, and returns it
+    """
+    params = [*ssm_params]
+    logger.info(f"Getting the values for parameters: {params}")
+    response = SSM_CLIENT.get_parameters(
+        Names=params,
+        WithDecryption=with_decryption
+    )
+    invalid_params = response["InvalidParameters"]
+    if invalid_params:
+        logger.warning(f"Invalid parameters: {invalid_params}")
+    for param in response["Parameters"]:
+        ssm_params[param["Name"]] = param["Value"]
+    logger.info("Successfully retrieved and updated the values for parameters")
+    return ssm_params
+
+
+def send_file_quarantined_sns_msg(bucket: str, key: str, topic_arn: str, quarantine_reason: str):
     logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
-    topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
     message = (
         "A file has been quarantined.\n\n"
         f"Quarantine Reason: {quarantine_reason}.\n"
@@ -280,14 +300,15 @@ def send_to_quarantine_bucket(src_bucket: str, dest_bucket: str, key: str, recei
 
     try:
         logger.info("Deleting the message from SQS queue and sending notification")  # noqa: E501
-        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+        queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
         delete_sqs_message(queue_url, receipt_handle)
-        send_file_quarantined_sns_msg(obj_location, key, guarantine_reason)  # noqa: E501
+        topic_arn = ssm_params["/pipeline/QuarantineTopicArn"]
+        send_file_quarantined_sns_msg(obj_location, key, topic_arn, guarantine_reason)  # noqa: E501
     except Exception as e:
         logger.warning(e)
 
 
-def validate_filetype(file_path: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
+def validate_filetype(file_path: str, file_ext: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
@@ -301,10 +322,9 @@ def validate_filetype(file_path: str, approved_filetypes: list) -> tuple[bool, d
 
     logger.info(f"Validating file: {file_path}")
 
-    file_ext = get_file_extension(file_path)
     file_type, mime_type = get_file_identity(file_path)
 
-    if not file_type and file_ext in special_file_types:
+    if (not file_type) and (file_ext in special_file_types):
         logger.info(f"File {file_path} has the extension of {file_ext}. Performing AV scan only")  # noqa: E501
         file_type, mime_type = special_file_types[file_ext].values()
         tags = create_tags_for_file_validation("None", file_type, mime_type)  # noqa: E501

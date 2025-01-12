@@ -1,24 +1,20 @@
 import logging
+import tempfile
 
-from config import INGESTION_DIR, ZIP_INGESTION_DIR
-from utils import empty_dir
-from utils import get_param_value
+import clamscan
+from config import ssm_params
 from utils import download_file
 from utils import send_to_quarantine_bucket
 from utils import get_file_extension
-from utils import extract_zipfile
 from validation import validate_file
-from validation import validate_zipfile
 
 logger = logging.getLogger()
 
 
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list):
-    empty_dir(INGESTION_DIR)
-    empty_dir(ZIP_INGESTION_DIR)
-
     logger.info(f"Getting {bucket}/{key} object")
 
+    # TODO: Move this into the validate_file
     file_ext = get_file_extension(key)
     logger.info(f"Extension: {file_ext}")
 
@@ -26,24 +22,20 @@ def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: lis
         handle_non_approved_filetypes(bucket, key, receipt_handle, file_ext)
         return
 
-    if file_ext == "zip":
-        file_path = f"{ZIP_INGESTION_DIR}/zipfile.zip"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file_path = f"{tmpdir}/file_to_scan.{file_ext}"
         download_file(bucket, key, file_path)
-        extract_zipfile(file_path, INGESTION_DIR)
-        validate_zipfile(bucket, key, file_path, receipt_handle, approved_filetypes)  # noqa: E501
-        return
-
-    # At this point, the file is of an approved type and is not a zip file
-    file_path = f"{INGESTION_DIR}/file_to_scan.{file_ext}"
-    download_file(bucket, key, file_path)
-    validate_file(bucket, key, file_path, receipt_handle, approved_filetypes)
+        valid = validate_file(bucket, key, file_path, receipt_handle, approved_filetypes)  # noqa: E501
+        # TODO: Should we scan the file for virus first, before doing the content type check?
+        if valid:
+            clamscan.scan(bucket, key, file_path, receipt_handle)
 
 
 def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, file_ext: str):
     logger.warning(f"Extension {file_ext} is NOT one of the allowed file types")  # noqa: E501
 
     try:
-        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
+        quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
         send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
     except Exception as e:
         # TODO: Should we ignore errors?
