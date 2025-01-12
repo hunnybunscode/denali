@@ -3,11 +3,12 @@ import random
 import subprocess  # nosec B404
 
 from config import ssm_params
-from utils import delete_sqs_message
-from utils import publish_sns_message
+from utils import add_tags
 from utils import copy_object
 from utils import delete_object
-from utils import add_tags
+from utils import delete_sqs_message
+from utils import publish_sns_message
+
 
 logger = logging.getLogger()
 

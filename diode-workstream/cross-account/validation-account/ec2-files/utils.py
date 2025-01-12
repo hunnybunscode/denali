@@ -7,6 +7,8 @@ import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
+from config import approved_filetypes
+from config import exempt_file_types
 from config import mime_mapping
 from config import ssm_params
 
@@ -160,7 +162,7 @@ def receive_sqs_message(queue_url: str, max_num_of_messages=1):
     )
     messages: list = response.get("Messages")
     if not messages:
-        logger.info("No messages were retrieved")
+        logger.info("No messages were received")
     return messages
 
 
@@ -202,18 +204,6 @@ def get_params_values(ssm_params: dict[str, str], with_decryption=False) -> dict
         ssm_params[param["Name"]] = param["Value"]
     logger.info("Successfully retrieved and updated the values for parameters")
     return ssm_params
-
-
-def send_file_quarantined_sns_msg(bucket: str, key: str, topic_arn: str, quarantine_reason: str):
-    logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
-    message = (
-        "A file has been quarantined.\n\n"
-        f"Quarantine Reason: {quarantine_reason}.\n"
-        f"File: {key}\n"
-        f"File Location: {bucket}/{key}"
-    )
-    publish_sns_message(topic_arn, message, quarantine_reason)
-    logger.info("Successfully sent the SNS message")
 
 
 def create_tags_for_file_validation(error_status: str, file_type: str, mime_type: str):
@@ -289,45 +279,17 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
         return "Unknown", "Unknown"
 
 
-# TODO: Break up this function
-def send_to_quarantine_bucket(src_bucket: str, dest_bucket: str, key: str, receipt_handle: str):
-    guarantine_reason = "Content-Type Validation Failure"
-    logger.warning(f"Quarantining the file, {key}: {guarantine_reason}")  # noqa: E501
-
-    copied = copy_object(src_bucket, dest_bucket, key, raise_error=False)
-    obj_location = dest_bucket if copied else src_bucket
-    delete_object(src_bucket, key, raise_error=False)
-
-    try:
-        logger.info("Deleting the message from SQS queue and sending notification")  # noqa: E501
-        queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
-        delete_sqs_message(queue_url, receipt_handle)
-        topic_arn = ssm_params["/pipeline/QuarantineTopicArn"]
-        send_file_quarantined_sns_msg(obj_location, key, topic_arn, guarantine_reason)  # noqa: E501
-    except Exception as e:
-        logger.warning(e)
-
-
-def validate_filetype(file_path: str, file_ext: str, approved_filetypes: list) -> tuple[bool, dict[str, str]]:
+def validate_filetype(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
-    # File types that puremagic cannot validate
-    special_file_types = {
-        "csv": {
-            "file_type": "csv",
-            "mime_type": "text/csv"
-        }
-    }
-
     logger.info(f"Validating file: {file_path}")
 
     file_type, mime_type = get_file_identity(file_path)
 
-    if (not file_type) and (file_ext in special_file_types):
+    if (not file_type) and (file_ext in exempt_file_types):
         logger.info(f"File {file_path} has the extension of {file_ext}. Performing AV scan only")  # noqa: E501
-        file_type, mime_type = special_file_types[file_ext].values()
-        tags = create_tags_for_file_validation("None", file_type, mime_type)  # noqa: E501
+        tags = create_tags_for_file_validation("None", file_ext, "")
         return True, tags
 
     if file_type != file_ext:
@@ -352,7 +314,7 @@ def validate_filetype(file_path: str, file_ext: str, approved_filetypes: list) -
     return True, tags
 
 
-def get_file_extension(file_path: str):
+def get_file_ext(file_path: str):
     """
     Extracts and returns the file extension (in lowercase) without the leading dot.\n
     In case of any errors, returns "Unknown".

@@ -8,6 +8,10 @@ mime_mapping = {
     "wav": ["audio/wav", "audio/wave", "audio/x-wav"]
 }
 
+# File types that puremagic cannot validate
+exempt_file_types = ["csv"]
+
+# Populated and updated in the main function
 ssm_params = {
     "/pipeline/AvScanQueueUrl": "",
     "/pipeline/QuarantineBucketName": "",
@@ -19,3 +23,6 @@ ssm_params = {
     "/pipeline/InvalidFilesBucketName": "",
     "/pipeline/InvalidFilesTopicArn": "",
 }
+
+# Populated and updated in the main function
+approved_filetypes = []
