@@ -2,9 +2,10 @@ import json
 import logging
 import time
 
+from config import ssm_params
 from get_file import get_file
-from utils import get_param_value
 from utils import receive_sqs_message
+from utils import get_params_values
 
 logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
 logger = logging.getLogger()
@@ -19,9 +20,12 @@ def main():
     # TODO: Use signal to gracefully exit in case of instance termination
     # TODO: Implement a health check
 
-    queue_url = get_param_value("/pipeline/AvScanQueueUrl")
-    approved_filetypes = get_param_value("/pipeline/ApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
-    dfdl_approved_filetypes = get_param_value("/pipeline/DfdlApprovedFileTypes").replace(".", "").replace(" ", "").split(",")  # noqa: E501
+    logger.info(ssm_params)
+    get_params_values(ssm_params)
+    logger.info(ssm_params)
+    queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
+    approved_filetypes = ssm_params["/pipeline/ApprovedFileTypes"].replace(".", "").replace(" ", "").split(",")  # noqa: E501
+    dfdl_approved_filetypes = ssm_params["/pipeline/DfdlApprovedFileTypes"].replace(".", "").replace(" ", "").split(",")  # noqa: E501
     approved_filetypes.extend(dfdl_approved_filetypes)
     sleep_period = 1
 

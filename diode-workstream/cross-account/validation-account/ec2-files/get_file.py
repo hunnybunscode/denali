@@ -2,7 +2,7 @@ import logging
 import tempfile
 
 import clamscan
-from utils import get_param_value
+from config import ssm_params
 from utils import download_file
 from utils import send_to_quarantine_bucket
 from utils import get_file_extension
@@ -14,6 +14,7 @@ logger = logging.getLogger()
 def get_file(bucket: str, key: str, receipt_handle: str, approved_filetypes: list):
     logger.info(f"Getting {bucket}/{key} object")
 
+    # TODO: Move this into the validate_file
     file_ext = get_file_extension(key)
     logger.info(f"Extension: {file_ext}")
 
@@ -34,7 +35,7 @@ def handle_non_approved_filetypes(bucket: str, key: str, receipt_handle: str, fi
     logger.warning(f"Extension {file_ext} is NOT one of the allowed file types")  # noqa: E501
 
     try:
-        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
+        quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
         send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
     except Exception as e:
         # TODO: Should we ignore errors?

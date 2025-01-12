@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 import tempfile
 
-from utils import get_param_value
+from config import ssm_params
 from utils import send_to_quarantine_bucket
 from utils import get_file_extension
 from utils import validate_filetype
@@ -24,7 +24,7 @@ def validate_file(bucket: str, key: str, file_path: str, receipt_handle: str, ap
         add_tags(bucket, key, tags)
 
         if not valid:
-            quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+            quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
             send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
             return False
 
@@ -44,7 +44,7 @@ def validate_file(bucket: str, key: str, file_path: str, receipt_handle: str, ap
                     logger.warning(f"Nested zip files are not allowed: {_file_path}")  # noqa: E501
                     error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "application/zip")  # noqa: E501
                     add_tags(bucket, key, error_tags)
-                    quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+                    quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
                     send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
                     return False
 
@@ -53,7 +53,7 @@ def validate_file(bucket: str, key: str, file_path: str, receipt_handle: str, ap
                     # If one file fails validation, move the entire zip file to quarantine bucket
                     error_tags = create_tags_for_file_validation("ZipFileWithInvalidFile", "zip", "application/zip")  # noqa: E501
                     add_tags(bucket, key, error_tags)
-                    quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+                    quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
                     send_to_quarantine_bucket(bucket, quarantine_bucket, key, receipt_handle)  # noqa: E501
                     return False
 

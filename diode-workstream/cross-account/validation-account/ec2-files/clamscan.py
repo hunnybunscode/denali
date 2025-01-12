@@ -2,7 +2,7 @@ import logging
 import random
 import subprocess  # nosec B404
 
-from utils import get_param_value
+from config import ssm_params
 from utils import delete_sqs_message
 from utils import publish_sns_message
 from utils import copy_object
@@ -36,7 +36,7 @@ def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
         # If file does not exist
         if exit_status == 512:
             logger.warning(f"File {key} NOT FOUND. Unable to scan")
-            queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+            queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
             delete_sqs_message(queue_url, receipt_handle)
             return
 
@@ -44,7 +44,7 @@ def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
         file_status = "INFECTED"
         # exit_status = 999
         logger.warning(f"{key} is {file_status}")
-        quarantine_bucket = get_param_value("/pipeline/QuarantineBucketName")
+        quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
         msg = f"Quarantined File: {key} stored in {bucket}"
         tag_file(bucket, key, file_status, msg, exit_status, receipt_handle)
         publish_quarantine_notification(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
@@ -63,9 +63,9 @@ def tag_file(bucket, key, file_status, msg, exitstatus, receipt_handle):
         add_tags(bucket, key, new_tags)
 
         if file_status == "CLEAN":
-            dest_bucket = get_param_value("/pipeline/DataTransferIngestBucketName")  # noqa: E501
+            dest_bucket = ssm_params["/pipeline/DataTransferIngestBucketName"]
         else:
-            dest_bucket = get_param_value("/pipeline/QuarantineBucketName")  # noqa: E501
+            dest_bucket = ssm_params["/pipeline/QuarantineBucketName"]
 
         move_file(bucket, dest_bucket, key, msg, receipt_handle)
     except Exception as e:
@@ -76,7 +76,7 @@ def move_file(bucket, dest_bucket, key, msg, receipt_handle):
     logger.info(msg)
     try:
         copy_object(bucket, dest_bucket, key)
-        queue_url = get_param_value("/pipeline/AvScanQueueUrl")
+        queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
         delete_sqs_message(queue_url, receipt_handle)
         move_object_to_lts_bucket(bucket, key)
     except Exception as e:
@@ -88,7 +88,7 @@ def move_object_to_lts_bucket(bucket, key):
     Moves `key` from ingestion bucket to long term storage bucket
     """
     try:
-        lts_bucket = get_param_value("/pipeline/LongTermStorageBucketName")  # noqa: E501
+        lts_bucket = ssm_params["/pipeline/LongTermStorageBucketName"]
         logger.info(f"Moving file to {lts_bucket}")
         copy_object(bucket, lts_bucket, key)
         delete_object(bucket, key)
@@ -99,7 +99,7 @@ def move_object_to_lts_bucket(bucket, key):
 def publish_quarantine_notification(bucket: str, key: str, file_status: str, exit_status: int):
     logger.info("Publishing SNS message for a quarantined file")
     try:
-        topic_arn = get_param_value("/pipeline/QuarantineTopicArn")
+        topic_arn = ssm_params["/pipeline/QuarantineTopicArn"]
         subject = "A file uploaded to the quarantine S3 Bucket following a ClamAV scan"
         message = (
             "A file has been quarantined based on the results of a ClamAV scan:\n\n"

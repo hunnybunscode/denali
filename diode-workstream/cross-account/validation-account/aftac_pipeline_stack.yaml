@@ -593,13 +593,14 @@ Resources:
       Type: String
       Value: !Ref QuarantineBucket
 
-  DataTransferQueueURLParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Description: URL of the SQS Queue which manages the diode transfer
-      Name: /pipeline/DataTransferQueueUrl
-      Type: String
-      Value: !GetAtt transferqueue.QueueUrl
+  ## Not used; S3 bucket sends events directly to the transfer queue
+  # DataTransferQueueURLParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Description: URL of the SQS Queue which manages the diode transfer
+  #     Name: /pipeline/DataTransferQueueUrl
+  #     Type: String
+  #     Value: !GetAtt transferqueue.QueueUrl
 
   LongTermStorageBucketNameParameter:
     Type: AWS::SSM::Parameter
