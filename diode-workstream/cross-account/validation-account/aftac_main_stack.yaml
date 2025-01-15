@@ -272,50 +272,17 @@ Parameters:
     Description: Name of the Sftp Server Key Owner
     Default: Cosmo
 
-  # CustomResourceCodeKey:
-  #   Type: String
-  #   Description: The S3 key of the custom resource code
-  #   Default: lambda_functions/CustomResourceCode.zip
-
-  # AddEventNotificationCodeKey:
-  #   Type: String
-  #   Description: The S3 key of the add event notification code
-  #   Default: lambda_functions/AddEventNotificationCode.zip
-
   ApprovedFileTypes:
-    Type: String
-    Description: A Comma Separated List of File Types to be Allowed through the validation pipeline
+    Type: CommaDelimitedList
+    Description: A comma-separated list of file types allowed through the validation pipeline
     Default: csv, flac, wav, mp4, txt, json, zip
 
   DfdlApprovedFileTypes:
-    Type: String
-    Description: A Comma Separated List of File Types to be Allowed through the DFDL validation pipeline
+    Type: CommaDelimitedList
+    Description: A comma-separated list of file types allowed through the DFDL validation pipeline
     Default: infoset, xml
 
 Resources:
-  SftpServerStack:
-    Type: AWS::CloudFormation::Stack
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
-    Properties:
-      TemplateURL: !Ref TemplateURLSftpServerStack
-      Parameters:
-        SftpUserName: !Ref SftpServerStackSftpUserName
-        TransferUserRoleArn: !ImportValue TransferUserRoleArn
-        TransferLoggingRoleArn: !ImportValue TransferLoggingRoleArn
-        AftacVpcId: !Ref AftacVpcId
-        SftpServerSubnetIds:
-          !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
-        SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
-        SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
-        SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
-        LambdaStorageBucket: !Ref LambdaStorageBucket
-        ObjectTaggerRoleARN: !ImportValue ObjectTaggerRoleArn
-        PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
-        ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
-        # TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
-    DependsOn: PipelineStack
-
   LoggingStack:
     Type: AWS::CloudFormation::Stack
     UpdateReplacePolicy: Delete
@@ -325,6 +292,7 @@ Resources:
 
   IngestStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn: LoggingStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -347,11 +315,10 @@ Resources:
         ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
         Bucket1CDSProfile: !Ref IngestStackBucket1CDSProfile
         Bucket2CDSProfile: !Ref IngestStackBucket2CDSProfile
-    DependsOn:
-      - LoggingStack
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn: IngestStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -367,8 +334,29 @@ Resources:
         TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
         TransferResultServiceRole: !ImportValue TransferResultLambdaRoleArn
         LambdaStorageBucket: !Ref LambdaStorageBucket
-        ApprovedFileTypes: !Ref ApprovedFileTypes
+        ApprovedFileTypes: !Join [",", !Ref ApprovedFileTypes]
+        DfdlApprovedFileTypes: !Join [",", !Ref DfdlApprovedFileTypes]
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
-        DfdlApprovedFileTypes: !Ref DfdlApprovedFileTypes
-    DependsOn:
-      - IngestStack
+
+  SftpServerStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: PipelineStack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      TemplateURL: !Ref TemplateURLSftpServerStack
+      Parameters:
+        SftpUserName: !Ref SftpServerStackSftpUserName
+        TransferUserRoleArn: !ImportValue TransferUserRoleArn
+        TransferLoggingRoleArn: !ImportValue TransferLoggingRoleArn
+        AftacVpcId: !Ref AftacVpcId
+        SftpServerSubnetIds:
+          !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
+        SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
+        SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
+        SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
+        LambdaStorageBucket: !Ref LambdaStorageBucket
+        ObjectTaggerRoleARN: !ImportValue ObjectTaggerRoleArn
+        PrivateSubnetIds: !Join [",", !Ref PipelineStackPrivateSubnetIds]
+        ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
+        # TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey

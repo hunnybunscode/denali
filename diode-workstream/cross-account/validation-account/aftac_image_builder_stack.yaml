@@ -10,21 +10,20 @@ Metadata:
         Parameters:
           - pIamPrefix
           - pResourcePrefix
-          - pImageRecipeSemVer
+          - pSemVer
           - pParentImage
           - pLaunchTemplateId
           - pSubnetId
           - pSecurityGroupIds
           - pEmailEndPoint
-          # - pInstanceProfileName
 
     ParameterLabels:
       pIamPrefix:
         default: IAM Resource Prefix
       pResourcePrefix:
         default: Resource Prefix
-      pImageRecipeSemVer:
-        default: Image Recipe Semantic Version
+      pSemVer:
+        default: Semantic Version
       pParentImage:
         default: Parent Image
       pLaunchTemplateId:
@@ -35,8 +34,6 @@ Metadata:
         default: Security Group IDs
       pEmailEndPoint:
         default: Email Notification
-      # pInstanceProfileName:
-      #   default: EC2 Instance Profile Name
 
 Parameters:
   pIamPrefix:
@@ -55,9 +52,11 @@ Parameters:
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
-  pImageRecipeSemVer:
+  pSemVer:
     Type: String
-    Description: Semantic Version of the Diode Image Recipe. Increment this when updating the parent image below.
+    Description: >
+      Semantic version of the Diode Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
     Default: "1.0.0"
 
   pParentImage:
@@ -73,11 +72,6 @@ Parameters:
     AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid launch template ID.
 
-  # pInstanceProfileName:
-  #   Type: String
-  #   Description: The name of the EC2 instance profile to be associated with EC2 instances launched by the image pipeline.
-  #   Default: EC2InstanceProfileForImageBuilder
-
   pSubnetId:
     Type: AWS::EC2::Subnet::Id
     Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
@@ -92,9 +86,12 @@ Parameters:
 
   pEmailEndPoint:
     Type: String
-    Description: The email address at which to receive notifications for ImageBuilder events
-    AllowedPattern: ^\S+@\S+\.+\S+$
-    ConstraintDescription: Must be a valid email address
+    Description: "[DO NOT USE FOR NOW] The email address at which to receive notifications for ImageBuilder events"
+    AllowedPattern: ^$|^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be left blank or a valid email address
+
+Conditions:
+  IsEmailAddressProvided: !Not [!Equals [!Ref pEmailEndPoint, ""]]
 
 Resources:
   BuildComponentPython3AndPipInstall:
@@ -102,16 +99,12 @@ Resources:
     Properties:
       Name: !Sub ${pResourcePrefix}-python3-and-pip
       Description: Installs and upgrades Python3 and Pip
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.1"
-      ChangeDescription: Initial version
-      #############################################
+      Version: !Ref pSemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
+      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
       ## If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: |
         name: Python3 and Pip
@@ -155,16 +148,12 @@ Resources:
     Properties:
       Name: !Sub ${pResourcePrefix}-python-packages
       Description: Installs Python packages
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.1"
-      ChangeDescription: Initial version
-      #############################################
+      Version: !Ref pSemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
+      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
       # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: |
         name: Python package
@@ -203,16 +192,12 @@ Resources:
     Properties:
       Name: !Sub ${pResourcePrefix}-s3-download-overwrite
       Description: Downloads files from S3 to a local path, overwriting any existing files
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.0"
-      ChangeDescription: Initial version
-      #############################################
+      Version: !Ref pSemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
+      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
       # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: |
         name: S3 Download
@@ -248,16 +233,12 @@ Resources:
     Properties:
       Name: !Sub ${pResourcePrefix}-enable-sqs-poller-service
       Description: Enables SQS poller service
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.0"
-      ChangeDescription: Initial version
-      #############################################
+      Version: !Ref pSemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
+      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
       # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: |
         name: Enable SQS Poller Service
@@ -282,16 +263,12 @@ Resources:
     Properties:
       Name: !Sub ${pResourcePrefix}-enable-cloudwatch-agent
       Description: Enables CloudWatch Agent
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.0"
-      ChangeDescription: Initial version
-      #############################################
+      Version: !Ref pSemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
+      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
       # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: |
         name: Enable CloudWatch Agent
@@ -344,7 +321,7 @@ Resources:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${pResourcePrefix}-image-recipe
-      Version: !Ref pImageRecipeSemVer
+      Version: !Ref pSemVer
       # Description: Testing ec2 scanner recipe
       ParentImage: !Ref pParentImage
       # WorkingDirectory: String # The default path is `/tmp`
@@ -403,13 +380,15 @@ Resources:
       InstanceMetadataOptions:
         HttpTokens: required
         HttpPutResponseHopLimit: 1
-      # InstanceProfileName: !Ref pInstanceProfileName
       InstanceProfileName: !Ref ImageBuilderInfraInstanceProfile
       SubnetId: !Ref pSubnetId
       SecurityGroupIds: !Ref pSecurityGroupIds
       TerminateInstanceOnFailure: true # For troubleshooting, set it to false
       InstanceTypes: [t3.small]
-      SnsTopicArn: !Ref ImageBuilderNotificationTopic
+      SnsTopicArn: !If
+        - IsEmailAddressProvided
+        - !Ref ImageBuilderNotificationTopic
+        - !Ref AWS::NoValue
       # KeyPair: String
       # Logging:
       #   S3Logs:
@@ -471,7 +450,7 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              # KMSMasterKeyID: KeyID
+              KMSMasterKeyID: !GetAtt ImageBuilderKmsKey.Arn
               SSEAlgorithm: aws:kms # Uses aws/s3
             BucketKeyEnabled: true
       PublicAccessBlockConfiguration:
@@ -534,7 +513,7 @@ Resources:
         # TODO: Scope it down if possible
         - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
       Policies:
-        - PolicyName: ImageBuilderInfraInstanceRoleInlinePolicy
+        - PolicyName: S3_Policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -546,19 +525,95 @@ Resources:
                 Effect: Allow
                 Action: s3:ListBucket
                 Resource: !Sub ${EC2RequiredFilesBucket.Arn}
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowKMS
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !GetAtt ImageBuilderKmsKey.Arn
 
   ImageBuilderNotificationTopic:
     Type: AWS::SNS::Topic
+    Condition: IsEmailAddressProvided
     Properties:
       DisplayName: ImageBuilder Event Notification
       # KmsMasterKeyId: String
 
-  QuickSightRoleMembershipLambdaFailureNotificationSubscription:
+  ImageBuilderNotificationTopicSubscription:
     Type: AWS::SNS::Subscription
+    Condition: IsEmailAddressProvided
     Properties:
       TopicArn: !Ref ImageBuilderNotificationTopic
       Protocol: email
       Endpoint: !Ref pEmailEndPoint
+
+  ImageBuilderKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for ImageBuilder pipeline solution
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            # Condition:
+            #   StringEquals:
+            #     kms:CallerAccount: !Ref AWS::AccountId
+            #     kms:ViaService:
+            #       - !Sub s3.${AWS::Region}.amazonaws.com
+            #       - !Sub sns.${AWS::Region}.amazonaws.com
+
+          # - Sid: Allow logs service principal to use the key
+          #   Effect: Allow
+          #   Principal:
+          #     Service: !Sub logs.${AWS::Region}.amazonaws.com
+          #   Action:
+          #     - kms:Encrypt
+          #     - kms:Decrypt
+          #     - kms:ReEncrypt*
+          #     - kms:GenerateDataKey*
+          #     - kms:DescribeKey
+          #   Resource: "*"
+          #   Condition:
+          #     ArnEquals:
+          #       kms:EncryptionContext:aws:logs:arn:
+          #         - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${pResourcePrefix}-Lambda
+          # - Sid: Allow service principal to use the key
+          #   Effect: Allow
+          #   Principal:
+          #     Service:
+          #       - events.amazonaws.com
+          #   Action:
+          #     - kms:GenerateDataKey
+          #     - kms:Decrypt
+          #   Resource: "*"
 
   # BuildWorkflow:
   #   Type: AWS::ImageBuilder::Workflow

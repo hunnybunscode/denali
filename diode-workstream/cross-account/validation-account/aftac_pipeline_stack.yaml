@@ -221,6 +221,7 @@ Resources:
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
+        # TODO: Determine if we need to set this to Default using an API
         Version: !GetAtt AutoScalingGroupLaunchTemplate.DefaultVersionNumber
       MaxSize: "12"
       MinSize: "2"
@@ -550,7 +551,7 @@ Resources:
     Properties:
       Description: Filetypes which are authorized for low to high transfer
       Name: /pipeline/ApprovedFileTypes
-      Type: String
+      Type: StringList
       Value: !Ref ApprovedFileTypes
 
   DfdlApprovedFileTypesParameter:
@@ -558,7 +559,7 @@ Resources:
     Properties:
       Description: Filetypes which are authorized for low to high transfer after DFDL Conversion
       Name: /pipeline/DfdlApprovedFileTypes
-      Type: String
+      Type: StringList
       Value: !Ref DfdlApprovedFileTypes
 
   InvalidFilesBucketNameParameter:
