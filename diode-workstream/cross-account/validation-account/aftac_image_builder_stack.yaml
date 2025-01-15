@@ -8,16 +8,23 @@ Metadata:
       - Label:
           default: ""
         Parameters:
+          - pIamPrefix
           - pResourcePrefix
+          - pImageRecipeSemVer
           - pParentImage
           - pLaunchTemplateId
           - pSubnetId
           - pSecurityGroupIds
+          - pEmailEndPoint
           # - pInstanceProfileName
 
     ParameterLabels:
+      pIamPrefix:
+        default: IAM Resource Prefix
       pResourcePrefix:
         default: Resource Prefix
+      pImageRecipeSemVer:
+        default: Image Recipe Semantic Version
       pParentImage:
         default: Parent Image
       pLaunchTemplateId:
@@ -26,10 +33,19 @@ Metadata:
         default: Subnet ID
       pSecurityGroupIds:
         default: Security Group IDs
+      pEmailEndPoint:
+        default: Email Notification
       # pInstanceProfileName:
       #   default: EC2 Instance Profile Name
 
 Parameters:
+  pIamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
   pResourcePrefix:
     Type: String
     Description: >-
@@ -38,6 +54,11 @@ Parameters:
     Default: ec2-av-scanner
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  pImageRecipeSemVer:
+    Type: String
+    Description: Semantic Version of the Diode Image Recipe. Increment this when updating the parent image below.
+    Default: "1.0.0"
 
   pParentImage:
     Type: String
@@ -68,6 +89,12 @@ Parameters:
     Description: The IDs of the security groups to be associated with EC2 instances launched by the image pipeline.
     AllowedPattern: \S+
     ConstraintDescription: Must select one or more security group IDs.
+
+  pEmailEndPoint:
+    Type: String
+    Description: The email address at which to receive notifications for ImageBuilder events
+    AllowedPattern: ^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be a valid email address
 
 Resources:
   BuildComponentPython3AndPipInstall:
@@ -284,71 +311,40 @@ Resources:
                   commands:
                     - systemctl enable amazon-cloudwatch-agent
 
-  BuildComponentPerformOtherTasks:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub ${pResourcePrefix}-perform-other-tasks
-      Description: Performs other tasks
-      #############################################
-      # Update Version and ChangeDescription when you make any changes to this Component resource #
-      Version: "1.0.2"
-      ChangeDescription: Initial version
-      #############################################
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: Perform Other Tasks
-        description: Performs other tasks
-        schemaVersion: 1.0
-        phases:
-          - name: build
-            steps:
-              - name: OtherTasks
-                action: ExecuteBash
-                inputs:
-                  commands:
-                    - mkdir /usr/bin/files
-                    - mkdir /usr/bin/zipfiles
-
-  # TODO
-  ImageBuilderTestComponent:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub ${pResourcePrefix}-test-component
-      Description: Dummy description
-      #############################################
-      # Update Version and ChangeDescription when any changes are made to this resource #
-      Version: "1.0.0"
-      ChangeDescription: Initial version
-      #############################################
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      # KmsKeyId: String
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: test-image
-        description: This is hello world testing doc
-        schemaVersion: 1.0
-        phases:
-          - name: test
-            steps:
-              - name: HelloWorldStep
-                action: ExecuteBash
-                inputs:
-                  commands:
-                    - echo "Hello World! Test."
+  # ImageBuilderTestComponent:
+  #   Type: AWS::ImageBuilder::Component
+  #   Properties:
+  #     Name: !Sub ${pResourcePrefix}-test-component
+  #     Description: Dummy description
+  #     #############################################
+  #     # Update Version and ChangeDescription when any changes are made to this resource #
+  #     Version: "1.0.0"
+  #     ChangeDescription: Initial version
+  #     #############################################
+  #     Platform: Linux
+  #     SupportedOsVersions:
+  #       - Red Hat Enterprise Linux 8
+  #       - Red Hat Enterprise Linux 9
+  #     # KmsKeyId: String
+  #     # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+  #     Data: |
+  #       name: test-image
+  #       description: This is hello world testing doc
+  #       schemaVersion: 1.0
+  #       phases:
+  #         - name: test
+  #           steps:
+  #             - name: HelloWorldStep
+  #               action: ExecuteBash
+  #               inputs:
+  #                 commands:
+  #                   - echo "Hello World! Test."
 
   ImageRecipe:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
       Name: !Sub ${pResourcePrefix}-image-recipe
-      Version: "1.0.7"
+      Version: !Ref pImageRecipeSemVer
       # Description: Testing ec2 scanner recipe
       ParentImage: !Ref pParentImage
       # WorkingDirectory: String # The default path is `/tmp`
@@ -384,10 +380,8 @@ Resources:
         - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
         - ComponentArn: !Ref BuildComponentEnableCloudWatchAgent
         - ComponentArn: !Ref BuildComponentEnableSQSPollerService
-        - ComponentArn: !Ref BuildComponentPerformOtherTasks
         - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
         # - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux-kernel-ml/x.x.x
-
       # BlockDeviceMappings:
       #   - DeviceName: String
       #     Ebs:
@@ -415,6 +409,7 @@ Resources:
       SecurityGroupIds: !Ref pSecurityGroupIds
       TerminateInstanceOnFailure: true # For troubleshooting, set it to false
       InstanceTypes: [t3.small]
+      SnsTopicArn: !Ref ImageBuilderNotificationTopic
       # KeyPair: String
       # Logging:
       #   S3Logs:
@@ -422,9 +417,6 @@ Resources:
       #     S3KeyPrefix: String
       # Placement: Placement
       # ResourceTags:
-      #   Key: Value
-      # SnsTopicArn: String
-      # Tags:
       #   Key: Value
 
   ImageBuilderImagePipeline:
@@ -520,13 +512,13 @@ Resources:
   ImageBuilderInfraInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      # InstanceProfileName: String
+      InstanceProfileName: !Sub ${pIamPrefix}-${pResourcePrefix}-image-builder-infra-instance-profile
       Roles: [!Ref ImageBuilderInfraInstanceRole]
 
   ImageBuilderInfraInstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      # RoleName: String
+      RoleName: !Sub ${pIamPrefix}-${pResourcePrefix}-image-builder-infra-instance-role
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -554,6 +546,19 @@ Resources:
                 Effect: Allow
                 Action: s3:ListBucket
                 Resource: !Sub ${EC2RequiredFilesBucket.Arn}
+
+  ImageBuilderNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ImageBuilder Event Notification
+      # KmsMasterKeyId: String
+
+  QuickSightRoleMembershipLambdaFailureNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref ImageBuilderNotificationTopic
+      Protocol: email
+      Endpoint: !Ref pEmailEndPoint
 
   # BuildWorkflow:
   #   Type: AWS::ImageBuilder::Workflow
