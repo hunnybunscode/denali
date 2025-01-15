@@ -1,15 +1,21 @@
 import json
 import logging
 import time
+from logging.handlers import TimedRotatingFileHandler
 
 from config import approved_filetypes
+from config import file_handler_config
 from config import ssm_params
 from utils import get_params_values
 from utils import receive_sqs_message
 from validation import validate_file
 
-logging.basicConfig(format="[%(levelname)s] %(message)s", filename="/var/log/messages", level=logging.INFO)  # noqa: E501
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+file_handler = TimedRotatingFileHandler(**file_handler_config)
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 
 def main():

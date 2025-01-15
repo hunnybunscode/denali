@@ -8,11 +8,11 @@
       "files": {
         "collect_list": [
           {
-            "file_path": "/var/log/messages",
+            "file_path": "/var/log/sqs_poller.log",
             "log_group_class": "STANDARD",
-            "log_group_name": "messages",
+            "log_group_name": "sqs_poller",
             "log_stream_name": "{instance_id}",
-            "retention_in_days": -1
+            "retention_in_days": 120
           }
         ]
       }
@@ -28,26 +28,21 @@
           "cpu_usage_user",
           "cpu_usage_system"
         ],
-        "metrics_collection_interval": 10,
         "totalcpu": false
       },
       "disk": {
         "measurement": ["used_percent", "inodes_free"],
-        "metrics_collection_interval": 10,
         "resources": ["*"]
       },
       "mem": {
-        "measurement": ["mem_used_percent"],
-        "metrics_collection_interval": 10
+        "measurement": ["mem_used_percent"]
       },
       "statsd": {
         "metrics_aggregation_interval": 10,
-        "metrics_collection_interval": 10,
         "service_address": ":8125"
       },
       "swap": {
-        "measurement": ["swap_used_percent"],
-        "metrics_collection_interval": 10
+        "measurement": ["swap_used_percent"]
       }
     }
   }

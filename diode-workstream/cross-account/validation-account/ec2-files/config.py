@@ -1,3 +1,9 @@
+file_handler_config = {
+    "filename": "/var/log/sqs_poller.log",
+    "when": "midnight",
+    "backupCount": 30
+}
+
 mime_mapping = {
     "txt": ["text/plain"],
     "json": ["application/json"],
