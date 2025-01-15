@@ -10,7 +10,6 @@ from botocore.exceptions import ClientError  # type: ignore
 from config import approved_filetypes
 from config import exempt_file_types
 from config import mime_mapping
-from config import ssm_params
 
 logger = logging.getLogger()
 
