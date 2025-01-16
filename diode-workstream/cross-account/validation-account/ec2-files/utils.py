@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError  # type: ignore
 from config import approved_filetypes
 from config import exempt_file_types
 from config import mime_mapping
+from config import ssm_params
 
 logger = logging.getLogger()
 
@@ -220,6 +221,19 @@ def create_tags_for_file_validation(error_status: str, file_type: str, mime_type
     }
 
 
+def create_tags_for_av_scan(file_status: str, exit_status: int):
+    """
+    Returns: {
+        "AV_SCAN_STATUS": file_status,
+        "CLAM_AV_EXIT_CODE": exit_status
+    }
+    """
+    return {
+        "AV_SCAN_STATUS": file_status,
+        "CLAM_AV_EXIT_CODE": str(exit_status)
+    }
+
+
 def empty_dir(dir: str):
     """
     Deletes all files and subdirectories in the given directory.\n
@@ -334,3 +348,11 @@ def extract_zipfile(zipfile_path: str, extract_dir: str):
     with zipfile.ZipFile(zipfile_path) as zip_file:
         zip_file.extractall(extract_dir)
     logger.info("Successfully extracted the zip file")
+
+
+def delete_av_scan_message(receipt_handle: str):
+    """
+    Deletes the message from AV Scan Queue to stop other consumers from processing the message
+    """
+    queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
+    delete_sqs_message(queue_url, receipt_handle)

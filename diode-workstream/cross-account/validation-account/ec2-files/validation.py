@@ -8,8 +8,8 @@ from config import ssm_params
 from utils import add_tags
 from utils import copy_object
 from utils import create_tags_for_file_validation
+from utils import delete_av_scan_message
 from utils import delete_object
-from utils import delete_sqs_message
 from utils import download_file
 from utils import extract_zipfile
 from utils import get_file_ext
@@ -37,7 +37,6 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
         file_path = f"{tmpdir}/{key}"
         download_file(bucket, key, file_path)
         valid = _validate_file(bucket, key, file_path, receipt_handle)
-        # TODO: Should we scan the file for virus first, before doing the content type check?
         if valid:
             clamscan.scan(bucket, key, file_path, receipt_handle)
 
@@ -100,21 +99,23 @@ def _send_to_invalid_files_bucket(src_bucket: str, key: str, receipt_handle: str
 
     try:
         logger.info("Deleting the message from SQS queue and sending notification")  # noqa: E501
-        queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
-        delete_sqs_message(queue_url, receipt_handle)
-        topic_arn = ssm_params["/pipeline/InvalidFilesTopicArn"]
-        _send_file_rejected_sns_msg(obj_location, key, topic_arn, reject_reason)  # noqa: E501
+        delete_av_scan_message(receipt_handle)
+        _send_file_rejected_sns_msg(obj_location, key, reject_reason)  # noqa: E501
     except Exception as e:
         logger.warning(e)
 
 
-def _send_file_rejected_sns_msg(bucket: str, key: str, topic_arn: str, reject_reason: str):
+def _send_file_rejected_sns_msg(bucket: str, key: str, reject_reason: str):
     logger.info(f"Sending an SNS message regarding the rejected file: {key}")  # noqa: E501
-    message = (
-        "A file has been rejected.\n\n"
-        f"File: {key}\n"
-        f"File Location: {bucket}/{key}\n"
-        f"Reject Reason: {reject_reason}\n"
-    )
-    publish_sns_message(topic_arn, message, reject_reason)
-    logger.info("Successfully sent the SNS message")
+    try:
+        topic_arn = ssm_params["/pipeline/InvalidFilesTopicArn"]
+        message = (
+            "A file has been rejected.\n\n"
+            f"File: {key}\n"
+            f"File Location: {bucket}/{key}\n"
+            f"Reject Reason: {reject_reason}\n"
+        )
+        publish_sns_message(topic_arn, message, reject_reason)
+        # logger.info("Successfully sent the SNS message")
+    except Exception as e:
+        logger.error(f"Could not publish an SNS message: {e}")

@@ -190,7 +190,7 @@ Resources:
   InvalidFilesTopic:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: Invalid Files SNS Topic
+      DisplayName: Invalid File SNS Topic
       KmsMasterKeyId: alias/aws/sns
 
   AutoScalingGroupLaunchTemplate:
