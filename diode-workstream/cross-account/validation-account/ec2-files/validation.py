@@ -30,7 +30,7 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
         logger.warning(f"File extension \"{file_ext}\" is NOT approved")
         tags = create_tags_for_file_validation("FileTypeNotApproved", file_ext, "")  # noqa: E501
         add_tags(bucket, key, tags)
-        _send_to_invalid_files_bucket(bucket, key, receipt_handle)
+        process_invalid_file(bucket, key, receipt_handle)
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -48,7 +48,7 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
         add_tags(bucket, key, tags)
 
         if not valid:
-            _send_to_invalid_files_bucket(bucket, key, receipt_handle)
+            process_invalid_file(bucket, key, receipt_handle)
             return False
 
         if not get_file_ext(file_path) == "zip":
@@ -67,7 +67,7 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
                     logger.warning(f"Nested zip files are not allowed: {_file_path}")  # noqa: E501
                     error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "")  # noqa: E501
                     add_tags(bucket, key, error_tags)
-                    _send_to_invalid_files_bucket(bucket, key, receipt_handle)  # noqa: E501
+                    process_invalid_file(bucket, key, receipt_handle)
                     return False
 
                 valid, _ = validate_filetype(_file_path, _file_ext)
@@ -75,7 +75,7 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
                     # If one file fails validation, move the entire zip file to quarantine bucket
                     error_tags = create_tags_for_file_validation("ZipFileWithInvalidFile", "zip", "")  # noqa: E501
                     add_tags(bucket, key, error_tags)
-                    _send_to_invalid_files_bucket(bucket, key, receipt_handle)  # noqa: E501
+                    process_invalid_file(bucket, key, receipt_handle)
                     return False
 
         return True
@@ -83,39 +83,33 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
     except Exception as e:
         # TODO: What should happen in case of errors? Is logging it out enough? That means the SQS message will be processed again
         logger.error(f"Could not validate the file: {e}")
-        raise
-        # _send_to_invalid_files_bucket(bucket, key, receipt_handle)  # noqa: E501
 
 
-# TODO: Break up this function
-def _send_to_invalid_files_bucket(src_bucket: str, key: str, receipt_handle: str):
-    reject_reason = "Content-Type Validation Failure"
-    logger.warning(f"Rejecting the file, {key}: {reject_reason}")
-
+def process_invalid_file(bucket: str, key: str, receipt_handle: str):
     invalid_files_bucket = ssm_params["/pipeline/InvalidFilesBucketName"]
-    copied = copy_object(src_bucket, invalid_files_bucket, key, raise_error=False)  # noqa: E501
-    obj_location = invalid_files_bucket if copied else src_bucket
-    delete_object(src_bucket, key, raise_error=False)
+    logger.info(f"Copying {key} file to Invalid Files bucket: {invalid_files_bucket}")  # noqa: E501
+    copy_object(bucket, invalid_files_bucket, key)
 
-    try:
-        logger.info("Deleting the message from SQS queue and sending notification")  # noqa: E501
-        delete_av_scan_message(receipt_handle)
-        _send_file_rejected_sns_msg(obj_location, key, reject_reason)  # noqa: E501
-    except Exception as e:
-        logger.warning(e)
+    # Delete it from the ingestion bucket
+    delete_object(bucket, key)
+
+    delete_av_scan_message(receipt_handle)
+
+    _send_file_rejected_sns_msg(invalid_files_bucket, key)
 
 
-def _send_file_rejected_sns_msg(bucket: str, key: str, reject_reason: str):
+def _send_file_rejected_sns_msg(bucket: str, key: str):
     logger.info(f"Sending an SNS message regarding the rejected file: {key}")  # noqa: E501
     try:
         topic_arn = ssm_params["/pipeline/InvalidFilesTopicArn"]
+        subject = "Content-Type Validation Failure"
         message = (
             "A file has been rejected.\n\n"
             f"File: {key}\n"
             f"File Location: {bucket}/{key}\n"
-            f"Reject Reason: {reject_reason}\n"
+            f"Reject Reason: {subject}\n"
         )
-        publish_sns_message(topic_arn, message, reject_reason)
+        publish_sns_message(topic_arn, message, subject)
         # logger.info("Successfully sent the SNS message")
     except Exception as e:
         logger.error(f"Could not publish an SNS message: {e}")
