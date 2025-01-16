@@ -87,7 +87,7 @@ def _run_av_scan(key: str, file_path: str):
 
 
 def _send_file_quarantined_sns_msg(bucket: str, key: str, file_status: str, exit_status: int):
-    logger.info("Publishing SNS message for a quarantined file")
+    logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
     try:
         topic_arn = ssm_params["/pipeline/QuarantineTopicArn"]
         subject = "AV Scanning Failure"
