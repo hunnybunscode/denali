@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError  # type: ignore
 from config import approved_filetypes
 from config import exempt_file_types
 from config import mime_mapping
+from config import resource_suffix
 from config import ssm_params
 
 logger = logging.getLogger()
@@ -354,5 +355,5 @@ def delete_av_scan_message(receipt_handle: str):
     """
     Deletes the message from AV Scan Queue to stop other consumers from processing the message
     """
-    queue_url = ssm_params["/pipeline/AvScanQueueUrl"]
+    queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
     delete_sqs_message(queue_url, receipt_handle)

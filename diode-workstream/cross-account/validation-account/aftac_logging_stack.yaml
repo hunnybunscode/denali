@@ -1,6 +1,13 @@
+Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
 Resources:
-  logBucket:
+  LogBucket:
     Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -20,14 +27,11 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
-  logBucketPolicy:
+  LogBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: logBucket
+      Bucket: !Ref LogBucket
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -35,8 +39,8 @@ Resources:
             Principal: "*"
             Action: s3:*
             Resource:
-              - !Sub ${logBucket.Arn}
-              - !Sub ${logBucket.Arn}/*
+              - !Sub ${LogBucket.Arn}
+              - !Sub ${LogBucket.Arn}/*
             Condition:
               Bool:
                 aws:SecureTransport: false
@@ -50,52 +54,49 @@ Resources:
               - s3:ListBucket
               - s3:PutObject
             Resource:
-              - !Sub ${logBucket.Arn}
-              - !Sub ${logBucket.Arn}/*
+              - !Sub ${LogBucket.Arn}
+              - !Sub ${LogBucket.Arn}/*
 
   SftpServerLogGroup:
     Type: AWS::Logs::LogGroup
-    Properties:
-      RetentionInDays: 731
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 731
 
   ApiGatewayStageLogGroup:
     Type: AWS::Logs::LogGroup
-    Properties:
-      RetentionInDays: 731
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 731
 
   IngestWACLAccessLogGroup:
     Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: aws-waf-logs-ingest-api
-      RetentionInDays: 731
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 731
 
 Outputs:
   LogBucketExport:
     Description: Name of the S3 Logging Bucket
-    Value: !Ref logBucket
-    Export:
-      Name: aftac-pipeline-logBucket
+    Value: !Ref LogBucket
 
   SftpServerLogGroupExport:
     Description: ARN of the SFTP Server Log Group
     Value: !GetAtt SftpServerLogGroup.Arn
     Export:
-      Name: aftac-pipeline-SftpServerLogGroup
+      Name: !Sub aftac-pipeline-SftpServerLogGroup-${ResourceSuffix}
 
   ApiGatewayStageLogGroupARNExport:
     Description: Name of the API Gateway Stage Log Group
     Value: !GetAtt ApiGatewayStageLogGroup.Arn
     Export:
-      Name: aftac-pipeline-ApiGatewayStageLogGroup
+      Name: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
 
   IngestWACLAccessLogGroupExport:
     Description: Name of the Ingest WACL Access Log Group
     Value: !Ref IngestWACLAccessLogGroup
     Export:
-      Name: aftac-pipeline-IngestWACLAccessLogGroup
+      Name: !Sub aftac-pipeline-IngestWACLAccessLogGroup-${ResourceSuffix}

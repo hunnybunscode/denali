@@ -1,12 +1,14 @@
-#### Needs
-# Lambda Transfer Function
-# Lambda Role
-# Lambda Policy with Cross Account Access
-# Lambda Permission for SQS to Invoke Function
+# Update this as well with resource prefix and iam prefix
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
+      - Label:
+          default: General Parameters
+        Parameters:
+          - IamPrefix
+          - ResourceSuffix
+
       - Label:
           default: Resources from Validation Account
         Parameters:
@@ -35,6 +37,10 @@ Metadata:
           - DiodeSimulatorEndpoint
 
     ParameterLabels:
+      IamPrefix:
+        default: IAM Prefix
+      ResourceSuffix:
+        default: Resource Prefix
       DataTransferBucketName:
         default: Data Transfer Bucket Name
       DataTransferSqsQueueArn:
@@ -59,6 +65,21 @@ Metadata:
         default: Diode Simulator Endpoint
 
 Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain 
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
   DataTransferBucketName:
     Type: String
     Description: Name of the S3 data transfer bucket in the Validation Account
@@ -80,7 +101,7 @@ Parameters:
   TranferResultSqsQueueUrl:
     Type: String
     Description: URL of the Data Transfer Result SQS queue in the Validation Account
-    AllowedPattern: ^https:\/\/sqs\..+
+    AllowedPattern: ^https://sqs\..+
     ConstraintDescription: Must be a valid URL of the Data Transfer Result SQS queue in the Validation Account
 
   DataTransferLambdaStorageBucket:
@@ -119,7 +140,7 @@ Parameters:
   DiodeSimulatorEndpoint:
     Type: String
     Description: If using a Diode simulator, enter the simulator endpoint that starts with "http://"; otherwise, leave it blank.
-    AllowedPattern: ^$|^http:\/\/[a-zA-Z0-9-\.]+(:\d{1,5})?\/?$
+    AllowedPattern: ^$|^http://[a-zA-Z0-9-\.]+(:\d{1,5})?/?$
     ConstraintDescription: Must be either blank or a valid URL of the Diode simulator endpoint
 
 Conditions:
@@ -129,7 +150,7 @@ Resources:
   DataTransferLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AFC2S_DataTransferLambdaRole
+      RoleName: !Sub ${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -141,7 +162,7 @@ Resources:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
       Policies:
-        - PolicyName: AFC2S_DataTransferLambdaPolicy
+        - PolicyName: DataTransferLambdaPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -150,17 +171,14 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt DataTransferLambdaFunctionLogGroup.Arn
-
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:GetObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
-
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref TranferResultSqsQueueArn
-
               - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
@@ -175,13 +193,13 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      LogGroupName: /aws/lambda/AFC2S_DataTransferLambdaFunction
+      LogGroupName: !Sub /aws/lambda/DataTransferLambdaFunction-${ResourceSuffix}
       RetentionInDays: 90
 
   DataTransferLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: AFC2S_DataTransferLambdaFunction
+      FunctionName: !Sub DataTransferLambdaFunction-${ResourceSuffix}
       LoggingConfig:
         LogGroup: !Ref DataTransferLambdaFunctionLogGroup
       Handler: data_transfer.lambda_handler
@@ -254,6 +272,7 @@ Resources:
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
+      # KmsMasterKeyId: alias/aws/sqs
 
   TransferStatusQueuePolicy:
     Type: AWS::SQS::QueuePolicy

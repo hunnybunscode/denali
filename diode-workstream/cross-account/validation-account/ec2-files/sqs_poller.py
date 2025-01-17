@@ -5,6 +5,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 from config import approved_filetypes
 from config import file_handler_config
+from config import resource_suffix
 from config import ssm_params
 from utils import get_params_values
 from utils import receive_sqs_message
@@ -36,12 +37,12 @@ def main():
                 get_params_values(ssm_params)
                 approved_filetypes.clear()
                 approved_filetypes.extend([
-                    *(ssm_params["/pipeline/ApprovedFileTypes"].replace(".", "").replace(" ", "").split(",")),  # noqa: E501
-                    *(ssm_params["/pipeline/DfdlApprovedFileTypes"].replace(".", "").replace(" ", "").split(","))
+                    *(ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"].replace(".", "").replace(" ", "").split(",")),  # noqa: E501
+                    *(ssm_params[f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"].replace(".", "").replace(" ", "").split(","))
                 ])
                 clock = time.perf_counter()
 
-            messages = receive_sqs_message(ssm_params["/pipeline/AvScanQueueUrl"], 1)  # noqa: E501
+            messages = receive_sqs_message(ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"], 1)  # noqa: E501
             if not messages:
                 continue
 

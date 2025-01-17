@@ -9,7 +9,7 @@ Metadata:
           default: ""
         Parameters:
           - pIamPrefix
-          - pResourcePrefix
+          - pResourceSuffix
           - pSemVer
           - pParentImage
           - pLaunchTemplateId
@@ -20,8 +20,8 @@ Metadata:
     ParameterLabels:
       pIamPrefix:
         default: IAM Resource Prefix
-      pResourcePrefix:
-        default: Resource Prefix
+      pResourceSuffix:
+        default: Resource Suffix
       pSemVer:
         default: Semantic Version
       pParentImage:
@@ -43,12 +43,11 @@ Parameters:
     AllowedValues: [AFC2S]
     ConstraintDescription: Must be "AFC2S"
 
-  pResourcePrefix:
+  pResourceSuffix:
     Type: String
     Description: >-
-      Prefix added to the named AWS resources. It must start with a lowercase letter and contain 
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain 
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
-    Default: ec2-av-scanner
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
@@ -97,7 +96,7 @@ Resources:
   BuildComponentPython3AndPipInstall:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub ${pResourcePrefix}-python3-and-pip
+      Name: !Sub python3-and-pip-${pResourceSuffix}
       Description: Installs and upgrades Python3 and Pip
       Version: !Ref pSemVer
       Platform: Linux
@@ -146,7 +145,7 @@ Resources:
   BuildComponentPythonPackagesInstall:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub ${pResourcePrefix}-python-packages
+      Name: !Sub python-packages-${pResourceSuffix}
       Description: Installs Python packages
       Version: !Ref pSemVer
       Platform: Linux
@@ -190,7 +189,7 @@ Resources:
   BuildComponentS3Download:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub ${pResourcePrefix}-s3-download-overwrite
+      Name: !Sub s3-download-overwrite-${pResourceSuffix}
       Description: Downloads files from S3 to a local path, overwriting any existing files
       Version: !Ref pSemVer
       Platform: Linux
@@ -231,7 +230,7 @@ Resources:
   BuildComponentEnableSQSPollerService:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub ${pResourcePrefix}-enable-sqs-poller-service
+      Name: !Sub enable-sqs-poller-service-${pResourceSuffix}
       Description: Enables SQS poller service
       Version: !Ref pSemVer
       Platform: Linux
@@ -261,7 +260,7 @@ Resources:
   BuildComponentEnableCloudWatchAgent:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub ${pResourcePrefix}-enable-cloudwatch-agent
+      Name: !Sub enable-cloudwatch-agent-${pResourceSuffix}
       Description: Enables CloudWatch Agent
       Version: !Ref pSemVer
       Platform: Linux
@@ -291,7 +290,7 @@ Resources:
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
   #   Properties:
-  #     Name: !Sub ${pResourcePrefix}-test-component
+  #     Name: !Sub test-component-${pResourceSuffix}
   #     Description: Dummy description
   #     #############################################
   #     # Update Version and ChangeDescription when any changes are made to this resource #
@@ -320,7 +319,7 @@ Resources:
   ImageRecipe:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
-      Name: !Sub ${pResourcePrefix}-image-recipe
+      Name: !Sub image-recipe-${pResourceSuffix}
       Version: !Ref pSemVer
       # Description: Testing ec2 scanner recipe
       ParentImage: !Ref pParentImage
@@ -376,7 +375,7 @@ Resources:
   InfraConfig:
     Type: AWS::ImageBuilder::InfrastructureConfiguration
     Properties:
-      Name: !Sub ${pResourcePrefix}-infra-config
+      Name: !Sub infra-config-${pResourceSuffix}
       InstanceMetadataOptions:
         HttpTokens: required
         HttpPutResponseHopLimit: 1
@@ -401,7 +400,7 @@ Resources:
   ImageBuilderImagePipeline:
     Type: AWS::ImageBuilder::ImagePipeline
     Properties:
-      Name: !Sub ${pResourcePrefix}-image-pipeline
+      Name: !Sub image-pipeline-${pResourceSuffix}
       Status: ENABLED
       EnhancedImageMetadataEnabled: true # default value is true
       ImageRecipeArn: !Ref ImageRecipe
@@ -422,7 +421,7 @@ Resources:
   ImageBuilderDistroConfig:
     Type: AWS::ImageBuilder::DistributionConfiguration
     Properties:
-      Name: !Sub ${pResourcePrefix}-distro-config
+      Name: !Sub distro-config-${pResourceSuffix}
       Distributions:
         - LaunchTemplateConfigurations:
             - AccountId: !Ref AWS::AccountId
@@ -491,13 +490,13 @@ Resources:
   ImageBuilderInfraInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub ${pIamPrefix}-${pResourcePrefix}-image-builder-infra-instance-profile
+      InstanceProfileName: !Sub ${pIamPrefix}-image-builder-infra-instance-profile-${pResourceSuffix}
       Roles: [!Ref ImageBuilderInfraInstanceRole]
 
   ImageBuilderInfraInstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${pIamPrefix}-${pResourcePrefix}-image-builder-infra-instance-role
+      RoleName: !Sub ${pIamPrefix}-image-builder-infra-instance-role-${pResourceSuffix}
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -539,7 +538,7 @@ Resources:
     Condition: IsEmailAddressProvided
     Properties:
       DisplayName: ImageBuilder Event Notification
-      # KmsMasterKeyId: String
+      KmsMasterKeyId: alias/aws/sns
 
   ImageBuilderNotificationTopicSubscription:
     Type: AWS::SNS::Subscription
@@ -604,7 +603,7 @@ Resources:
           #   Condition:
           #     ArnEquals:
           #       kms:EncryptionContext:aws:logs:arn:
-          #         - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${pResourcePrefix}-Lambda
+          #         - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${pResourceSuffix}-Lambda
           # - Sid: Allow service principal to use the key
           #   Effect: Allow
           #   Principal:
@@ -618,7 +617,7 @@ Resources:
   # BuildWorkflow:
   #   Type: AWS::ImageBuilder::Workflow
   #   Properties:
-  #     Name: !Sub ${pResourcePrefix}-build-workflow
+  #     Name: !Sub ${pResourceSuffix}-build-workflow
   #     Type: BUILD # BUILD | TEST | DISTRIBUTION
   #     # KmsKeyId: String
   #     #############################################
@@ -691,7 +690,7 @@ Resources:
   # TestWorkflow:
   #   Type: AWS::ImageBuilder::Workflow
   #   Properties:
-  #     Name: !Sub ${pResourcePrefix}-test-workflow
+  #     Name: !Sub ${pResourceSuffix}-test-workflow
   #     # Description: ec2-scanner-workflow description
   #     Type: TEST
   #     # KmsKeyId: String

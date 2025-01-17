@@ -1,6 +1,30 @@
 ## Deployed Successfully but need to limit the SG Ingress CIDR
 
 Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
+  VpcId:
+    Type: String
+    Description: VPC ID for AFTAC Cloud
+
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: Subnet IDs for Lambda function
+
+  SftpServerSubnetIds:
+    Type: CommaDelimitedList
+    Description: Subnet IDs for SFTP server
+
+  LambdaStorageBucket:
+    Type: String
+    Description: S3 Bucket for Lambda Storage
+
+  ObjectTaggerLambdaCodeKey:
+    Type: String
+    Description: S3 Key for Lambda Code
+
   SftpUserName:
     Type: String
     Description: Username for SFTP user
@@ -12,14 +36,6 @@ Parameters:
   TransferLoggingRoleArn:
     Type: String
     Description: Role ARN for Transfer logging
-
-  AftacVpcId:
-    Type: String
-    Description: VPC ID for AFTAC Cloud
-
-  SftpServerSubnetIds:
-    Type: CommaDelimitedList
-    Description: Subnet IDs for SFTP server
 
   SftpBucketDataOwner:
     Type: String
@@ -33,21 +49,9 @@ Parameters:
     Type: String
     Description: Key Owner for SFTP bucket
 
-  LambdaStorageBucket:
-    Type: String
-    Description: S3 Bucket for Lambda Storage
-
   ObjectTaggerRoleARN:
     Type: String
     Description: Role ARN for Object Tagger
-
-  PrivateSubnetIds:
-    Type: CommaDelimitedList
-    Description: Subnet IDs for Lambda function
-
-  ObjectTaggerLambdaCodeKey:
-    Type: String
-    Description: S3 Key for Lambda Code
 
 Resources:
   SftpFunctionSecurityGroup:
@@ -58,25 +62,27 @@ Resources:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
           IpProtocol: "-1"
-      VpcId: !Ref AftacVpcId
+      VpcId: !Ref VpcId
+
   #### Fix This
   SftpBucketObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ObjectTaggerLambdaCodeKey
+      FunctionName: !Sub sftp-bucket-object-tagger-${ResourceSuffix}
+      Handler: object_tagger.lambda_handler
+      Role: !Ref ObjectTaggerRoleARN
+      Runtime: python3.11
+      Timeout: 30
       Environment:
         Variables:
           DATA_OWNER: !Ref SftpBucketDataOwner
           GOV_POC: !Ref SftpBucketGovPoc
           KEY_OWNER: !Ref SftpBucketKeyOwner
-          QUEUE_URL: !ImportValue aftac-pipeline-av-scan-queue
-      FunctionName: sftp-bucket-object-tagger
-      Handler: object_tagger.lambda_handler
-      Role: !Ref ObjectTaggerRoleARN
-      Runtime: python3.11
-      Timeout: 30
+          QUEUE_URL:
+            Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref ObjectTaggerLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref SftpFunctionSecurityGroup
@@ -85,9 +91,9 @@ Resources:
   SftpBucketObjectTaggerPermissions:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
       FunctionName: !Ref SftpBucketObjectTagger
       Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
       SourceAccount: !Ref AWS::AccountId
 
   SftpBucket:
@@ -106,32 +112,30 @@ Resources:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
             Function: !GetAtt SftpBucketObjectTagger.Arn
-    DependsOn: SftpBucketObjectTagger
 
   SftpBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: SftpBucket
+      Bucket: !Ref SftpBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: "false"
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${SftpBucket.Arn}
               - !Sub ${SftpBucket.Arn}/*
-        Version: "2012-10-17"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
 
   SftpServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security Group for SFTP Server
-      VpcId: !Ref AftacVpcId
+      VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
@@ -149,7 +153,7 @@ Resources:
   ElasticIpTwo:
     Type: AWS::EC2::EIP
 
-  sftpServer:
+  SftpServer:
     Type: AWS::Transfer::Server
     Properties:
       EndpointType: VPC
@@ -157,19 +161,19 @@ Resources:
         SecurityGroupIds:
           - !Ref SftpServerSecurityGroup
         SubnetIds: !Ref SftpServerSubnetIds
-        AddressAllocationIds: #must match the length of the list of subnet ids)
+        AddressAllocationIds: # Must match the length of the list of subnet ids)
           - !GetAtt ElasticIpOne.AllocationId
           - !GetAtt ElasticIpTwo.AllocationId
-        VpcId: !Ref AftacVpcId
+        VpcId: !Ref VpcId
       IdentityProviderType: SERVICE_MANAGED
       LoggingRole: !Ref TransferLoggingRoleArn
       StructuredLogDestinations:
-        - Fn::ImportValue: aftac-pipeline-SftpServerLogGroup
+        - Fn::ImportValue: !Sub aftac-pipeline-SftpServerLogGroup-${ResourceSuffix}
 
   TransferUser:
     Type: AWS::Transfer::User
     Properties:
-      ServerId: !GetAtt sftpServer.ServerId
+      ServerId: !GetAtt SftpServer.ServerId
       UserName: !Ref SftpUserName
       HomeDirectoryType: PATH
       HomeDirectory: !Sub /${SftpBucket}/${SftpUserName}
@@ -178,8 +182,9 @@ Resources:
 Outputs:
   S3BucketName:
     Value: !Ref SftpBucket
+
   SFTPHostName:
-    Value: !GetAtt sftpServer.ServerId
+    Value: !GetAtt SftpServer.ServerId
+
   SFTPUserName:
     Value: !Ref SftpUserName
-##### Create S3 SFTP Server #### 2/14
