@@ -202,6 +202,15 @@ Conditions:
 Resources:
   SimulatorLogGroup:
     Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158 # Ensure that CloudWatch Log Group is encrypted by KMS
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84 # CloudWatchLogs LogGroup should specify a KMS Key Id to encrypt the log data
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -222,6 +231,21 @@ Resources:
 
   LowSideBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18 # Ensure the S3 bucket has access logging enabled
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35 # S3 Bucket should have access logging configured
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W41 # S3 Bucket should have encryption option set
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W51 # S3 bucket should likely have a bucket policy
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     Properties:
       BucketName:
@@ -238,6 +262,21 @@ Resources:
 
   HighSideBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18 # Ensure the S3 bucket has access logging enabled
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35 # S3 Bucket should have access logging configured
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W41 # S3 Bucket should have encryption option set
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W51 # S3 bucket should likely have a bucket policy
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     Properties:
       BucketName:
@@ -259,6 +298,21 @@ Resources:
   # add a bucket that is internal to the simulator to store manifests if using the SWAMS service
   ManifestGeneratorBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18 # Ensure the S3 bucket has access logging enabled
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35 # S3 Bucket should have access logging configured
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W41 # S3 Bucket should have encryption option set
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W51 # S3 bucket should likely have a bucket policy
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     Properties:
       OwnershipControls:
@@ -273,6 +327,21 @@ Resources:
 
   TransferTable:
     Type: AWS::DynamoDB::Table
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_119 # Ensure DynamoDB Tables are encrypted using a KMS Customer Managed CMK
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_28 # Ensure DynamoDB point in time recovery (backup) is enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W73 # DynamoDB table should have billing mode set to either PAY_PER_REQUEST or PROVISIONED
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W74 # DynamoDB table should have encryption enabled using a CMK stored in KMS
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W78 # DynamoDB table should have backup enabled, should be set using PointInTimeRecoveryEnabled
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -288,6 +357,21 @@ Resources:
 
   MappingTable:
     Type: AWS::DynamoDB::Table
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_119 # Ensure DynamoDB Tables are encrypted using a KMS Customer Managed CMK
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_28 # Ensure DynamoDB point in time recovery (backup) is enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W73 # DynamoDB table should have billing mode set to either PAY_PER_REQUEST or PROVISIONED
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W74 # DynamoDB table should have encryption enabled using a CMK stored in KMS
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W78 # DynamoDB table should have backup enabled, should be set using PointInTimeRecoveryEnabled
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -303,6 +387,21 @@ Resources:
 
   ManifestTable:
     Type: AWS::DynamoDB::Table
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_119 # Ensure DynamoDB Tables are encrypted using a KMS Customer Managed CMK
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_28 # Ensure DynamoDB point in time recovery (backup) is enabled
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W73 # DynamoDB table should have billing mode set to either PAY_PER_REQUEST or PROVISIONED
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W74 # DynamoDB table should have encryption enabled using a CMK stored in KMS
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W78 # DynamoDB table should have backup enabled, should be set using PointInTimeRecoveryEnabled
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -402,6 +501,11 @@ Resources:
 
   EC2EnvironmentAccessPolicy:
     Type: AWS::IAM::Policy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12 # IAM policy should not allow * resource
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       PolicyName: !Sub ${AWS::StackName}-AWSEC2EnvironmentAccess
       PolicyDocument:
@@ -493,6 +597,11 @@ Resources:
 
   S3ManifestGeneratorGeneralAccessPolicy:
     Type: AWS::IAM::Policy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F4 # IAM policy should not allow * action
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       PolicyName: !Sub ${AWS::StackName}-SimulatorS3BucketForManifestGeneratorAccess
       PolicyDocument:
@@ -549,6 +658,11 @@ Resources:
 
   CloudWatchEventsAccessPolicy:
     Type: AWS::IAM::Policy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12 # IAM policy should not allow * resource
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       PolicyName: !Sub ${AWS::StackName}-CloudWatchEventsLimitedAccess
       PolicyDocument:
@@ -590,6 +704,11 @@ Resources:
 
   SimulatorClientSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F1000 # Missing egress rule means all traffic is allowed outbound.  Make this explicit if it is desired configuration
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       GroupDescription: Enable client access to simulator
       VpcId: !If
@@ -599,6 +718,17 @@ Resources:
 
   SimulatorEC2ServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_23 # Ensure every security groups rule has a description
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: F1000 # Missing egress rule means all traffic is allowed outbound.  Make this explicit if it is desired configuration
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W36 # Security group rules without a description obscure their purpose and may lead to bad practices in ensuring they only allow traffic from the ports and sources/destinations required.
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       GroupDescription: Enable SSH access and simulator access
       VpcId: !If
@@ -888,6 +1018,11 @@ Resources:
 
   CloudWatchEventsQueuePolicy:
     Type: AWS::SQS::QueuePolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F21 # SQS Queue policy should not allow * principal
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       Queues:
         - !Ref CloudWatchEventsQueue
@@ -942,6 +1077,15 @@ Resources:
   # We cheat by creating a log group of the same name that lambda would create, so we can set a retention policy
   LambdaControllerCwatchLogGroup:
     Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158 # Ensure that CloudWatch Log Group is encrypted by KMS
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84 # CloudWatchLogs LogGroup should specify a KMS Key Id to encrypt the log data
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -967,6 +1111,25 @@ Resources:
 
   ControllerLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_115 # Ensure that AWS Lambda function is configured for function-level concurrent execution limit
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_116 # Ensure that AWS Lambda function is configured for a Dead Letter Queue(DLQ)
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_117 # Ensure that AWS Lambda function is configured inside a VPC
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_173 # Check encryption settings for Lambda environment variable
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W92 # Lambda functions should define ReservedConcurrentExecutions to reserve simultaneous executions
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       Code:
         S3Bucket: !Ref SoftwareDeploymentPackageBucketName
@@ -984,6 +1147,15 @@ Resources:
 
   LambdaCalculatorCwatchLogGroup:
     Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158 # Ensure that CloudWatch Log Group is encrypted by KMS
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84 # CloudWatchLogs LogGroup should specify a KMS Key Id to encrypt the log data
+            reason: Template provided by the Diode service team for Diode simulator
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -992,6 +1164,25 @@ Resources:
 
   CalculatorLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_115 # Ensure that AWS Lambda function is configured for function-level concurrent execution limit
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_116 # Ensure that AWS Lambda function is configured for a Dead Letter Queue(DLQ)
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_117 # Ensure that AWS Lambda function is configured inside a VPC
+            comment: Template provided by the Diode service team for Diode simulator
+          - id: CKV_AWS_173 # Check encryption settings for Lambda environment variable
+            comment: Template provided by the Diode service team for Diode simulator
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: Template provided by the Diode service team for Diode simulator
+          - id: W92 # Lambda functions should define ReservedConcurrentExecutions to reserve simultaneous executions
+            reason: Template provided by the Diode service team for Diode simulator
     Properties:
       Code:
         S3Bucket: !Ref SoftwareDeploymentPackageBucketName
