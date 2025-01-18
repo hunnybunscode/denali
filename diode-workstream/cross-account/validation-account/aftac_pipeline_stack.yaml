@@ -1,6 +1,34 @@
 Parameters:
-  PipelineAmiId:
+  IamPrefix:
     Type: String
+    Description: Prefix added to all IAM resources
+
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
+  VpcId:
+    Type: String
+    Description: The VPC ID to use for the pipeline
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the existing VPC
+
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: The list of private subnet IDs to use for the pipeline
+
+  LambdaStorageBucket:
+    Type: String
+    Description: The S3 bucket to store the lambda code in
+
+  TransferResultLambdaCodeKey:
+    Type: String
+    Description: The S3 key of the pipeline lambda code
+
+  PipelineAmiId:
+    Type: AWS::EC2::Image::Id
     Description: The AMI ID to use for the pipeline
     AllowedPattern: ^ami-[0-9a-f]{17}$
     ConstraintDescription: Must be a valid AMI ID
@@ -11,33 +39,9 @@ Parameters:
     AllowedPattern: ^\d{12}$
     ConstraintDescription: Must be a valid AWS Account ID
 
-  VpcCidr:
-    Type: String
-    Description: The CIDR block of the existing VPC
-
   Ec2ScannerInstanceProfileARN:
     Type: String
     Description: The ARN of the EC2 Scanner Role
-
-  PrivateSubnetIds:
-    Type: CommaDelimitedList
-    Description: The list of private subnet IDs to use for the pipeline
-
-  AftacVpcId:
-    Type: String
-    Description: The VPC ID to use for the pipeline
-
-  LambdaStorageBucket:
-    Type: String
-    Description: The S3 bucket to store the lambda code in
-
-  TransferResultLambdaCodeKey:
-    Type: String
-    Description: The S3 key of the pipeline lambda code
-
-  TransferResultServiceRole:
-    Type: String
-    Description: The ARN of the IAM role for the Transfer Result Lambda
 
   ApprovedFileTypes:
     Type: String
@@ -47,14 +51,13 @@ Parameters:
     Type: String
     Description: The list of approved file types for DFDL
 
+  TransferResultServiceRole:
+    Type: String
+    Description: The ARN of the IAM role for the Transfer Result Lambda
+
   DiodeSimulatorInstanceRole:
     Type: String
     Description: ARN of the IAM role associated with the Diode Simulator instance profile
-    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
-
-  # LambdaMappingRoleArn:
-  #   Type: String
-  #   Description: The ARN of the Lambda Mapping Role
 
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
@@ -62,7 +65,12 @@ Conditions:
 Resources:
   LongTermStorageBucket:
     Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -78,84 +86,88 @@ Resources:
                 StorageClass: GLACIER_IR
               - TransitionInDays: 120
                 StorageClass: GLACIER
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
   LongTermStorageBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref LongTermStorageBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${LongTermStorageBucket.Arn}
               - !Sub ${LongTermStorageBucket.Arn}/*
-        Version: 2012-10-17
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
   QuarantineBucket:
     Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
   QuarantineBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref QuarantineBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${QuarantineBucket.Arn}
               - !Sub ${QuarantineBucket.Arn}/*
-        Version: 2012-10-17
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
   InvalidFilesBucket:
     Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
   InvalidFilesBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref InvalidFilesBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${InvalidFilesBucket.Arn}
               - !Sub ${InvalidFilesBucket.Arn}/*
-        Version: 2012-10-17
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
   PipelineFunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -165,7 +177,7 @@ Resources:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
           IpProtocol: "-1"
-      VpcId: !Ref AftacVpcId
+      VpcId: !Ref VpcId
 
   AvScanSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -179,7 +191,7 @@ Resources:
         - CidrIp: !Ref VpcCidr
           Description: Permit Access from VPC
           IpProtocol: "-1"
-      VpcId: !Ref AftacVpcId
+      VpcId: !Ref VpcId
 
   InfectedFileTopic:
     Type: AWS::SNS::Topic
@@ -218,6 +230,9 @@ Resources:
 
   PipelineAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
@@ -225,14 +240,11 @@ Resources:
         Version: !GetAtt AutoScalingGroupLaunchTemplate.DefaultVersionNumber
       MaxSize: "12"
       MinSize: "2"
+      VPCZoneIdentifier: !Ref PrivateSubnetIds
       Tags:
         - Key: Name
           PropagateAtLaunch: true
           Value: ValidationPipeline/AutoScalingGroup
-      VPCZoneIdentifier: !Ref PrivateSubnetIds
-    UpdatePolicy:
-      AutoScalingScheduledAction:
-        IgnoreUnmodifiedGroupSizeProperties: true
 
   AsgScaleUpAction:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -269,7 +281,8 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: QueueName
-          Value: !ImportValue aftac-pipeline-av-scan-queue-name
+          Value:
+            Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
@@ -277,42 +290,47 @@ Resources:
       Statistic: Average
       Threshold: 50
 
-  failedtransferbucket:
+  FailedTransferBucket:
     Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
-  failedtransferbucketPolicy:
+  FailedTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref failedtransferbucket
+      Bucket: !Ref FailedTransferBucket
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${FailedTransferBucket.Arn}
+              - !Sub ${FailedTransferBucket.Arn}/*
             Condition:
               Bool:
                 aws:SecureTransport: false
-            Effect: Deny
-            Principal:
-              AWS: "*"
-            Resource:
-              - !Sub ${failedtransferbucket.Arn}
-              - !Sub ${failedtransferbucket.Arn}/*
-        Version: 2012-10-17
 
-  transferdlq:
+  # TODO: Implement a way to replay messages in DLQ
+  TransferDlq:
     Type: AWS::SQS::Queue
-    Properties:
-      MessageRetentionPeriod: 345600 # Default value (4 days)
-      KmsMasterKeyId: alias/aws/sqs
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
 
   FailedTransferTopic:
     Type: AWS::SNS::Topic
@@ -323,21 +341,21 @@ Resources:
   TransferResultLambda:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref TransferResultLambdaCodeKey
+      FunctionName: !Sub Transfer-Result-lambda-${ResourceSuffix}
+      Handler: transfer_result.lambda_handler
+      Role: !Ref TransferResultServiceRole
+      Runtime: python3.11
+      Timeout: 15
       Environment:
         Variables:
           FAILED_TRANSFER_TOPIC_ARN: !GetAtt FailedTransferTopic.TopicArn
           DATA_TRANSFER_BUCKET: !Ref DataTransferBucket
           DYNAMODB_TABLE_NAME: !Ref TransferStatusTable
-          FAILED_TRANSFER_BUCKET: !Ref failedtransferbucket
+          FAILED_TRANSFER_BUCKET: !Ref FailedTransferBucket
           ACCOUNT_ID: !Ref AWS::AccountId
-      FunctionName: Transfer-Result-lambda
-      Handler: transfer_result.lambda_handler
-      Role: !Ref TransferResultServiceRole
-      Runtime: python3.11
-      Timeout: 15
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref TransferResultLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref PipelineFunctionSecurityGroup
@@ -349,18 +367,19 @@ Resources:
       EventSourceArn: !GetAtt TransferResultQueue.Arn
       FunctionName: !Ref TransferResultLambda
 
-  transferqueue:
+  TransferQueue:
     Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
+      # KmsMasterKeyId: alias/aws/sqs
       RedrivePolicy:
-        deadLetterTargetArn: !GetAtt transferdlq.Arn
+        deadLetterTargetArn: !GetAtt TransferDlq.Arn
         maxReceiveCount: 1
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
-  transferqueuePolicy:
+  TransferQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       PolicyDocument:
@@ -369,7 +388,7 @@ Resources:
           - Effect: Deny
             Principal: "*"
             Action: sqs:*
-            Resource: !GetAtt transferqueue.Arn
+            Resource: !GetAtt TransferQueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
@@ -377,7 +396,7 @@ Resources:
             Principal:
               Service: s3.amazonaws.com
             Action: sqs:SendMessage
-            Resource: !GetAtt transferqueue.Arn
+            Resource: !GetAtt TransferQueue.Arn
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
@@ -390,20 +409,24 @@ Resources:
               - sqs:ReceiveMessage
               - sqs:DeleteMessage
               - sqs:GetQueueAttributes
-            Resource: !GetAtt transferqueue.Arn
+            Resource: !GetAtt TransferQueue.Arn
             Condition:
               ArnEquals:
-                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
       Queues:
-        - !Ref transferqueue
+        - !Ref TransferQueue
 
   TransferResultQueue:
     Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
+      # KmsMasterKeyId: alias/aws/sqs
+      # RedrivePolicy:
+      #   deadLetterTargetArn: String
+      #   maxReceiveCount: 1
 
   TransferResultQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -414,7 +437,7 @@ Resources:
           - Effect: Deny
             Principal: "*"
             Action: sqs:*
-            Resource: !GetAtt transferqueue.Arn
+            Resource: !GetAtt TransferResultQueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
@@ -425,7 +448,7 @@ Resources:
             Resource: !GetAtt TransferResultQueue.Arn
             Condition:
               ArnEquals:
-                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
       Queues:
         - !Ref TransferResultQueue
 
@@ -473,10 +496,13 @@ Resources:
 
   DataTransferBucket:
     Type: AWS::S3::Bucket
-    DependsOn: transferqueuePolicy
+    DependsOn: TransferQueuePolicy
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -485,7 +511,7 @@ Resources:
       NotificationConfiguration:
         QueueConfigurations:
           - Event: s3:ObjectCreated:*
-            Queue: !GetAtt transferqueue.Arn
+            Queue: !GetAtt TransferQueue.Arn
 
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -512,9 +538,7 @@ Resources:
             Resource: !Sub ${DataTransferBucket.Arn}/*
             Condition:
               ArnEquals:
-                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/AFC2S_DataTransferLambdaRole
-
-          ##### THE BELOW LINES ARE ONLY USED FOR THE DIODE SIMULATOR
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
           - !If
             - UseDiodeSimulator
             - Sid: AllowS3PermissionsForDiodeSimulatorInstance
@@ -527,228 +551,83 @@ Resources:
               Resource: !Sub ${DataTransferBucket.Arn}/*
             - !Ref AWS::NoValue
 
-          # The Below Lines required the Lambda Mapping Role ARN
-          # Has not been tested yet...
-          # - Action:
-          #   - s3:GetObject
-          #   - s3:GetObjectTagging
-          #   Effect: Allow
-          #   Principal:
-          #     AWS: !Ref LambdaMappingRoleArn
-          #   Resource:
-          #     - Fn::GetAtt:
-          #         - DataTransferBucket
-          #         - Arn
-          #     - Fn::Join:
-          #         - ""
-          #         - - Fn::GetAtt:
-          #               - DataTransferBucket
-          #               - Arn
-          #           - /*
-
   ApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/ApprovedFileTypes-${ResourceSuffix}
       Description: Filetypes which are authorized for low to high transfer
-      Name: /pipeline/ApprovedFileTypes
       Type: StringList
       Value: !Ref ApprovedFileTypes
 
   DfdlApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/DfdlApprovedFileTypes-${ResourceSuffix}
       Description: Filetypes which are authorized for low to high transfer after DFDL Conversion
-      Name: /pipeline/DfdlApprovedFileTypes
       Type: StringList
       Value: !Ref DfdlApprovedFileTypes
 
   InvalidFilesBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/InvalidFilesBucketName-${ResourceSuffix}
       Description: Name of the Bucket where files which fail content-type validation are stored
-      Name: /pipeline/InvalidFilesBucketName
       Type: String
       Value: !Ref InvalidFilesBucket
 
   InvalidFilesTopicArnParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/InvalidFilesTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which fail content-type validation are published to.
-      Name: /pipeline/InvalidFilesTopicArn
       Type: String
       Value: !GetAtt InvalidFilesTopic.TopicArn
 
   DataTransferIngestBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/DataTransferIngestBucketName-${ResourceSuffix}
       Description: Name of the bucket where files are staged for diode processing
-      Name: /pipeline/DataTransferIngestBucketName
       Type: String
       Value: !Ref DataTransferBucket
 
   QuarantineBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/QuarantineBucketName-${ResourceSuffix}
       Description: Name of the Bucket where files which are deemed to potentially contain malware are stored
-      Name: /pipeline/QuarantineBucketName
       Type: String
       Value: !Ref QuarantineBucket
-
-  ## Not used; S3 bucket sends events directly to the transfer queue
-  # DataTransferQueueURLParameter:
-  #   Type: AWS::SSM::Parameter
-  #   Properties:
-  #     Description: URL of the SQS Queue which manages the diode transfer
-  #     Name: /pipeline/DataTransferQueueUrl
-  #     Type: String
-  #     Value: !GetAtt transferqueue.QueueUrl
 
   LongTermStorageBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/LongTermStorageBucketName-${ResourceSuffix}
       Description: Name of the Archive Bucket
-      Name: /pipeline/LongTermStorageBucketName
       Type: String
       Value: !Ref LongTermStorageBucket
 
   QuarantineTopicARNParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/QuarantineTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which are deemed to potentially contain malware are published to.
-      Name: /pipeline/QuarantineTopicArn
       Type: String
       Value: !GetAtt InfectedFileTopic.TopicArn
 
-# ######## CUSTOM RESOURCES TO ADD EVENT NOTIFICATION
-#   CustomResourceRole:
-#     Type: AWS::IAM::Role
-#     Properties:
-#       #PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/ProjAdminPolicy
-#       AssumeRolePolicyDocument:
-#         Statement:
-#           - Action: sts:AssumeRole
-#             Effect: Allow
-#             Principal:
-#               Service: lambda.amazonaws.com
-#         Version: '2012-10-17'
-#       RoleName: AFC2S_CustomResourceRole
-
-#   CustomResourcePolicy:
-#     Type: AWS::IAM::ManagedPolicy
-#     Properties:
-#       Description: ''
-#       Path: /
-#       PolicyDocument:
-#         Statement:
-#           - Action: lambda:InvokeFunction
-#             Effect: Allow
-#             Resource: '*'
-#         Version: '2012-10-17'
-#       ManagedPolicyName: AFC2S_CustomResourcePolicy
-#       Roles:
-#         - !Ref CustomResourceRole
-
-#   EventNotificationRole:
-#     Type: AWS::IAM::Role
-#     Properties:
-#       #PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/ProjAdminPolicy
-#       AssumeRolePolicyDocument:
-#         Statement:
-#           - Action: sts:AssumeRole
-#             Effect: Allow
-#             Principal:
-#               Service: lambda.amazonaws.com
-#         Version: '2012-10-17'
-#       ManagedPolicyArns:
-#         - !Join
-#           - ''
-#           - - 'arn:'
-#             - !Ref AWS::Partition
-#             - ':iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-#       RoleName: AFC2S_EventNotificationRole
-
-#   EventNotificationFunctionPolicy:
-#     Type: AWS::IAM::ManagedPolicy
-#     Properties:
-#       Description: ''
-#       Path: /
-#       PolicyDocument:
-#         Statement:
-#           - Action:
-#               - lambda:AddPermission
-#               - s3:PutBucketNotification
-#             Effect: Allow
-#             Resource: '*'
-#         Version: '2012-10-17'
-#       ManagedPolicyName: AFC2S_EventNotificationFunctionPolicy
-#       Roles:
-#         - !Ref EventNotificationRole
-
-#   AddEventNotificationFunction:
-#     Type: AWS::Lambda::Function
-#     Properties:
-#       Code:
-#         S3Bucket: !Ref LambdaStorageBucket
-#         S3Key: !Ref AddEventNotificationCodeKey
-#       Handler: event_notification.lambda_handler
-#       Role: !GetAtt EventNotificationRole.Arn
-#       Runtime: python3.11
-#       Timeout: 15
-#     DependsOn:
-#       - EventNotificationRole
-
-#   CustomResourceOne:
-#     Type: Custom::AWS
-#     Properties:
-#       ServiceToken: !GetAtt CustomResourceFunction.Arn
-#       Create:
-#         - !Join
-#           - ''
-#           - - '{"action":"invoke","service":"Lambda","parameters":{"FunctionName":"'
-#             - !Ref AddEventNotificationFunction
-#             - '","InvocationType":"RequestResponse","Payload":"{\"BUCKET_NAME\":\"'
-#             - !ImportValue aftac-pipeline-IngestBucket1
-#             - '\",\"LAMBDA_FUNCTION_ARN\":\"'
-#             - !GetAtt bucket1ObjectTagger.Arn
-#             - '\"}"},"physicalResourceId":{"id":"CustomResourceOne"},"logApiResponseData":true}'
-#       InstallLatestAwsSdk: false
-#     UpdateReplacePolicy: Delete
-#     DeletionPolicy: Delete
-
-#   CustomResourceFunction:
-#     Type: AWS::Lambda::Function
-#     Properties:
-#       Code:
-#         S3Bucket: !Ref LambdaStorageBucket
-#         S3Key: !Ref CustomResourceCodeKey
-#       Handler: index.handler
-#       Role: !GetAtt CustomResourceRole.Arn
-#       Runtime: nodejs18.x
-#       Timeout: 120
-#     DependsOn:
-#       - CustomResourceRole
-
-#   CustomResourceTwo:
-#     Type: Custom::AWS
-#     Properties:
-#       ServiceToken: !GetAtt CustomResourceFunction.Arn
-#       Create:
-#         - !Join
-#           - ''
-#           - - '{"action":"invoke","service":"Lambda","parameters":{"FunctionName":"'
-#             - !Ref AddEventNotificationFunction
-#             - '","InvocationType":"RequestResponse","Payload":"{\"BUCKET_NAME\":\"'
-#             - !ImportValue aftac-pipeline-IngestBucket2
-#             - '\",\"LAMBDA_FUNCTION_ARN\":\"'
-#             - !GetAtt bucket2ObjectTagger.Arn
-#             - '\"}"},"physicalResourceId":{"id":"CustomResourceTwo"},"logApiResponseData":true}'
-#       InstallLatestAwsSdk: false
-#     UpdateReplacePolicy: Delete
-#     DeletionPolicy: Delete
-
 Outputs:
-  PipelineSecurityGroupExport:
-    Description: Security Group ID of the pipeline function
-    Value: !Ref PipelineFunctionSecurityGroup
-    Export:
-      Name: aftac-pipeline-security-group
+  DataTransferBucketName:
+    Description: Data Transfer Bucket Name
+    Value: !Ref DataTransferBucket
+
+  DataTransferSqsQueueArn:
+    Description: Data Transfer SQS Queue ARN
+    Value: !GetAtt TransferQueue.Arn
+
+  DataTransferResultSqsQueueArn:
+    Description: Data Transfer Result SQS Queue ARN
+    Value: !GetAtt TransferResultQueue.Arn
+
+  DataTransferResultSqsQueueUrl:
+    Description: Data Transfer Result SQS Queue URL
+    Value: !Ref TransferResultQueue

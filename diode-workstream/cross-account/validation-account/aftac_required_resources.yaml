@@ -8,49 +8,45 @@ Metadata:
           default: ""
         Parameters:
           - VpcId
-          - ExistingVpcCidr
+          - VpcCidr
           - PrivateSubnetIds
           - PrivateRouteTableIds
 
     ParameterLabels:
       VpcId:
         default: VPC ID
-      PrivateRouteTableIds:
-        default: Private Route Table IDs
+      VpcCidr:
+        default: VPC CIDR
       PrivateSubnetIds:
         default: Private Subnet IDs
-      ExistingVpcCidr:
-        default: Existing VPC CIDR
+      PrivateRouteTableIds:
+        default: Private Route Table IDs
 
 Parameters:
   VpcId:
-    Type: String
-    Description: VPC ID for AFTAC VPC
-    Default: vpc-048daa85d41f50b10
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
     AllowedPattern: ^vpc-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid VPC ID.
 
-  PrivateRouteTableIds:
-    Type: CommaDelimitedList
-    Description: Private Route Table IDs for AFTAC VPC
-    Default: rtb-07027991a9dbb1f36
-    AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be one or more valid route table IDs.
+  VpcCidr:
+    Type: String
+    Description: Enter the VPC CIDR in the form of x.x.x.x/x (e.g. 10.162.208.0/20)
 
   PrivateSubnetIds:
-    Type: CommaDelimitedList
-    Description: Private Subnet IDs for AFTAC VPC
-    Default: subnet-0f2d694defec254c9, subnet-0f64b1f3ba14fd6ee, subnet-0e44f6353b9e3ee92
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Select three (3) private subnet IDs
     AllowedPattern: ^subnet-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be one or more valid subnet IDs.
+    ConstraintDescription: Must select valid subnet IDs
 
-  ExistingVpcCidr:
-    Type: String
-    Description: CIDR of existing VPC
-    Default: 10.162.208.0/20
+  PrivateRouteTableIds:
+    Type: CommaDelimitedList
+    Description: Enter route table IDs associated with the subnets selected above, separated by commas (e.g. rtb-1111111111abcdefg, rtb-2222222222abcdefg)
+    AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be valid route table IDs.
 
 Resources:
-  privateVpcDynamoDbEndpoint:
+  DynamoDbVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds: !Ref PrivateRouteTableIds
@@ -67,7 +63,7 @@ Resources:
           Description: No outbound traffic allowed
           IpProtocol: "-1"
       SecurityGroupIngress:
-        - CidrIp: !Ref ExistingVpcCidr
+        - CidrIp: !Ref VpcCidr
           Description: Allows inbound HTTPS traffic
           FromPort: 443
           IpProtocol: tcp

@@ -17,17 +17,20 @@ mime_mapping = {
 # File types that puremagic cannot validate
 exempt_file_types = ["csv"]
 
+# Update this to match the value from CloudFormation templates
+resource_suffix = ""
+
 # Populated and updated in the main function
 ssm_params = {
-    "/pipeline/AvScanQueueUrl": "",
-    "/pipeline/QuarantineBucketName": "",
-    "/pipeline/DataTransferIngestBucketName": "",
-    "/pipeline/LongTermStorageBucketName": "",
-    "/pipeline/QuarantineTopicArn": "",
-    "/pipeline/ApprovedFileTypes": "",
-    "/pipeline/DfdlApprovedFileTypes": "",
-    "/pipeline/InvalidFilesBucketName": "",
-    "/pipeline/InvalidFilesTopicArn": "",
+    f"/pipeline/AvScanQueueUrl-{resource_suffix}": "",
+    f"/pipeline/QuarantineBucketName-{resource_suffix}": "",
+    f"/pipeline/DataTransferIngestBucketName-{resource_suffix}": "",
+    f"/pipeline/LongTermStorageBucketName-{resource_suffix}": "",
+    f"/pipeline/QuarantineTopicArn-{resource_suffix}": "",
+    f"/pipeline/ApprovedFileTypes-{resource_suffix}": "",
+    f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}": "",
+    f"/pipeline/InvalidFilesBucketName-{resource_suffix}": "",
+    f"/pipeline/InvalidFilesTopicArn-{resource_suffix}": "",
 }
 
 # Populated and updated in the main function

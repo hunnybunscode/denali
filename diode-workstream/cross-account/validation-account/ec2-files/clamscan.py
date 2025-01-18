@@ -2,6 +2,7 @@ import logging
 import random
 import subprocess  # nosec B404
 
+from config import resource_suffix
 from config import ssm_params
 from utils import add_tags
 from utils import copy_object
@@ -22,50 +23,16 @@ def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
 
         # File does not exist
         if exit_status == 512:
-            logger.warning(f"File {key} NOT FOUND. Unable to scan")
-            delete_av_scan_message(receipt_handle)
+            _process_non_existent_file(key, receipt_handle)
             return
 
         # File is clean
         if exit_status == 0:
-            file_status = "CLEAN"
-            logger.info(f"{key} is {file_status}")
-
-            new_tags = create_tags_for_av_scan(file_status, exit_status)
-            add_tags(bucket, key, new_tags)
-
-            data_transfer_bucket = ssm_params["/pipeline/DataTransferIngestBucketName"]
-            logger.info(f"Copying {key} file to Data Transfer bucket: {data_transfer_bucket}")  # noqa: E501
-            copy_object(bucket, data_transfer_bucket, key)
-
-            lts_bucket = ssm_params["/pipeline/LongTermStorageBucketName"]
-            logger.info(f"Copying {key} file to Long-term Storage bucket: {lts_bucket}")  # noqa: E501
-            copy_object(bucket, lts_bucket, key)
-
-            # Delete it from the ingestion bucket
-            delete_object(bucket, key)
-
-            delete_av_scan_message(receipt_handle)
-
+            _process_clean_file(bucket, key, exit_status, receipt_handle)
             return
 
         # File is infected
-        file_status = "INFECTED"
-        logger.warning(f"{key} is {file_status}")
-
-        new_tags = create_tags_for_av_scan(file_status, exit_status)
-        add_tags(bucket, key, new_tags)
-
-        quarantine_bucket = ssm_params["/pipeline/QuarantineBucketName"]
-        logger.info(f"Copying {key} file to Quarantine bucket: {quarantine_bucket}")  # noqa: E501
-        copy_object(bucket, quarantine_bucket, key)
-
-        # Delete it from the ingestion bucket
-        delete_object(bucket, key)
-
-        delete_av_scan_message(receipt_handle)
-
-        _send_file_quarantined_sns_msg(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
+        _process_infected_file(bucket, key, exit_status, receipt_handle)
 
     except Exception as e:
         logger.error(f"Exception ocurred scanning file: {e}")
@@ -86,10 +53,55 @@ def _run_av_scan(key: str, file_path: str):
     return exit_status
 
 
+def _process_non_existent_file(key: str, receipt_handle: str):
+    logger.warning(f"File {key} NOT FOUND. Unable to scan")
+    delete_av_scan_message(receipt_handle)
+
+
+def _process_clean_file(bucket: str, key: str, exit_status: int, receipt_handle: str):
+    file_status = "CLEAN"
+    logger.info(f"{key} is {file_status}")
+
+    tags = create_tags_for_av_scan(file_status, exit_status)
+    add_tags(bucket, key, tags)
+
+    data_transfer_bucket = ssm_params[f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"]  # noqa: E501
+    logger.info(f"Copying {key} file to Data Transfer bucket: {data_transfer_bucket}")  # noqa: E501
+    copy_object(bucket, data_transfer_bucket, key)
+
+    lts_bucket = ssm_params[f"/pipeline/LongTermStorageBucketName-{resource_suffix}"]  # noqa: E501
+    logger.info(f"Copying {key} file to Long-term Storage bucket: {lts_bucket}")  # noqa: E501
+    copy_object(bucket, lts_bucket, key)
+
+    # Delete it from the ingestion bucket
+    delete_object(bucket, key)
+
+    delete_av_scan_message(receipt_handle)
+
+
+def _process_infected_file(bucket: str, key: str, exit_status: int, receipt_handle: str):
+    file_status = "INFECTED"
+    logger.warning(f"{key} is {file_status}")
+
+    tags = create_tags_for_av_scan(file_status, exit_status)
+    add_tags(bucket, key, tags)
+
+    quarantine_bucket = ssm_params[f"/pipeline/QuarantineBucketName-{resource_suffix}"]  # noqa: E501
+    logger.info(f"Copying {key} file to Quarantine bucket: {quarantine_bucket}")  # noqa: E501
+    copy_object(bucket, quarantine_bucket, key)
+
+    # Delete it from the ingestion bucket
+    delete_object(bucket, key)
+
+    delete_av_scan_message(receipt_handle)
+
+    _send_file_quarantined_sns_msg(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
+
+
 def _send_file_quarantined_sns_msg(bucket: str, key: str, file_status: str, exit_status: int):
     logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
     try:
-        topic_arn = ssm_params["/pipeline/QuarantineTopicArn"]
+        topic_arn = ssm_params[f"/pipeline/QuarantineTopicArn-{resource_suffix}"]  # noqa: E501
         subject = "AV Scanning Failure"
         message = (
             "A file has been quarantined based on the results of a ClamAV scan:\n\n"

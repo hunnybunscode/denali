@@ -1,4 +1,8 @@
 Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
   Bucket1CDSProfile:
     Type: String
     Description: The CDS Profile for the Bucket 1
@@ -9,25 +13,25 @@ Parameters:
 
   ObjectTaggerRoleARN:
     Type: String
-    Description: The ARN of the IAM role for the Object Tagger Lambda
+    Description: ARN of the IAM role for the Object Tagger Lambda
 
-  presigngeneratorServiceRole:
+  PresignGeneratorServiceRole:
     Type: String
-    Description: ARN of the service role for the presign generator lambda
+    Description: ARN of the IAM role for the Presign Generator Lambda
 
   ObjectTaggerLambdaCodeKey:
     Type: String
-    Description: S3 key for the object tagger lambda code
+    Description: S3 key for the Object Tagger Lambda code
 
   LambdaStorageBucket:
     Type: String
-    Description: S3 bucket where the lambda code is stored
+    Description: S3 bucket where the Lambda code is stored
 
   ApiGwLambdaCodeKey:
     Type: String
-    Description: S3 key for the API Gateway lambda code
+    Description: S3 key for the API Gateway Lambda code
 
-  fileuploaderCloudWatchRole:
+  FileUploaderCloudWatchRole:
     Type: String
     Description: ARN of the file uploader CloudWatch role
 
@@ -35,9 +39,9 @@ Parameters:
     Type: String
     Description: ARN of the API Lambda invoke role
 
-  AftacVpcId:
+  VpcId:
     Type: String
-    Description: AFTAC VPC ID
+    Description: VPC ID
 
   PrivateSubnetIds:
     Type: CommaDelimitedList
@@ -46,69 +50,65 @@ Parameters:
   BucketOneGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
-    Default: Monica
 
   BucketOneDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
-    Default: Phoebe
 
   BucketOneKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 1
-    Default: Chandler
 
   BucketTwoGovPoc:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
-    Default: Ross
 
   BucketTwoDataOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
-    Default: Rachel
 
   BucketTwoKeyOwner:
     Type: String
     Description: String to be added as a tag to objects in Bucket 2
-    Default: Joey
 
 Resources:
   AvScanDeadLetterQueue:
     Type: AWS::SQS::Queue
-    Properties:
-      MessageRetentionPeriod: 345600 # Default value (4 days)
-      ReceiveMessageWaitTimeSeconds: 20
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
 
   AvScanQueue:
     Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt AvScanDeadLetterQueue.Arn
         maxReceiveCount: 5
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
 
   AvScanQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: sqs:*
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: sqs:*
+            Resource: !GetAtt AvScanQueue.Arn
             Condition:
               Bool:
                 aws:SecureTransport: false
-            Effect: Deny
-            Principal:
-              AWS: "*"
-            Resource: !GetAtt AvScanQueue.Arn
-        Version: 2012-10-17
       Queues:
-        - Ref: AvScanQueue
+        - !Ref AvScanQueue
 
   LambdaFunctionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -118,14 +118,16 @@ Resources:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
           IpProtocol: "-1"
-      VpcId: !Ref AftacVpcId
+      VpcId: !Ref VpcId
 
-  bucket1ObjectTagger:
+  Bucket1ObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ObjectTaggerLambdaCodeKey
+      FunctionName: !Sub bucket-1-object-tagger-${ResourceSuffix}
+      Handler: object_tagger.lambda_handler
+      Role: !Ref ObjectTaggerRoleARN
+      Runtime: python3.11
+      Timeout: 30
       Environment:
         Variables:
           DATA_OWNER: !Ref BucketOneDataOwner
@@ -133,31 +135,30 @@ Resources:
           KEY_OWNER: !Ref BucketOneKeyOwner
           CDS_PROFILE: !Ref Bucket1CDSProfile
           QUEUE_URL: !Ref AvScanQueue
-      FunctionName: bucket-1-object-tagger
-      Handler: object_tagger.lambda_handler
-      Role: !Ref ObjectTaggerRoleARN
-      Runtime: python3.11
-      Timeout: 30
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref ObjectTaggerLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
-  bucket1ObjectTaggerPermission:
+  Bucket1ObjectTaggerPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt bucket1ObjectTagger.Arn
+      FunctionName: !GetAtt Bucket1ObjectTagger.Arn
       Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
       SourceAccount: !Ref AWS::AccountId
 
-  #########################
-  bucket2ObjectTagger:
+  Bucket2ObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ObjectTaggerLambdaCodeKey
+      FunctionName: !Sub bucket-2-object-tagger-${ResourceSuffix}
+      Handler: object_tagger.lambda_handler
+      Role: !Ref ObjectTaggerRoleARN
+      Runtime: python3.11
+      Timeout: 30
       Environment:
         Variables:
           DATA_OWNER: !Ref BucketTwoDataOwner
@@ -165,22 +166,20 @@ Resources:
           KEY_OWNER: !Ref BucketTwoKeyOwner
           QUEUE_URL: !Ref AvScanQueue
           CDS_PROFILE: !Ref Bucket2CDSProfile
-      FunctionName: bucket-2-object-tagger
-      Handler: object_tagger.lambda_handler
-      Role: !Ref ObjectTaggerRoleARN
-      Runtime: python3.11
-      Timeout: 30
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref ObjectTaggerLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
-  bucket2ObjectTaggerPermission:
+  Bucket2ObjectTaggerPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt bucket2ObjectTagger.Arn
+      FunctionName: !GetAtt Bucket2ObjectTagger.Arn
       Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
       SourceAccount: !Ref AWS::AccountId
 
   IngestBucket1:
@@ -198,27 +197,25 @@ Resources:
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
-            #Bucket1 Object Tagger
-            Function: !GetAtt bucket1ObjectTagger.Arn
+            Function: !GetAtt Bucket1ObjectTagger.Arn
 
   IngestBucket1Policy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: IngestBucket1
+      Bucket: !Ref IngestBucket1
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${IngestBucket1.Arn}
               - !Sub ${IngestBucket1.Arn}/*
-        Version: 2012-10-17
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
   IngestBucket2:
     Type: AWS::S3::Bucket
@@ -235,84 +232,83 @@ Resources:
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
-            #Bucket1 Object Tagger
-            Function: !GetAtt bucket2ObjectTagger.Arn
+            Function: !GetAtt Bucket2ObjectTagger.Arn
 
   IngestBucket2Policy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket:
-        Ref: IngestBucket2
+      Bucket: !Ref IngestBucket2
       PolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Action: s3:*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-            Effect: Deny
+          - Effect: Deny
             Principal:
               AWS: "*"
+            Action: s3:*
             Resource:
               - !Sub ${IngestBucket2.Arn}
               - !Sub ${IngestBucket2.Arn}/*
-        Version: 2012-10-17
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
-  presigngenerator:
+  PresignGenerator:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ApiGwLambdaCodeKey
+      Handler: presigner.lambda_handler
+      Role: !Ref PresignGeneratorServiceRole
+      Runtime: python3.11
       Environment:
         Variables:
           ingest_bucket: !Ref IngestBucket1
-      Handler: presigner.lambda_handler
-      Role: !Ref presigngeneratorServiceRole
-      Runtime: python3.11
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref ApiGwLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
-  fileuploader:
+  FileUploader:
     Type: AWS::ApiGateway::RestApi
     Properties:
+      Name: FileUploader1
       EndpointConfiguration:
         Types:
           - REGIONAL
-      Name: FileUploader1
 
-  fileuploaderAccount:
+  # To avoid overwriting other roles, you should only have one AWS::ApiGateway::Account resource per region per account.
+  # Should we create this outside CloudFormation?
+  FileUploaderAccount:
     Type: AWS::ApiGateway::Account
-    Properties:
-      CloudWatchRoleArn: !Ref fileuploaderCloudWatchRole
-    DependsOn:
-      - fileuploader
+    DependsOn: FileUploader
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
-
-  fileuploaderDeployment:
-    Type: AWS::ApiGateway::Deployment
     Properties:
-      Description: Automatically created by the RestApi construct
-      RestApiId:
-        Ref: fileuploader
+      CloudWatchRoleArn: !Ref FileUploaderCloudWatchRole
+
+  FileUploaderDeployment:
+    Type: AWS::ApiGateway::Deployment
     DependsOn:
       - APIModel
-      - fileuploaderuploadOPTIONS
-      - fileuploaderuploadPOST
-      - fileuploaderupload
+      - FileUploaderUploadOPTIONS
+      - FileUploaderUploadPOST
+      - FileUploaderUpload
+    Properties:
+      Description: Automatically created by the RestApi construct
+      RestApiId: !Ref FileUploader
 
-  fileuploaderDeploymentStageprod:
+  FileUploaderDeploymentStageProd:
     Type: AWS::ApiGateway::Stage
+    DependsOn: FileUploaderAccount
     Properties:
       AccessLogSetting:
-        DestinationArn: !ImportValue aftac-pipeline-ApiGatewayStageLogGroup
+        DestinationArn:
+          Fn::ImportValue: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
-      DeploymentId:
-        Ref: fileuploaderDeployment
+      DeploymentId: !Ref FileUploaderDeployment
       MethodSettings:
         - CacheDataEncrypted: true
           CachingEnabled: true
@@ -320,29 +316,25 @@ Resources:
           HttpMethod: "*"
           LoggingLevel: INFO
           ResourcePath: "/*"
-      RestApiId:
-        Ref: fileuploader
+      RestApiId: !Ref FileUploader
       StageName: prod
-    DependsOn:
-      - fileuploaderAccount
 
-  fileuploaderupload:
+  FileUploaderUpload:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId: !GetAtt fileuploader.RootResourceId
+      ParentId: !GetAtt FileUploader.RootResourceId
       PathPart: upload
-      RestApiId:
-        Ref: fileuploader
+      RestApiId: !Ref FileUploader
 
-  fileuploaderuploadPOSTApiPermission:
+  FileUploaderUploadPOSTApiPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref presigngenerator
+      FunctionName: !Ref PresignGenerator
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${fileuploader}/${fileuploaderDeploymentStageprod}/POST/upload
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd}/POST/upload
 
-  fileuploaderuploadPOST:
+  FileUploaderUploadPOST:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: AWS_IAM
@@ -356,18 +348,15 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator.Arn}/invocations
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignGenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
-            application/json:
-              Ref: APIModel
+            application/json: !Ref APIModel
           StatusCode: "200"
-      ResourceId:
-        Ref: fileuploaderupload
-      RestApiId:
-        Ref: fileuploader
+      ResourceId: !Ref FileUploaderUpload
+      RestApiId: !Ref FileUploader
 
-  fileuploaderuploadPUT:
+  FileUploaderUploadPUT:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: AWS_IAM
@@ -381,18 +370,15 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator.Arn}/invocations
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignGenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
-            application/json:
-              Ref: APIModel
+            application/json: !Ref APIModel
           StatusCode: "200"
-      ResourceId:
-        Ref: fileuploaderupload
-      RestApiId:
-        Ref: fileuploader
+      ResourceId: !Ref FileUploaderUpload
+      RestApiId: !Ref FileUploader
 
-  fileuploaderuploadOPTIONS:
+  FileUploaderUploadOPTIONS:
     Type: AWS::ApiGateway::Method
     Properties:
       ApiKeyRequired: false
@@ -414,76 +400,74 @@ Resources:
             method.response.header.Access-Control-Allow-Origin: true
             method.response.header.Access-Control-Allow-Methods: true
           StatusCode: "200"
-      ResourceId:
-        Ref: fileuploaderupload
-      RestApiId:
-        Ref: fileuploader
+      ResourceId: !Ref FileUploaderUpload
+      RestApiId: !Ref FileUploader
 
   APIModel:
     Type: AWS::ApiGateway::Model
     Properties:
       ContentType: application/json
-      RestApiId:
-        Ref: fileuploader
+      RestApiId: !Ref FileUploader
       Schema:
         "$schema": http://json-schema.org/draft-04/schema#
 
-  presigngenerator2:
+  PresignGenerator2:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ApiGwLambdaCodeKey
+      Handler: presigner.lambda_handler
+      Role: !Ref PresignGeneratorServiceRole
+      Runtime: python3.11
       Environment:
         Variables:
           ingest_bucket: !Ref IngestBucket2
-      Handler: presigner.lambda_handler
-      Role: !Ref presigngeneratorServiceRole
-      Runtime: python3.11
+      Code:
+        S3Bucket: !Ref LambdaStorageBucket
+        S3Key: !Ref ApiGwLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
-  fileuploader2:
+  FileUploader2:
     Type: AWS::ApiGateway::RestApi
     Properties:
+      Name: FileUploader2
       EndpointConfiguration:
         Types:
           - REGIONAL
-      Name: FileUploader2
 
-  fileuploaderAccount2:
+  # To avoid overwriting other roles, you should only have one AWS::ApiGateway::Account resource per region per account.
+  # Should we create this outside CloudFormation? If not, should we create more than one? Do we retain it?
+  FileUploaderAccount2:
     Type: AWS::ApiGateway::Account
-    Properties:
-      CloudWatchRoleArn: !Ref fileuploaderCloudWatchRole
-    DependsOn:
-      - fileuploader2
+    DependsOn: FileUploader2
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
-
-  fileuploaderDeployment2:
-    Type: AWS::ApiGateway::Deployment
     Properties:
-      Description: Automatically created by the RestApi construct
-      RestApiId:
-        Ref: fileuploader2
+      CloudWatchRoleArn: !Ref FileUploaderCloudWatchRole
+
+  FileUploaderDeployment2:
+    Type: AWS::ApiGateway::Deployment
     DependsOn:
       - APIModel2
-      - fileuploaderuploadOPTIONS2
-      - fileuploaderuploadPOST2
-      - fileuploaderupload2
+      - FileUploaderUploadOPTIONS2
+      - FileUploaderUploadPOST2
+      - FileUploaderUpload2
+    Properties:
+      Description: Automatically created by the RestApi construct
+      RestApiId: !Ref FileUploader2
 
-  fileuploaderDeploymentStageprod2:
+  FileUploaderDeploymentStageProd2:
     Type: AWS::ApiGateway::Stage
+    DependsOn: FileUploaderAccount2
     Properties:
       AccessLogSetting:
-        DestinationArn: !ImportValue aftac-pipeline-ApiGatewayStageLogGroup
+        DestinationArn:
+          Fn::ImportValue: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
-      DeploymentId:
-        Ref: fileuploaderDeployment2
+      DeploymentId: !Ref FileUploaderDeployment2
       MethodSettings:
         - CacheDataEncrypted: true
           CachingEnabled: true
@@ -491,29 +475,25 @@ Resources:
           HttpMethod: "*"
           LoggingLevel: INFO
           ResourcePath: "/*"
-      RestApiId:
-        Ref: fileuploader2
+      RestApiId: !Ref FileUploader2
       StageName: prod
-    DependsOn:
-      - fileuploaderAccount2
 
-  fileuploaderupload2:
+  FileUploaderUpload2:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId: !GetAtt fileuploader2.RootResourceId
+      ParentId: !GetAtt FileUploader2.RootResourceId
       PathPart: upload
-      RestApiId:
-        Ref: fileuploader2
+      RestApiId: !Ref FileUploader2
 
-  fileuploaderuploadPOSTApiPermission2:
+  FileUploaderUploadPOSTApiPermission2:
     Type: AWS::Lambda::Permission
     Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt presigngenerator2.Arn
+      FunctionName: !GetAtt PresignGenerator2.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${fileuploader}/${fileuploaderDeploymentStageprod}/POST/upload
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd}/POST/upload
 
-  fileuploaderuploadPOST2:
+  FileUploaderUploadPOST2:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: AWS_IAM
@@ -527,18 +507,15 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${presigngenerator2.Arn}/invocations
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignGenerator2.Arn}/invocations
       MethodResponses:
         - ResponseModels:
-            application/json:
-              Ref: APIModel2
+            application/json: !Ref APIModel2
           StatusCode: "200"
-      ResourceId:
-        Ref: fileuploaderupload2
-      RestApiId:
-        Ref: fileuploader2
+      ResourceId: !Ref FileUploaderUpload2
+      RestApiId: !Ref FileUploader2
 
-  fileuploaderuploadOPTIONS2:
+  FileUploaderUploadOPTIONS2:
     Type: AWS::ApiGateway::Method
     Properties:
       ApiKeyRequired: false
@@ -560,17 +537,14 @@ Resources:
             method.response.header.Access-Control-Allow-Origin: true
             method.response.header.Access-Control-Allow-Methods: true
           StatusCode: "200"
-      ResourceId:
-        Ref: fileuploaderupload2
-      RestApiId:
-        Ref: fileuploader2
+      ResourceId: !Ref FileUploaderUpload2
+      RestApiId: !Ref FileUploader2
 
   APIModel2:
     Type: AWS::ApiGateway::Model
     Properties:
       ContentType: application/json
-      RestApiId:
-        Ref: fileuploader2
+      RestApiId: !Ref FileUploader2
       Schema:
         "$schema": http://json-schema.org/draft-04/schema#
 
@@ -649,9 +623,9 @@ Resources:
   #       Fn::Join:
   #       - ''
   #       - - arn:aws:apigateway:us-east-1::/restapis/
-  #         - Ref: fileuploader
+  #         - !Ref fileuploader
   #         - "/stages/"
-  #         - Ref: fileuploaderDeploymentStageprod
+  #         - !Ref fileuploaderDeploymentStageprod
   #     WebACLArn:
   #       Fn::GetAtt:
   #       - IngestAPIWebACL
@@ -664,9 +638,9 @@ Resources:
   #       Fn::Join:
   #       - ''
   #       - - arn:aws:apigateway:us-east-1::/restapis/
-  #         - Ref: fileuploader2
+  #         - !Ref fileuploader2
   #         - "/stages/"
-  #         - Ref: fileuploaderDeploymentStageprod2
+  #         - !Ref fileuploaderDeploymentStageprod2
   #     WebACLArn:
   #       Fn::GetAtt:
   #       - IngestAPIWebACL
@@ -675,57 +649,36 @@ Resources:
   AvScanQueueURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
+      Name: !Sub /pipeline/AvScanQueueUrl-${ResourceSuffix}
       Description: URL of the SQS Queue which manages AV Scan
-      Name: /pipeline/AvScanQueueUrl
       Type: String
       Value: !GetAtt AvScanQueue.QueueUrl
 
 Outputs:
-  #### Temporary PlaceHolders ###
-  LambdaFunctionSecurityGroup:
-    Value: !Ref LambdaFunctionSecurityGroup
-    Description: Security Group ID of LambdaFunctionSecurityGroup
-    Export:
-      Name: Pipeline-LambdaFunctionSecurityGroup
-
-  IngestBucket1:
-    Value: !Ref IngestBucket1
-    Description: Name of Ingest Bucket 1
-    Export:
-      Name: Pipeline-IngestBucket1
-
-  IngestBucket2:
-    Value: !Ref IngestBucket2
-    Description: Name of Ingest Bucket 2
-    Export:
-      Name: Pipeline-IngestBucket2
-
-  ###########
-
   AvScanQueueUrlExport:
     Description: Queue URL of the SQS AV Scan Queue
     Value: !Ref AvScanQueue
     Export:
-      Name: aftac-pipeline-av-scan-queue
+      Name: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
 
   AvScanQueueNameExport:
     Description: Name of the SQS AV Scan Queue
     Value: !GetAtt AvScanQueue.QueueName
     Export:
-      Name: aftac-pipeline-av-scan-queue-name
+      Name: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
 
-  IngestBucket1b:
+  IngestBucket1Export:
     Value: !Ref IngestBucket1
     Description: Name of Ingest Bucket 1
     Export:
-      Name: aftac-pipeline-IngestBucket1
+      Name: !Sub aftac-pipeline-IngestBucket1-${ResourceSuffix}
 
-  IngestBucket2b:
+  IngestBucket2Export:
     Value: !Ref IngestBucket2
     Description: Name of Ingest Bucket 2
     Export:
-      Name: aftac-pipeline-IngestBucket2
+      Name: !Sub aftac-pipeline-IngestBucket2-${ResourceSuffix}
 
   PresignGenerator1InvokeURL:
-    Value: !Sub https://${fileuploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
-    Description: Presign Generator 1 Invoke URL
+    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
+    Description: URL of the Presign Generator API Endpoint

@@ -5,11 +5,14 @@ Metadata:
           default: General Parameters
         Parameters:
           - pIamPrefix
+          - pResourceSuffix
           - pPermissionsBoundaryPolicyArn
 
     ParameterLabels:
       pIamPrefix:
         default: IAM Prefix
+      pResourceSuffix:
+        default: Resource Suffix
       pPermissionsBoundaryPolicyArn:
         default: Permissions Boundary Policy ARN
 
@@ -21,6 +24,14 @@ Parameters:
     AllowedValues: [AFC2S]
     ConstraintDescription: Must be "AFC2S"
 
+  pResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain 
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
   pPermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
@@ -28,33 +39,33 @@ Parameters:
     ConstraintDescription: Must be a valid IAM policy ARN
 
 Resources:
-  TrailLogsRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_TrailLogsRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudtrail.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_TrailLogsRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+  # TrailLogsRole:
+  #   Type: AWS::IAM::Role
+  #   Metadata:
+  #     cfn_nag:
+  #       rules_to_suppress:
+  #         - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+  #           reason: An explicit name is required
+  #   Properties:
+  #     RoleName: !Sub ${pIamPrefix}-TrailLogsRole-${pResourceSuffix}
+  #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: cloudtrail.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: TrailLogsRoleDefaultPolicy
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - logs:CreateLogStream
+  #                 - logs:PutLogEvents
+  #               Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
 
   Ec2ScannerCwLogsPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -64,7 +75,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerCwLogsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}-Ec2ScannerCwLogsPolicy-${pResourceSuffix}
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -86,7 +97,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerSqsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}-Ec2ScannerSqsPolicy-${pResourceSuffix}
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -105,7 +116,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerS3Policy
+      ManagedPolicyName: !Sub ${pIamPrefix}-Ec2ScannerS3Policy-${pResourceSuffix}
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -128,7 +139,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerSnsPolicy
+      ManagedPolicyName: !Sub ${pIamPrefix}-Ec2ScannerSnsPolicy-${pResourceSuffix}
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -144,7 +155,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      ManagedPolicyName: !Sub ${pIamPrefix}_Ec2ScannerEc2Policy
+      ManagedPolicyName: !Sub ${pIamPrefix}-Ec2ScannerEc2Policy-${pResourceSuffix}
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -160,7 +171,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_Ec2ScannerRole
+      RoleName: !Sub ${pIamPrefix}-Ec2ScannerRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       Description: Role to be assumed by EC2 Anti-Virus Scanner instances
       AssumeRolePolicyDocument:
@@ -181,14 +192,66 @@ Resources:
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub ${pIamPrefix}_Ec2ScannerInstanceProfile
+      InstanceProfileName: !Sub ${pIamPrefix}-Ec2ScannerInstanceProfile-${pResourceSuffix}
       Roles: [!Ref Ec2ScannerRole]
 
-  ## Commented out as this does not seem to be used
-  # FailedTransferServiceRole:
+  TransferResultLambdaRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${pIamPrefix}-TransferResultLambdaRole-${pResourceSuffix}
+      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: TransferResultLambdaRoleDefaultPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Should be locked down to only necessary SQS queue and SNS Topic
+              - Effect: Allow
+                Action:
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ReceiveMessage
+                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                  - s3:DeleteObject
+                  - s3:GetBucketAcl
+                  - s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+
+  # DataTransferServiceRole:
   #   Type: AWS::IAM::Role
+  #   Metadata:
+  #     cfn_nag:
+  #       rules_to_suppress:
+  #         - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+  #           reason: An explicit name is required
   #   Properties:
-  #     RoleName: !Sub ${pIamPrefix}_FailedTransferServiceRole
+  #     RoleName: !Sub ${pIamPrefix}-DataTransferServiceRole-${pResourceSuffix}
   #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
   #     AssumeRolePolicyDocument:
   #       Version: 2012-10-17
@@ -200,123 +263,36 @@ Resources:
   #     ManagedPolicyArns:
   #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
   #     Policies:
-  #       - PolicyName: !Sub ${pIamPrefix}_FailedTransferServiceRoleDefaultPolicy
+  #       - PolicyName: DataTransferServiceRoleDefaultPolicy
   #         PolicyDocument:
   #           Version: 2012-10-17
   #           Statement:
-  #             # Should be locked down to only necessary SQS queue and SNS Topic
+  #             # Should be locked down to only necessary SQS Queue
   #             - Effect: Allow
   #               Action:
+  #                 - sqs:ChangeMessageVisibility
   #                 - sqs:DeleteMessage
   #                 - sqs:GetQueueAttributes
+  #                 - sqs:GetQueueUrl
   #                 - sqs:ReceiveMessage
   #               Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
 
+  #               # Should be locked down to only necessary DynamoDB Table
   #             - Effect: Allow
-  #               Action: sns:Publish
-  #               Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+  #               Action: dynamodb:PutItem
+  #               Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
 
-  TransferResultLambdaRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_TransferResultLambdaRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_TransferResultLambdaRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Should be locked down to only necessary SQS queue and SNS Topic
-              - Effect: Allow
-                Action:
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:ReceiveMessage
-                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-
-              - Effect: Allow
-                Action: sns:Publish
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
-
-              - Effect: Allow
-                Action: dynamodb:PutItem
-                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
-
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:GetObjectTagging
-                  - s3:PutObject
-                  - s3:PutObjectTagging
-                  - s3:DeleteObject
-                  - s3:GetBucketAcl
-                  - s3:ListBucket
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-
-  DataTransferServiceRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_DataTransferServiceRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_DataTransferServiceRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Should be locked down to only necessary SQS Queue
-              - Effect: Allow
-                Action:
-                  - sqs:ChangeMessageVisibility
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:GetQueueUrl
-                  - sqs:ReceiveMessage
-                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-
-                # Should be locked down to only necessary DynamoDB Table
-              - Effect: Allow
-                Action: dynamodb:PutItem
-                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
-
-                # Should be locked down to only necessary S3 Buckets
-              - Effect: Allow
-                Action:
-                  - s3:DeleteObject
-                  - s3:GetBucketAcl
-                  - s3:GetObject
-                  - s3:GetObjectTagging
-                  - s3:ListBucket
-                  - s3:PutObject
-                  - s3:PutObjectTagging
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
+  #               # Should be locked down to only necessary S3 Buckets
+  #             - Effect: Allow
+  #               Action:
+  #                 - s3:DeleteObject
+  #                 - s3:GetBucketAcl
+  #                 - s3:GetObject
+  #                 - s3:GetObjectTagging
+  #                 - s3:ListBucket
+  #                 - s3:PutObject
+  #                 - s3:PutObjectTagging
+  #               Resource: !Sub arn:${AWS::Partition}:s3:::*
 
   ObjectTaggerRole:
     Type: AWS::IAM::Role
@@ -326,7 +302,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_ObjectTaggerRole
+      RoleName: !Sub ${pIamPrefix}-ObjectTaggerRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -338,7 +314,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}_ObjectTaggerRoleDefaultPolicy
+        - PolicyName: ObjectTaggerRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -358,31 +334,31 @@ Resources:
                   - s3:PutObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 
-  InvokeTaggerRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_InvokeTaggerRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_InvokeTaggerPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: lambda:InvokeFunction
-                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+  # InvokeTaggerRole:
+  #   Type: AWS::IAM::Role
+  #   Metadata:
+  #     cfn_nag:
+  #       rules_to_suppress:
+  #         - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+  #           reason: An explicit name is required
+  #   Properties:
+  #     RoleName: !Sub ${pIamPrefix}-InvokeTaggerRole-${pResourceSuffix}
+  #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: events.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: InvokeTaggerPolicy
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             - Effect: Allow
+  #               Action: lambda:InvokeFunction
+  #               Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
   PresignGeneratorServiceRole:
     Type: AWS::IAM::Role
@@ -392,7 +368,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_PresignGeneratorServiceRole
+      RoleName: !Sub ${pIamPrefix}-PresignGeneratorServiceRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -404,7 +380,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}_PresignGeneratorServiceRoleDefaultPolicy
+        - PolicyName: PresignGeneratorServiceRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -419,34 +395,34 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
-  LoggingRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_LoggingRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_LoggingRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+  # LoggingRole:
+  #   Type: AWS::IAM::Role
+  #   Metadata:
+  #     cfn_nag:
+  #       rules_to_suppress:
+  #         - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+  #           reason: An explicit name is required
+  #   Properties:
+  #     RoleName: !Sub ${pIamPrefix}-LoggingRole-${pResourceSuffix}
+  #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: lambda.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: LoggingRoleDefaultPolicy
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - logs:CreateLogGroup
+  #                 - logs:CreateLogStream
+  #                 - logs:PutLogEvents
+  #               Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
   FileUploaderCloudWatchRole:
     Type: AWS::IAM::Role
@@ -456,7 +432,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_FileUploaderCloudWatchRole
+      RoleName: !Sub ${pIamPrefix}-FileUploaderCloudWatchRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -476,7 +452,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_APILambdaInvokeRole
+      RoleName: !Sub ${pIamPrefix}-APILambdaInvokeRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -486,7 +462,7 @@ Resources:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}_APILambdaInvokeRoleDefaultPolicy
+        - PolicyName: APILambdaInvokeRoleDefaultPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -496,69 +472,38 @@ Resources:
                   - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
                   - !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*
 
-  ## Commented out as this does not seem to be used
-  # PresignGeneratorServiceRole2:
+  # IngestWAFRole:
   #   Type: AWS::IAM::Role
+  #   Metadata:
+  #     cfn_nag:
+  #       rules_to_suppress:
+  #         - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+  #           reason: An explicit name is required
   #   Properties:
-  #     RoleName: !Sub ${pIamPrefix}_PresignGeneratorServiceRole2
+  #     RoleName: !Sub ${pIamPrefix}-IngestWAFRole-${pResourceSuffix}
   #     PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
   #     AssumeRolePolicyDocument:
   #       Version: 2012-10-17
   #       Statement:
   #         - Effect: Allow
   #           Principal:
-  #             Service: lambda.amazonaws.com
+  #             Service: wafv2.amazonaws.com
   #           Action: sts:AssumeRole
-  #     ManagedPolicyArns:
-  #       - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
   #     Policies:
-  #       - PolicyName: !Sub ${pIamPrefix}_PresignGeneratorServiceRoleDefaultPolicy2
+  #       - PolicyName: IngestWAFRoleDefaultPolicy
   #         PolicyDocument:
   #           Version: 2012-10-17
   #           Statement:
   #             - Effect: Allow
-  #               Action: s3:PutObject
-  #               Resource: !Sub arn:${AWS::Partition}:s3:::*
-
-  #             - Effect: Allow
   #               Action:
   #                 - logs:CreateLogGroup
   #                 - logs:CreateLogStream
+  #                 - logs:DescribeLogGroups
+  #                 - logs:DescribeLogStreams
+  #                 - logs:FilterLogEvents
+  #                 - logs:GetLogEvents
   #                 - logs:PutLogEvents
-  #               Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
-
-  IngestWAFRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${pIamPrefix}_IngestWAFRole
-      PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: wafv2.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub ${pIamPrefix}_IngestWAFRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
-                  - logs:FilterLogEvents
-                  - logs:GetLogEvents
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+  #               Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
 
   TransferLoggingRole:
     Type: AWS::IAM::Role
@@ -568,7 +513,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_TransferLoggingRole
+      RoleName: !Sub ${pIamPrefix}-TransferLoggingRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -578,7 +523,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}_TransferLoggingPolicy
+        - PolicyName: TransferLoggingPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -588,7 +533,7 @@ Resources:
                   - s3:GetBucketAcl
                   - s3:PutBucketAcl
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
-        - PolicyName: !Sub ${pIamPrefix}_AWSTransferLoggingAccess
+        - PolicyName: AWSTransferLoggingAccess
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -607,7 +552,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${pIamPrefix}_TransferUserRole
+      RoleName: !Sub ${pIamPrefix}-TransferUserRole-${pResourceSuffix}
       PermissionsBoundary: !Ref pPermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -617,7 +562,7 @@ Resources:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${pIamPrefix}_TransferUserPolicy
+        - PolicyName: TransferUserPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -640,88 +585,76 @@ Outputs:
     Description: Cloudtrail Logs Role ARN for SFTP
     Value: !GetAtt TransferLoggingRole.Arn
     Export:
-      Name: TransferLoggingRoleArn
+      Name: !Sub TransferLoggingRoleArn-${pResourceSuffix}
 
   TransferUserRoleExport:
     Description: SFTP Transfer User Role ARN
     Value: !GetAtt TransferUserRole.Arn
     Export:
-      Name: TransferUserRoleArn
+      Name: !Sub TransferUserRoleArn-${pResourceSuffix}
 
-  TrailLogsRoleExport:
-    Description: Cloudtrail Logs Role ARN
-    Value: !GetAtt TrailLogsRole.Arn
-    Export:
-      Name: TrailLogsRoleArn
+  # TrailLogsRoleExport:
+  #   Description: Cloudtrail Logs Role ARN
+  #   Value: !GetAtt TrailLogsRole.Arn
+  #   Export:
+  #     Name: !Sub TrailLogsRoleArn-${pResourceSuffix}
 
   Ec2ScannerInstanceProfileExport:
     Description: Ec2ScannerInstanceProfile ARN
     Value: !GetAtt Ec2ScannerInstanceProfile.Arn
     Export:
-      Name: Ec2ScannerInstanceProfile
+      Name: !Sub Ec2ScannerInstanceProfile-${pResourceSuffix}
 
-  # FailedTransferServiceRoleExport:
-  #   Description: FailedTransferServiceRole ARN
-  #   Value: !GetAtt FailedTransferServiceRole.Arn
+  # DataTransferServiceRoleExport:
+  #   Description: DatatransferServiceRole ARN
+  #   Value: !GetAtt DataTransferServiceRole.Arn
   #   Export:
-  #     Name: FailedTransferServiceRole
-
-  DataTransferServiceRoleExport:
-    Description: DatatransferServiceRole ARN
-    Value: !GetAtt DataTransferServiceRole.Arn
-    Export:
-      Name: DataTransferServiceRoleArn
+  #     Name: DataTransferServiceRoleArn
 
   TransferResultLambdaRoleExport:
     Description: TransferResultLambdaRole ARN
     Value: !GetAtt TransferResultLambdaRole.Arn
     Export:
-      Name: TransferResultLambdaRoleArn
+      Name: !Sub TransferResultLambdaRoleArn-${pResourceSuffix}
 
   ObjectTaggerRoleExport:
     Description: ObjectTaggerRole ARN
     Value: !GetAtt ObjectTaggerRole.Arn
     Export:
-      Name: ObjectTaggerRoleArn
+      Name: !Sub ObjectTaggerRoleArn-${pResourceSuffix}
 
-  InvokeTaggerRoleExport:
-    Description: InvokeTaggerRole ARN
-    Value: !GetAtt InvokeTaggerRole.Arn
-    Export:
-      Name: InvokeTaggerRole
+  # InvokeTaggerRoleExport:
+  #   Description: InvokeTaggerRole ARN
+  #   Value: !GetAtt InvokeTaggerRole.Arn
+  #   Export:
+  #     Name: InvokeTaggerRole
 
   PresignGeneratorServiceRoleExport:
     Description: PresignGeneratorServiceRole ARN
     Value: !GetAtt PresignGeneratorServiceRole.Arn
     Export:
-      Name: PresignGeneratorServiceRoleArn
+      Name: !Sub PresignGeneratorServiceRoleArn-${pResourceSuffix}
 
-  LoggingRoleExport:
-    Description: LoggingRole ARN
-    Value: !GetAtt LoggingRole.Arn
-    Export:
-      Name: LoggingRoleArn
+  # LoggingRoleExport:
+  #   Description: LoggingRole ARN
+  #   Value: !GetAtt LoggingRole.Arn
+  #   Export:
+  #     Name: LoggingRoleArn
 
   FileUploaderCloudWatchRoleExport:
     Description: FileuploaderCloudWatchRole ARN
     Value: !GetAtt FileUploaderCloudWatchRole.Arn
     Export:
-      Name: FileUploaderCloudWatchRoleArn
+      Name: !Sub FileUploaderCloudWatchRoleArn-${pResourceSuffix}
 
   APILambdaInvokeRoleExport:
     Description: APILambdaInvokeRole ARN
     Value: !GetAtt APILambdaInvokeRole.Arn
     Export:
-      Name: APILambdaInvokeRoleArn
+      Name: !Sub APILambdaInvokeRoleArn-${pResourceSuffix}
 
-  # PresignGeneratorServiceRole2Export:
-  #   Description: PresignGeneratorServiceRole2 ARN
-  #   Value: !GetAtt PresignGeneratorServiceRole2.Arn
+  # IngestWAFRoleExport:
+  #   Description: IngestWAFRole ARN
+  #   Value: !GetAtt IngestWAFRole.Arn
   #   Export:
-  #     Name: PresignGeneratorServiceRole2
-
-  IngestWAFRoleExport:
-    Description: IngestWAFRole ARN
-    Value: !GetAtt IngestWAFRole.Arn
-    Export:
-      Name: IngestWAFRoleArn
+  #     Name: IngestWAFRoleArn
