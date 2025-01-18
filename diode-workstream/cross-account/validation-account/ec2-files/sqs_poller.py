@@ -59,7 +59,7 @@ def main():
             messages = receive_sqs_message(
                 ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"],
                 1,
-            )  # noqa: E501
+            )
             if not messages:
                 continue
 
