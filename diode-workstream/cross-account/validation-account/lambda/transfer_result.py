@@ -38,7 +38,7 @@ def lambda_handler(event, context):
 
     if status != "SUCCEEDED":
         logger.info(
-            f"Data transfer failed; moving {bucket}/{key} to {FAILED_TRANSFER_BUCKET}"  # noqa: E501
+            f"Data transfer failed; moving {bucket}/{key} to {FAILED_TRANSFER_BUCKET}",  # noqa: E501
         )
         # Send a message to the SNS topic for failed data transfers
         send_transfer_error_message(key)
@@ -69,7 +69,8 @@ def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
 
 def get_object_tagging(bucket: str, key: str):
     """
-    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner` for `key` in `bucket`.
+    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner`
+    for `key` in `bucket`.\n
     If any of these tags are not set, returns "unknown".
     """
     unknown = "unknown"
@@ -86,7 +87,13 @@ def get_object_tagging(bucket: str, key: str):
         return unknown, unknown, unknown
 
 
-def put_item_in_ddb(data: dict, timestamp: datetime, data_owner: str, gov_poc: str, key_owner: str):
+def put_item_in_ddb(
+    data: dict,
+    timestamp: datetime,
+    data_owner: str,
+    gov_poc: str,
+    key_owner: str,
+):
     try:
         DDB_CLIENT.put_item(
             TableName=DDB_TABLE_NAME,
@@ -104,7 +111,7 @@ def put_item_in_ddb(data: dict, timestamp: datetime, data_owner: str, gov_poc: s
     except ClientError as e:
         logger.exception(e)
         logger.error(
-            f'Error putting metadata about {data["key"]} object into DynamoDB table'  # noqa: E501
+            f'Error putting metadata about {data["key"]} object into DynamoDB table',  # noqa: E501
         )
         raise
 
@@ -115,9 +122,11 @@ def send_transfer_error_message(key: str):
     SNS_CLIENT.publish(
         TopicArn=FAILED_TRANSFER_TOPIC_ARN,
         Subject="Failed Cross Domain Transfer",
-        Message=(f"The file {key} was NOT successfully transferred.\n"
-                 "It has been moved from the Data Transfer bucket to "
-                 f"the following location:\n{FAILED_TRANSFER_BUCKET}/{key}"),
+        Message=(
+            f"The file {key} was NOT successfully transferred.\n"
+            "It has been moved from the Data Transfer bucket to "
+            f"the following location:\n{FAILED_TRANSFER_BUCKET}/{key}"
+        ),
     )
 
 

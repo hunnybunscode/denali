@@ -36,13 +36,30 @@ def main():
                 logger.info("Refreshing SSM parameters")
                 get_params_values(ssm_params)
                 approved_filetypes.clear()
-                approved_filetypes.extend([
-                    *(ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"].replace(".", "").replace(" ", "").split(",")),  # noqa: E501
-                    *(ssm_params[f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"].replace(".", "").replace(" ", "").split(","))
-                ])
+                approved_filetypes.extend(
+                    [
+                        *(
+                            ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"]
+                            .replace(".", "")
+                            .replace(" ", "")
+                            .split(",")
+                        ),
+                        *(
+                            ssm_params[
+                                f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"
+                            ]
+                            .replace(".", "")
+                            .replace(" ", "")
+                            .split(",")
+                        ),
+                    ],
+                )
                 clock = time.perf_counter()
 
-            messages = receive_sqs_message(ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"], 1)  # noqa: E501
+            messages = receive_sqs_message(
+                ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"],
+                1,
+            )  # noqa: E501
             if not messages:
                 continue
 
@@ -60,7 +77,9 @@ def main():
 
         except Exception as e:
             logger.exception(e)
-            logger.info("Sleeping for 3 seconds, before proceeding to receive the next message")  # noqa: E501
+            logger.info(
+                "Sleeping for 3 seconds, before proceeding to receive the next message",
+            )
             time.sleep(3)  # nosemgrep arbitrary-sleep
 
 

@@ -15,7 +15,7 @@ TAGS = [
     {"Key": "GovPOC", "Value": os.environ["GOV_POC"]},
     {"Key": "DataOwner", "Value": os.environ["DATA_OWNER"]},
     {"Key": "KeyOwner", "Value": os.environ["KEY_OWNER"]},
-    {"Key": "CDSProfile", "Value": os.environ["CDS_PROFILE"]}
+    {"Key": "CDSProfile", "Value": os.environ["CDS_PROFILE"]},
 ]
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
@@ -28,7 +28,7 @@ def lambda_handler(event, context):
     key = unquote_plus(event["Records"][0]["s3"]["object"]["key"])
 
     logger.info(
-        f"Adding tags and sending a message to the SQS queue for Bucket: {bucket}, Key: {key}"  # noqa: E501
+        f"Adding tags and sending a message to the SQS queue for Bucket: {bucket}, Key: {key}",  # noqa: E501
     )
     add_tags(bucket, key)
     send_to_sqs(bucket, key)
@@ -39,10 +39,7 @@ def add_tags(bucket: str, key: str):
     S3_CLIENT.put_object_tagging(
         Bucket=bucket,
         Key=key,
-        Tagging={
-            "TagSet": TAGS
-        },
-
+        Tagging={"TagSet": TAGS},
         # TODO: We should add this for enhanced security
         # ExpectedBucketOwner
     )
@@ -51,12 +48,7 @@ def add_tags(bucket: str, key: str):
 def send_to_sqs(bucket, key):
     SQS_CLIENT.send_message(
         QueueUrl=QUEUE_URL,
-        MessageBody=json.dumps({
-            "detail": {
-                "requestParameters": {
-                    "bucketName": bucket,
-                    "key": key
-                }
-            }
-        })
+        MessageBody=json.dumps(
+            {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
+        ),
     )

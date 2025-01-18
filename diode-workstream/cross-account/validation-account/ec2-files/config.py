@@ -1,7 +1,7 @@
 file_handler_config = {
     "filename": "/var/log/sqs_poller.log",
     "when": "midnight",
-    "backupCount": 30
+    "backupCount": 30,
 }
 
 mime_mapping = {
@@ -11,7 +11,7 @@ mime_mapping = {
     "xml": ["application/xml"],
     "flac": ["audio/flac"],
     "zip": ["application/zip"],
-    "wav": ["audio/wav", "audio/wave", "audio/x-wav"]
+    "wav": ["audio/wav", "audio/wave", "audio/x-wav"],
 }
 
 # File types that puremagic cannot validate
@@ -34,4 +34,4 @@ ssm_params = {
 }
 
 # Populated and updated in the main function
-approved_filetypes = []
+approved_filetypes: list[str] = []

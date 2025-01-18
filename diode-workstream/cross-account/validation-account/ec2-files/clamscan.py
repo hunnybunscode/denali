@@ -35,7 +35,7 @@ def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
         _process_infected_file(bucket, key, exit_status, receipt_handle)
 
     except Exception as e:
-        logger.error(f"Exception ocurred scanning file: {e}")
+        logger.error(f"Exception occurred scanning file: {e}")
 
 
 def _run_av_scan(key: str, file_path: str):
@@ -43,7 +43,9 @@ def _run_av_scan(key: str, file_path: str):
     Returns the exit status after running clamdscan on file_path
     """
     if TEST_MODE:
-        logger.info(f"Testing mode enabled. Simulating clamdscan for {key}")  # noqa: E501
+        logger.info(
+            f"Testing mode enabled. Simulating clamdscan for {key}",
+        )
         exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
     else:
         logger.info(f"Scanning {key}")
@@ -65,12 +67,18 @@ def _process_clean_file(bucket: str, key: str, exit_status: int, receipt_handle:
     tags = create_tags_for_av_scan(file_status, exit_status)
     add_tags(bucket, key, tags)
 
-    data_transfer_bucket = ssm_params[f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"]  # noqa: E501
-    logger.info(f"Copying {key} file to Data Transfer bucket: {data_transfer_bucket}")  # noqa: E501
+    data_transfer_bucket = ssm_params[
+        f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"
+    ]
+    logger.info(
+        f"Copying {key} file to Data Transfer bucket: {data_transfer_bucket}",
+    )
     copy_object(bucket, data_transfer_bucket, key)
 
-    lts_bucket = ssm_params[f"/pipeline/LongTermStorageBucketName-{resource_suffix}"]  # noqa: E501
-    logger.info(f"Copying {key} file to Long-term Storage bucket: {lts_bucket}")  # noqa: E501
+    lts_bucket = ssm_params[f"/pipeline/LongTermStorageBucketName-{resource_suffix}"]
+    logger.info(
+        f"Copying {key} file to Long-term Storage bucket: {lts_bucket}",
+    )
     copy_object(bucket, lts_bucket, key)
 
     # Delete it from the ingestion bucket
@@ -79,15 +87,22 @@ def _process_clean_file(bucket: str, key: str, exit_status: int, receipt_handle:
     delete_av_scan_message(receipt_handle)
 
 
-def _process_infected_file(bucket: str, key: str, exit_status: int, receipt_handle: str):
+def _process_infected_file(
+    bucket: str,
+    key: str,
+    exit_status: int,
+    receipt_handle: str,
+):
     file_status = "INFECTED"
     logger.warning(f"{key} is {file_status}")
 
     tags = create_tags_for_av_scan(file_status, exit_status)
     add_tags(bucket, key, tags)
 
-    quarantine_bucket = ssm_params[f"/pipeline/QuarantineBucketName-{resource_suffix}"]  # noqa: E501
-    logger.info(f"Copying {key} file to Quarantine bucket: {quarantine_bucket}")  # noqa: E501
+    quarantine_bucket = ssm_params[f"/pipeline/QuarantineBucketName-{resource_suffix}"]
+    logger.info(
+        f"Copying {key} file to Quarantine bucket: {quarantine_bucket}",
+    )
     copy_object(bucket, quarantine_bucket, key)
 
     # Delete it from the ingestion bucket
@@ -95,13 +110,25 @@ def _process_infected_file(bucket: str, key: str, exit_status: int, receipt_hand
 
     delete_av_scan_message(receipt_handle)
 
-    _send_file_quarantined_sns_msg(quarantine_bucket, key, file_status, exit_status)  # noqa: E501
+    _send_file_quarantined_sns_msg(
+        quarantine_bucket,
+        key,
+        file_status,
+        exit_status,
+    )
 
 
-def _send_file_quarantined_sns_msg(bucket: str, key: str, file_status: str, exit_status: int):
-    logger.info(f"Sending an SNS message regarding the quarantined file: {key}")  # noqa: E501
+def _send_file_quarantined_sns_msg(
+    bucket: str,
+    key: str,
+    file_status: str,
+    exit_status: int,
+):
+    logger.info(
+        f"Sending an SNS message regarding the quarantined file: {key}",
+    )
     try:
-        topic_arn = ssm_params[f"/pipeline/QuarantineTopicArn-{resource_suffix}"]  # noqa: E501
+        topic_arn = ssm_params[f"/pipeline/QuarantineTopicArn-{resource_suffix}"]
         subject = "AV Scanning Failure"
         message = (
             "A file has been quarantined based on the results of a ClamAV scan:\n\n"

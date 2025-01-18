@@ -20,17 +20,14 @@ def lambda_handler(event, context):
     logger.info(f"Bucket: {bucket}")
     logger.info(f"Key: {key}")
 
-    response_body = S3_CLIENT.generate_presigned_post(
-        Bucket=bucket,
-        Key=key
-    )
+    response = S3_CLIENT.generate_presigned_post(Bucket=bucket, Key=key)
 
-    logger.info(f"Response Body: {response_body}")
+    logger.info(f"Response Body: {response}")
 
     response = {
         "statusCode": 200,
-        "body": json.dumps(response_body),
-        "isBase64Encoded": False
+        "body": json.dumps(response),
+        "isBase64Encoded": False,
     }
 
     return response
