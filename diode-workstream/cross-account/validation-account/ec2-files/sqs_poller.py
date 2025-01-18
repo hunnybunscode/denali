@@ -61,7 +61,7 @@ def main():
         except Exception as e:
             logger.exception(e)
             logger.info("Sleeping for 3 seconds, before proceeding to receive the next message")  # noqa: E501
-            time.sleep(3)
+            time.sleep(3)  # nosemgrep arbitrary-sleep
 
 
 if __name__ == "__main__":
