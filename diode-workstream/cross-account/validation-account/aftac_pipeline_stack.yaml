@@ -215,6 +215,9 @@ Resources:
         InstanceType: m5.large
         Monitoring:
           Enabled: false
+        MetadataOptions:
+          HttpPutResponseHopLimit: 1
+          HttpTokens: required
         SecurityGroupIds:
           - !GetAtt AvScanSecurityGroup.GroupId
         TagSpecifications:
