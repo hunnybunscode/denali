@@ -989,13 +989,13 @@ Resources:
           cd diodeSimulator
           unzip ${SimulatorDeploymentPackageObjectKey}
           rm ${SimulatorDeploymentPackageObjectKey}
-          chown -R ec2-user:ec2-user /home/ec2-user 
+          chown -R ec2-user:ec2-user /home/ec2-user
           iptables -A PREROUTING -t nat -i eth0 -p tcp --dport ${SimulatorListenPort} -j REDIRECT --to-port 8080
           iptables -t nat -A OUTPUT -o lo -p tcp --dport ${SimulatorListenPort} -j REDIRECT --to-port 8080
           mkdir /etc/iptables
           iptables-save > /etc/iptables/rules.v4
           ip6tables-save > /etc/iptables/rules.v6
-          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30"` 
+          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30"`
           PUBLIC_DNS_NAME=`curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-hostname`
           unset TOKEN
           echo "SIMULATORENDPOINT=http://$PUBLIC_DNS_NAME:${SimulatorListenPort}" >> /home/ec2-user/diodeSimulator/diode_simulator.properties

@@ -1,6 +1,6 @@
 import logging
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import clamscan
 from config import approved_filetypes
@@ -22,14 +22,18 @@ logger = logging.getLogger()
 
 
 def validate_file(bucket: str, key: str, receipt_handle: str):
-    logger.info(f"Validating \"{key}\" object uploaded to \"{bucket}\" bucket")
+    logger.info(f'Validating "{key}" object uploaded to "{bucket}" bucket')
 
     file_ext = get_file_ext(key)
     logger.info(f"File extension: {file_ext}")
 
     if file_ext not in approved_filetypes:
-        logger.warning(f"File extension \"{file_ext}\" is NOT approved")
-        tags = create_tags_for_file_validation("FileTypeNotApproved", file_ext, "")  # noqa: E501
+        logger.warning(f'File extension "{file_ext}" is NOT approved')
+        tags = create_tags_for_file_validation(
+            "FileTypeNotApproved",
+            file_ext,
+            "",
+        )
         add_tags(bucket, key, tags)
         _process_invalid_file(bucket, key, receipt_handle)
         return
@@ -55,26 +59,39 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
         if not get_file_ext(file_path) == "zip":
             return True
 
-        # TODO: What files are allowed to be in a zip file? For example, is an XML allowed?
-        logger.info(f"The file is a ZIP file. Validating its contents")
+        # TODO: What files are allowed to be in a zip file?
+        # For example, should files destined for DFDL be allowed?
+        logger.info("The file is a ZIP file. Validating its contents")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             extract_zipfile(file_path, tmpdir)
-            file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]  # noqa: E501
+            file_paths = [
+                str(item) for item in Path(tmpdir).rglob("*") if item.is_file()
+            ]
             for _file_path in file_paths:
-                # Nested zip files are not allowed, for now
+                # Nested zip files are not allowed
                 _file_ext = get_file_ext(_file_path)
                 if _file_ext == "zip":
-                    logger.warning(f"Nested zip files are not allowed: {_file_path}")  # noqa: E501
-                    error_tags = create_tags_for_file_validation("NestedZipFileNotAllowed", "zip", "")  # noqa: E501
+                    logger.warning(
+                        f"Nested zip files are not allowed: {_file_path}",
+                    )
+                    error_tags = create_tags_for_file_validation(
+                        "NestedZipFileNotAllowed",
+                        "zip",
+                        "",
+                    )
                     add_tags(bucket, key, error_tags)
                     _process_invalid_file(bucket, key, receipt_handle)
                     return False
 
                 valid, _ = validate_filetype(_file_path, _file_ext)
                 if not valid:
-                    # If one file fails validation, move the entire zip file to quarantine bucket
-                    error_tags = create_tags_for_file_validation("ZipFileWithInvalidFile", "zip", "")  # noqa: E501
+                    # If one file fails validation, reject the entire zip file
+                    error_tags = create_tags_for_file_validation(
+                        "ZipFileWithInvalidFile",
+                        "zip",
+                        "",
+                    )
                     add_tags(bucket, key, error_tags)
                     _process_invalid_file(bucket, key, receipt_handle)
                     return False
@@ -82,13 +99,18 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
         return True
 
     except Exception as e:
-        # TODO: What should happen in case of errors? Is logging it out enough? That means the SQS message will be processed again
+        # TODO: What should happen in case of errors? Is logging it out enough?
+        # That means the SQS message will be processed again
         logger.error(f"Could not validate the file: {e}")
 
 
 def _process_invalid_file(bucket: str, key: str, receipt_handle: str):
-    invalid_files_bucket = ssm_params[f"/pipeline/InvalidFilesBucketName-{resource_suffix}"]  # noqa: E501
-    logger.info(f"Copying {key} file to Invalid Files bucket: {invalid_files_bucket}")  # noqa: E501
+    invalid_files_bucket = ssm_params[
+        f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
+    ]
+    logger.info(
+        f"Copying {key} file to Invalid Files bucket: {invalid_files_bucket}",
+    )
     copy_object(bucket, invalid_files_bucket, key)
 
     # Delete it from the ingestion bucket
@@ -100,9 +122,11 @@ def _process_invalid_file(bucket: str, key: str, receipt_handle: str):
 
 
 def _send_file_rejected_sns_msg(bucket: str, key: str):
-    logger.info(f"Sending an SNS message regarding the rejected file: {key}")  # noqa: E501
+    logger.info(
+        f"Sending an SNS message regarding the rejected file: {key}",
+    )
     try:
-        topic_arn = ssm_params[f"/pipeline/InvalidFilesTopicArn-{resource_suffix}"]  # noqa: E501
+        topic_arn = ssm_params[f"/pipeline/InvalidFilesTopicArn-{resource_suffix}"]
         subject = "Content-Type Validation Failure"
         message = (
             "A file has been rejected.\n\n"

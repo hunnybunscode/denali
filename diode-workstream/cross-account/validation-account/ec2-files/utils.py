@@ -6,7 +6,6 @@ import boto3  # type: ignore
 import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
-
 from config import approved_filetypes
 from config import exempt_file_types
 from config import mime_mapping
@@ -24,7 +23,14 @@ SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 
-def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: str | None = None, dest_bucket_owner: str | None = None, raise_error=True):
+def copy_object(
+    src_bucket: str,
+    dest_bucket: str,
+    key: str,
+    src_bucket_owner: str | None = None,
+    dest_bucket_owner: str | None = None,
+    raise_error=True,
+):
     try:
         logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
         params = dict(
@@ -48,13 +54,15 @@ def copy_object(src_bucket: str, dest_bucket: str, key: str, src_bucket_owner: s
         return False
 
 
-def delete_object(bucket: str, key: str, bucket_owner: str | None = None, raise_error=True):
+def delete_object(
+    bucket: str,
+    key: str,
+    bucket_owner: str | None = None,
+    raise_error=True,
+):
     try:
         logger.info(f"Deleting {bucket}/{key}")
-        params = dict(
-            Bucket=bucket,
-            Key=key
-        )
+        params = dict(Bucket=bucket, Key=key)
         if bucket_owner:
             params["ExpectedBucketOwner"] = bucket_owner
 
@@ -69,12 +77,13 @@ def delete_object(bucket: str, key: str, bucket_owner: str | None = None, raise_
         return False
 
 
-def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -> dict[str, str]:
+def get_object_tagging(
+    bucket: str,
+    key: str,
+    bucket_owner: str | None = None,
+) -> dict[str, str]:
     logger.info(f"Getting existing tags for {bucket}/{key}")
-    params = dict(
-        Bucket=bucket,
-        Key=key
-    )
+    params = dict(Bucket=bucket, Key=key)
     if bucket_owner:
         params["ExpectedBucketOwner"] = bucket_owner
 
@@ -83,14 +92,15 @@ def get_object_tagging(bucket: str, key: str, bucket_owner: str | None = None) -
     return {tag["Key"]: tag["Value"] for tag in tag_set}
 
 
-def put_object_tagging(bucket: str, key: str, tags: dict[str, str], bucket_owner: str | None = None) -> dict[str, str]:
+def put_object_tagging(
+    bucket: str,
+    key: str,
+    tags: dict[str, str],
+    bucket_owner: str | None = None,
+):
     logger.info(f"Putting tags for {bucket}/{key}")
     tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
-    params = dict(
-        Bucket=bucket,
-        Key=key,
-        Tagging={"TagSet": tag_set}
-    )
+    params = dict(Bucket=bucket, Key=key, Tagging={"TagSet": tag_set})
     if bucket_owner:
         params["ExpectedBucketOwner"] = bucket_owner
 
@@ -98,13 +108,14 @@ def put_object_tagging(bucket: str, key: str, tags: dict[str, str], bucket_owner
     logger.info("Successfully put the tags")
 
 
-def download_file(bucket: str, key: str, file_path: str, bucket_owner: str | None = None):
+def download_file(
+    bucket: str,
+    key: str,
+    file_path: str,
+    bucket_owner: str | None = None,
+):
     logger.info(f"Downloading {bucket}/{key} to {file_path}")
-    params = dict(
-        Bucket=bucket,
-        Key=key,
-        Filename=file_path
-    )
+    params: dict[str, str | dict] = dict(Bucket=bucket, Key=key, Filename=file_path)
     if bucket_owner:
         params["ExtraArgs"] = {"ExpectedBucketOwner": bucket_owner}
 
@@ -112,7 +123,12 @@ def download_file(bucket: str, key: str, file_path: str, bucket_owner: str | Non
     logger.info("Successfully downloaded the object")
 
 
-def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: str | None = None):
+def add_tags(
+    bucket: str,
+    key: str,
+    tags_to_add: dict[str, str],
+    bucket_owner: str | None = None,
+):
     """
     `ClientError`s are logged, but ignored
     """
@@ -123,16 +139,15 @@ def add_tags(bucket: str, key: str, tags_to_add: dict[str, str], bucket_owner: s
         put_object_tagging(bucket, key, combined_tags, bucket_owner)
         logger.info("Successfully added the new tags")
     except ClientError as e:
-        logger.warning(f"ERROR: Exception ocurred while adding tags: {e}")
+        logger.warning(f"ERROR: Exception occurred while adding tags: {e}")
         pass
 
 
 def publish_sns_message(topic_arn: str, message: str, subject: str | None = None):
-    logger.info(f"Publishing a message to SNS topic: {topic_arn.split(':')[5]}")  # noqa: E501
-    params = dict(
-        TopicArn=topic_arn,
-        Message=message
+    logger.info(
+        f"Publishing a message to SNS topic: {topic_arn.split(':')[5]}",
     )
+    params = dict(TopicArn=topic_arn, Message=message)
     if subject:
         params["Subject"] = subject
 
@@ -143,10 +158,7 @@ def publish_sns_message(topic_arn: str, message: str, subject: str | None = None
 def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = None):
     queue_name = queue_url.split("/")[-1]
     logger.info(f"Sending a message to {queue_name} SQS queue")
-    params = dict(
-        QueueUrl=queue_url,
-        MessageBody=message
-    )
+    params: dict[str, str | int] = dict(QueueUrl=queue_url, MessageBody=message)
     if delay_seconds is not None:
         params["DelaySeconds"] = delay_seconds
 
@@ -159,9 +171,9 @@ def receive_sqs_message(queue_url: str, max_num_of_messages=1):
     logger.info(f"Checking for messages from {queue_name} SQS queue")
     response: dict = SQS_CLIENT.receive_message(
         QueueUrl=queue_url,
-        MaxNumberOfMessages=max_num_of_messages
+        MaxNumberOfMessages=max_num_of_messages,
     )
-    messages: list = response.get("Messages")
+    messages: list = response.get("Messages", [])
     if not messages:
         logger.info("No messages were received")
     return messages
@@ -170,34 +182,30 @@ def receive_sqs_message(queue_url: str, max_num_of_messages=1):
 def delete_sqs_message(queue_url: str, receipt_handle: str):
     queue_name = queue_url.split("/")[-1]
     logger.info(f"Deleting message from {queue_name} SQS queue")
-    SQS_CLIENT.delete_message(
-        QueueUrl=queue_url,
-        ReceiptHandle=receipt_handle
-    )
+    SQS_CLIENT.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
     logger.info("Successfully deleted the message")
 
 
 def get_param_value(name: str, with_decryption=False) -> str:
     logger.info(f"Getting the value for {name} parameter")
-    value = SSM_CLIENT.get_parameter(
-        Name=name,
-        WithDecryption=with_decryption
-    )["Parameter"]["Value"]
+    value = SSM_CLIENT.get_parameter(Name=name, WithDecryption=with_decryption)[
+        "Parameter"
+    ]["Value"]
     logger.info("Successfully retrieved the value")
     return value
 
 
-def get_params_values(ssm_params: dict[str, str], with_decryption=False) -> dict[str, str]:
+def get_params_values(
+    ssm_params: dict[str, str],
+    with_decryption=False,
+) -> dict[str, str]:
     """
-    Retrieves the values specified by `ssm_params` dictionary keys, 
+    Retrieves the values specified by `ssm_params` dictionary keys,
     updates their values in place, and returns it
     """
     params = [*ssm_params]
     logger.info(f"Getting the values for parameters: {params}")
-    response = SSM_CLIENT.get_parameters(
-        Names=params,
-        WithDecryption=with_decryption
-    )
+    response = SSM_CLIENT.get_parameters(Names=params, WithDecryption=with_decryption)
     invalid_params = response["InvalidParameters"]
     if invalid_params:
         logger.warning(f"Invalid parameters: {invalid_params}")
@@ -218,7 +226,7 @@ def create_tags_for_file_validation(error_status: str, file_type: str, mime_type
     return {
         "ERROR_STATUS": error_status,
         "FILE_TYPE": file_type,
-        "MIME_TYPE": mime_type
+        "MIME_TYPE": mime_type,
     }
 
 
@@ -229,10 +237,7 @@ def create_tags_for_av_scan(file_status: str, exit_status: int):
         "CLAM_AV_EXIT_CODE": exit_status
     }
     """
-    return {
-        "AV_SCAN_STATUS": file_status,
-        "CLAM_AV_EXIT_CODE": str(exit_status)
-    }
+    return {"AV_SCAN_STATUS": file_status, "CLAM_AV_EXIT_CODE": str(exit_status)}
 
 
 def empty_dir(dir: str):
@@ -255,7 +260,7 @@ def empty_dir(dir: str):
             if path.is_file():
                 path.unlink(missing_ok=True)
             if path.is_dir():
-                empty_dir(path)
+                empty_dir(str(path))
                 path.rmdir()
         logger.info("Successfully emptied the directory")
     except Exception as e:
@@ -266,7 +271,10 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
     """
     Uses the puremagic library to determine file type and mime type.\n
     Returns (file_type, mime_type)\n
-    If puremagic can't determine the file type and mime type, returns empty strings ("", "")\n
+
+    If puremagic can't determine the file type and mime type,
+    returns empty strings ("", "")\n
+
     In case of any errors, returns ("Unknown", "Unknown")\n
     Note: `file_type` is stripped of any dots.
     """
@@ -302,25 +310,43 @@ def validate_filetype(file_path: str, file_ext: str) -> tuple[bool, dict[str, st
     file_type, mime_type = get_file_identity(file_path)
 
     if (not file_type) and (file_ext in exempt_file_types):
-        logger.info(f"File {file_path} has the extension of {file_ext}. Performing AV scan only")  # noqa: E501
+        logger.info(
+            f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
+        )
         tags = create_tags_for_file_validation("None", file_ext, "")
         return True, tags
 
     if file_type != file_ext:
-        logger.warning(f"File type ({file_type}) does NOT match file extension ({file_ext})")  # noqa: E501
-        tags = create_tags_for_file_validation("FileTypeNotMatched", file_type, mime_type)  # noqa: E501
+        logger.warning(
+            f"File type ({file_type}) does NOT match file extension ({file_ext})",
+        )
+        tags = create_tags_for_file_validation(
+            "FileTypeNotMatched",
+            file_type,
+            mime_type,
+        )
         return False, tags
 
-    logger.info(f"File type ({file_type}) matches file extension ({file_ext})")  # noqa: E501
+    logger.info(
+        f"File type ({file_type}) matches file extension ({file_ext})",
+    )
     if file_type not in approved_filetypes:
         logger.warning(f"File type ({file_type}) is NOT approved")
-        tags = create_tags_for_file_validation("FileTypeNotApproved", file_type, mime_type)  # noqa: E501
+        tags = create_tags_for_file_validation(
+            "FileTypeNotApproved",
+            file_type,
+            mime_type,
+        )
         return False, tags
 
     logger.info(f"File type ({file_type}) is an approved type")
     if mime_type not in mime_mapping.get(file_type, []):
         logger.warning(f"Mime type ({mime_type}) is NOT approved")
-        tags = create_tags_for_file_validation("MimeTypeNotApproved", file_type, mime_type)  # noqa: E501
+        tags = create_tags_for_file_validation(
+            "MimeTypeNotApproved",
+            file_type,
+            mime_type,
+        )
         return False, tags
 
     logger.info(f"Successfully validated file: {file_path}")
@@ -353,7 +379,8 @@ def extract_zipfile(zipfile_path: str, extract_dir: str):
 
 def delete_av_scan_message(receipt_handle: str):
     """
-    Deletes the message from AV Scan Queue to stop other consumers from processing the message
+    Deletes the message from AV Scan Queue to stop other consumers
+    from processing the message
     """
     queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
     delete_sqs_message(queue_url, receipt_handle)

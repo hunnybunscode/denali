@@ -21,7 +21,11 @@ diode_endpoint_url = "https://diode.us-gov-west-1.amazonaws.com"
 if USE_DIODE_SIMULATOR == "True":
     diode_endpoint_url = DIODE_SIMULATOR_ENDPOINT
 
-DIODE_CLIENT = boto3.client("diode", config=config, endpoint_url=diode_endpoint_url)  # noqa: E501
+DIODE_CLIENT = boto3.client(
+    "diode",
+    config=config,
+    endpoint_url=diode_endpoint_url,
+)
 S3_CLIENT = boto3.client("s3", config=config)
 SQS_CLIENT = boto3.client("sqs", config=config)
 
@@ -57,7 +61,13 @@ def handle_create_transfer(msg: dict):
     except ClientError as e:
         logger.error(f"Failed to create the transfer request for {key}")
         logger.error(e)
-        send_status_message(bucket, key, mapping_id, "FAILED", "CREATE_TRANSFER_FAILED")  # noqa: E501
+        send_status_message(
+            bucket,
+            key,
+            mapping_id,
+            "FAILED",
+            "CREATE_TRANSFER_FAILED",
+        )
 
 
 def handle_transfer_status_event(msg: dict):
@@ -80,18 +90,26 @@ def handle_transfer_status_event(msg: dict):
     send_status_message(bucket, key, mapping_id, status, transfer_id)
 
 
-def send_status_message(bucket: str, key: str, mapping_id: str, status: str, transfer_id: str):
+def send_status_message(
+    bucket: str,
+    key: str,
+    mapping_id: str,
+    status: str,
+    transfer_id: str,
+):
     logger.info("Sending a message on transfer status to SQS queue")
 
     SQS_CLIENT.send_message(
         QueueUrl=QUEUE_URL,
-        MessageBody=json.dumps({
-            "bucket": bucket,
-            "key": key,
-            "mappingId": mapping_id,
-            "status": status,
-            "transferId": transfer_id,
-        })
+        MessageBody=json.dumps(
+            {
+                "bucket": bucket,
+                "key": key,
+                "mappingId": mapping_id,
+                "status": status,
+                "transferId": transfer_id,
+            },
+        ),
     )
 
     logger.info("Message sent successfully")
@@ -111,11 +129,17 @@ def get_mapping(bucket, key) -> str:
     if cds_profile == "CDS_3":
         return CDS3_MAPPING
 
-    logger.warning(f"CDSProfile tag is missing or its value is unmatched, using {CDS1_MAPPING} mapping")  # noqa: E501
+    logger.warning(
+        f"CDSProfile tag is missing or its value is unmatched, using {CDS1_MAPPING} mapping",  # noqa: E501
+    )
     return CDS1_MAPPING
 
 
-def get_object_tagging(bucket: str, key: str, expected_bucket_owner: str = "") -> dict[str, str]:
+def get_object_tagging(
+    bucket: str,
+    key: str,
+    expected_bucket_owner: str = "",
+) -> dict[str, str]:
     """
     expected_bucket_owner: (optional) 12-digit account ID
     """
@@ -139,7 +163,7 @@ def create_transfer(mapping_id: str, bucket: str, key: str, include_tags=True):
         s3Key=key,
         # Take the last 100 chars of the key as description
         description=key.split("/")[-1][-100:],
-        includeS3ObjectTags=include_tags
+        includeS3ObjectTags=include_tags,
     )["transfer"]
 
     logger.info(f"Transfer request created: {response}")
@@ -149,9 +173,7 @@ def describe_transfer(transfer_id: str):
     logger.info(f"Getting details for transfer: {transfer_id}")
 
     try:
-        response = DIODE_CLIENT.describe_transfer(
-            transferId=transfer_id
-        )["transfer"]
+        response = DIODE_CLIENT.describe_transfer(transferId=transfer_id)["transfer"]
         logger.info(f"Details: {response}")
     except ClientError as e:
         logger.warning(f"Failed to get transfer details: {e}")

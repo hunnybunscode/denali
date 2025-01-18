@@ -73,7 +73,7 @@ Parameters:
   ResourceSuffix:
     Type: String
     Description: >-
-      Suffix added to the named AWS resources. It must start with a lowercase letter and contain 
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.

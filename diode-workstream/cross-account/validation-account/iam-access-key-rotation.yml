@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: 2010-09-09
 Description: >-
   This CloudFormation template automates IAM Access Key rotation for enhanced security.
   It creates a Lambda function that periodically checks and rotates IAM user access keys based on configurable time periods.
@@ -62,27 +62,27 @@ Parameters:
     Default: AFC2S
     AllowedValues:
       - AFC2S
-    ConstraintDescription: Must be AFC2S 
+    ConstraintDescription: Must be AFC2S
   pPermissionBoundaryArn:
     Type: String
     Description: Permission Boundary required for SCP for IAM Role creation
   pRotationPeriod:
     Description: >-
-      Number of days before an active key is rotated. Must be at least 30 days and less than Inactive Period. 
+      Number of days before an active key is rotated. Must be at least 30 days and less than Inactive Period.
       Recommended: 90 days
     Type: Number
     Default: 90
     MinValue: 1
   pInactivePeriod:
     Description: >-
-      Number of days before an inactive key is deleted. Must be greater than Rotation Period by at least 7 days 
+      Number of days before an inactive key is deleted. Must be greater than Rotation Period by at least 7 days
       and less than Retention Period. Recommended: 100 days
     Type: Number
     Default: 100
     MinValue: 1
   pRetentionPeriod:
     Description: >-
-      Number of days before a deleted key is permanently removed. Must be greater than Inactive Period by at least 7 days. 
+      Number of days before a deleted key is permanently removed. Must be greater than Inactive Period by at least 7 days.
       Recommended: 110 days
     Type: Number
     Default: 110
@@ -103,7 +103,7 @@ Parameters:
     Type: String
 
 Conditions:
-  HasSecondaryEmail: !Not [!Equals [!Ref pNotificationsEmailSecondary, '']]
+  HasSecondaryEmail: !Not [!Equals [!Ref pNotificationsEmailSecondary, ""]]
 
 Resources:
   rKMSKey:
@@ -162,7 +162,7 @@ Resources:
   rKMSKeyAlias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: !Sub 'alias/${pResourcePrefix}_access_key_rotation'
+      AliasName: !Sub alias/${pResourcePrefix}_access_key_rotation
       TargetKeyId: !Ref rKMSKey
 
   rRotationLambdaFunctionExecutionRole:
@@ -171,7 +171,7 @@ Resources:
       RoleName: !Sub ${pIamResourcePrefix}_${pResourcePrefix}_AccessKeyRotationLambdaRole
       PermissionsBoundary: !Ref pPermissionBoundaryArn
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -182,7 +182,7 @@ Resources:
       Policies:
         - PolicyName: !Sub ${pIamResourcePrefix}_Allow_Rotation_Function_Policy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -194,13 +194,13 @@ Resources:
                   - iam:UpdateAccessKey
                 Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/*
               - Effect: Allow
-                Action: 
+                Action:
                   - secretsmanager:PutSecretValue
                   - secretsmanager:CreateSecret
                 Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*-AccessKey*
               - Effect: Allow
                 Action: sns:Publish
-                Resource: 
+                Resource:
                   - !Ref rRotationSNSTopic
                   - !Ref rRotationFailureSNSTopic
               - Effect: Allow
@@ -282,13 +282,13 @@ Resources:
               Raises ValueError if validation fails
               """
               logger.info("Validating rotation periods")
-              
+
               # Check minimum rotation period
               if ROTATION_PERIOD < 30:
                   error_msg = f"Rotation Period ({ROTATION_PERIOD}) must be at least 30 days"
                   logger.error(error_msg)
                   raise ValueError(error_msg)
-              
+
               # Check period order
               if not (ROTATION_PERIOD < INACTIVATION_PERIOD < DELETION_PERIOD):
                   error_msg = (
@@ -298,7 +298,7 @@ Resources:
                   )
                   logger.error(error_msg)
                   raise ValueError(error_msg)
-              
+
               # Check minimum gaps between periods
               if (INACTIVATION_PERIOD - ROTATION_PERIOD) < 7:
                   error_msg = (
@@ -307,7 +307,7 @@ Resources:
                   )
                   logger.error(error_msg)
                   raise ValueError(error_msg)
-              
+
               if (DELETION_PERIOD - INACTIVATION_PERIOD) < 7:
                   error_msg = (
                       f"Gap between Inactivation Period ({INACTIVATION_PERIOD}) and "
@@ -315,7 +315,7 @@ Resources:
                   )
                   logger.error(error_msg)
                   raise ValueError(error_msg)
-              
+
               logger.info(
                   f"Rotation periods validation passed - Rotation: {ROTATION_PERIOD}, "
                   f"Inactivation: {INACTIVATION_PERIOD}, Deletion: {DELETION_PERIOD}"
@@ -353,11 +353,11 @@ Resources:
               """
               user_name = user['UserName']
               logger.info(f"Processing user: {user_name}")
-              
+
               try:
                   # Check exclusion tags
                   user_tags = iam.list_user_tags(UserName=user_name)['Tags']
-                  if any(tag['Key'] == EXCLUDED_USER_TAG_KEY and tag['Value'] == EXCLUDED_USER_TAG_VALUE 
+                  if any(tag['Key'] == EXCLUDED_USER_TAG_KEY and tag['Value'] == EXCLUDED_USER_TAG_VALUE
                         for tag in user_tags):
                       logger.info(f"User {user_name} excluded from rotation due to exclusion tag")
                       return {"Action": "Skipped (EXCLUDED USER TAG FOUND)"}
@@ -366,11 +366,11 @@ Resources:
                   access_keys = iam.list_access_keys(UserName=user_name)['AccessKeyMetadata']
                   active_keys = [key for key in access_keys if key['Status'] == 'Active']
                   inactive_keys = [key for key in access_keys if key['Status'] == 'Inactive']
-                  
+
                   logger.info(f"User {user_name} has {len(active_keys)} active and {len(inactive_keys)} inactive keys")
-                  
+
                   result = {}
-                  
+
                   # Process active keys
                   if len(active_keys) == 2:
                       oldest_key = min(active_keys, key=lambda k: k['CreateDate'])
@@ -379,14 +379,14 @@ Resources:
                           delete_access_key(user_name, oldest_key['AccessKeyId'])
                           result["Deleted Old Key"] = oldest_key['AccessKeyId']
                           create_new_key(user_name, result, context)
-                  
+
                   # Process single active key
                   elif len(active_keys) == 1:
                       key = active_keys[0]
                       if classify_key_age(key['CreateDate'], dates) != "New":
                           logger.info(f"Rotating single active key for user {user_name}")
                           create_new_key(user_name, result, context)
-                  
+
                   # Process inactive keys
                   for key in inactive_keys:
                       key_age = classify_key_age(key['CreateDate'], dates)
@@ -398,9 +398,9 @@ Resources:
                           result["Deleted Keys"].append(key['AccessKeyId'])
                       elif key_age == "Inactivate":
                           logger.info(f"Key {key['AccessKeyId']} for user {user_name} already inactive")
-                  
+
                   return result or {"Action": "No action required"}
-              
+
               except Exception as e:
                   logger.error(f"Error processing user {user_name}: {str(e)}")
                   raise
@@ -410,19 +410,19 @@ Resources:
               Creates a new access key and stores it in Secrets Manager
               """
               logger.info(f"Creating new access key for user {user_name}")
-              
+
               try:
                   new_key = iam.create_access_key(UserName=user_name)['AccessKey']
                   result["Created Access Key"] = new_key['AccessKeyId']
-                  
+
                   secret_name = f"{user_name}-AccessKey"
                   result["ASM Secret Name"] = secret_name
-                  
+
                   secret_string = json.dumps({
                       'aws_access_key_id': new_key['AccessKeyId'],
                       'aws_secret_access_key': new_key['SecretAccessKey']
                   })
-                  
+
                   try:
                       sm.put_secret_value(SecretId=secret_name, SecretString=secret_string)
                       logger.info(f"Updated existing secret for user {user_name}")
@@ -433,10 +433,10 @@ Resources:
                           SecretString=secret_string
                       )
                       logger.info(f"Created new secret for user {user_name}")
-                  
+
                   send_notification(user_name, new_key['AccessKeyId'], context)
                   logger.info(f"Successfully created new access key for user {user_name}")
-              
+
               except Exception as e:
                   logger.error(f"Error creating new key for user {user_name}: {str(e)}")
                   raise
@@ -471,7 +471,7 @@ Resources:
                       f"Generated by Lambda Function: {context.invoked_function_arn}\n"
                       f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
                   )
-                  
+
                   sns.publish(
                       TopicArn=SNS_ARN,
                       Message=message,
@@ -487,21 +487,21 @@ Resources:
               Main handler for the Lambda function
               """
               logger.info("Starting access key rotation process")
-              
+
               try:
                   # Validate configuration
                   validate_periods()
-                  
+
                   # Calculate dates for key age classification
                   dates = calculate_dates()
                   logger.info(f"Reference dates - Rotation: {dates['rotation']}, "
                             f"Inactivation: {dates['inactivation']}, "
                             f"Deletion: {dates['deletion']}")
-                  
+
                   # Process all users
                   users = iam.list_users()['Users']
                   logger.info(f"Found {len(users)} IAM users to process")
-                  
+
                   response = {
                       'ProcessingDate': datetime.datetime.now().isoformat(),
                       'Configuration': {
@@ -510,17 +510,17 @@ Resources:
                           'DeletionPeriod': DELETION_PERIOD
                       },
                       'Results': {
-                          user['UserName']: process_user(user, dates, context) 
+                          user['UserName']: process_user(user, dates, context)
                           for user in users
                       }
                   }
-                  
+
                   logger.info("Access key rotation process completed successfully")
                   return response
-                  
+
               except Exception as e:
                   logger.error(f"Error in access key rotation process: {str(e)}")
-                  
+
                   # Send failure notification
                   try:
                       sns.publish(
@@ -531,7 +531,6 @@ Resources:
                   except Exception as sns_error:
                       logger.error(f"Failed to send failure notification: {str(sns_error)}")
                   raise
-
 
   rRotationCloudWatchEventLambdaTrigger:
     Type: AWS::Events::Rule
@@ -587,7 +586,7 @@ Resources:
       Endpoint: !Ref pNotificationsEmailPrimary
       Protocol: email
       TopicArn: !Ref rRotationFailureSNSTopic
-  
+
   rRotationSNSSecondaryFailureNotificationSubscription:
     Type: AWS::SNS::Subscription
     Condition: HasSecondaryEmail
