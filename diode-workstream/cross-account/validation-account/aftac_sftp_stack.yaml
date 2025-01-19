@@ -181,8 +181,11 @@ Resources:
     Properties:
       ServerId: !GetAtt SftpServer.ServerId
       UserName: !Ref SftpUserName
-      HomeDirectoryType: PATH
-      HomeDirectory: !Sub /${SftpBucket}/${SftpUserName}
+      HomeDirectoryType: LOGICAL
+      HomeDirectoryMappings:
+        - Entry: / # chroot
+          Target: !Sub /${SftpBucket}/${SftpUserName} # Limit visibility to this directory (and below) only
+          Type: DIRECTORY
       Role: !Ref TransferUserRoleArn
 
 Outputs:

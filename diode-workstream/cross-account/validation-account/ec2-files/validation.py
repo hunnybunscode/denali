@@ -32,14 +32,15 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
         tags = create_tags_for_file_validation(
             "FileTypeNotApproved",
             file_ext,
-            "",
         )
         add_tags(bucket, key, tags)
         _process_invalid_file(bucket, key, receipt_handle)
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        file_path = f"{tmpdir}/{key}"
+        # If key includes prefixes, split it and take the last element
+        file_path = f'{tmpdir}/{key.split("/")[-1]}'
+        # TODO: If the object does not exist, delete the sqs message
         download_file(bucket, key, file_path)
         valid = _validate_file(bucket, key, file_path, receipt_handle)
         if valid:
@@ -78,7 +79,6 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
                     error_tags = create_tags_for_file_validation(
                         "NestedZipFileNotAllowed",
                         "zip",
-                        "",
                     )
                     add_tags(bucket, key, error_tags)
                     _process_invalid_file(bucket, key, receipt_handle)
@@ -90,7 +90,6 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
                     error_tags = create_tags_for_file_validation(
                         "ZipFileWithInvalidFile",
                         "zip",
-                        "",
                     )
                     add_tags(bucket, key, error_tags)
                     _process_invalid_file(bucket, key, receipt_handle)
