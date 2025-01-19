@@ -48,6 +48,7 @@ Metadata:
           - TemplateURLSftpServerStack
           - SftpServerStackSftpUserName
           - SftpServerStackSftpServerSubnetIds
+          - SftpServerStackSftpBucketCDSProfile
           - SftpServerStackSftpBucketDataOwner
           - SftpServerStackSftpBucketGovPoc
           - SftpServerStackSftpBucketKeyOwner
@@ -113,6 +114,8 @@ Metadata:
         default: SFTP Server Stack SFTP User Name
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
+      SftpServerStackSftpBucketCDSProfile:
+        default: SFTP Server Stack SFTP Bucket CDS Profile
       SftpServerStackSftpBucketDataOwner:
         default: SFTP Server Stack SFTP Bucket Data Owner
       SftpServerStackSftpBucketGovPoc:
@@ -269,6 +272,12 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Two (2) Subnet IDs for SFTP server
 
+  SftpServerStackSftpBucketCDSProfile:
+    Type: String
+    Description: CDS Profile for SFTP Bucket
+    AllowedValues: [CDS_1, CDS_2, CDS_3]
+    ConstraintDescription: Must be CDS_1, CDS_2, or CDS_3
+
   SftpServerStackSftpBucketDataOwner:
     Type: String
     Description: Name of the Sftp Server Data Owner
@@ -367,6 +376,7 @@ Resources:
         LambdaStorageBucket: !Ref LambdaStorageBucket
         ObjectTaggerLambdaCodeKey: !Ref IngestStackObjectTaggerLambdaCodeKey
         SftpUserName: !Ref SftpServerStackSftpUserName
+        SftpBucketCDSProfile: !Ref SftpServerStackSftpBucketCDSProfile
         SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
         SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
         SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
