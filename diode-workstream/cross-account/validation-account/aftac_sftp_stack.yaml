@@ -37,6 +37,10 @@ Parameters:
     Type: String
     Description: Role ARN for Transfer logging
 
+  SftpBucketCDSProfile:
+    Type: String
+    Description: The CDS Profile for SFTP Bucket
+
   SftpBucketDataOwner:
     Type: String
     Description: Data Owner for SFTP bucket
@@ -64,7 +68,6 @@ Resources:
           IpProtocol: "-1"
       VpcId: !Ref VpcId
 
-  #### Fix This
   SftpBucketObjectTagger:
     Type: AWS::Lambda::Function
     Properties:
@@ -78,6 +81,7 @@ Resources:
           DATA_OWNER: !Ref SftpBucketDataOwner
           GOV_POC: !Ref SftpBucketGovPoc
           KEY_OWNER: !Ref SftpBucketKeyOwner
+          CDS_PROFILE: !Ref SftpBucketCDSProfile
           QUEUE_URL:
             Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
       Code:
