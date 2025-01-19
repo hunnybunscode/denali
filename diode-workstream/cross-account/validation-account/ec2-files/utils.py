@@ -215,7 +215,7 @@ def get_params_values(
     return ssm_params
 
 
-def create_tags_for_file_validation(error_status: str, file_type: str, mime_type: str):
+def create_tags_for_file_validation(error_status: str, file_type: str, mime_type=""):
     """
     Returns: {
         "ERROR_STATUS": error_status,
@@ -313,7 +313,7 @@ def validate_filetype(file_path: str, file_ext: str) -> tuple[bool, dict[str, st
         logger.info(
             f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
         )
-        tags = create_tags_for_file_validation("None", file_ext, "")
+        tags = create_tags_for_file_validation("None", file_ext)
         return True, tags
 
     if file_type != file_ext:
