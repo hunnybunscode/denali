@@ -9,6 +9,8 @@ Metadata:
           - VpcId
           - VpcCidr
           - PrivateSubnetIds
+          - S3PrefixListId
+          - DDBPrefixListId
           - LambdaStorageBucket
 
       - Label:
@@ -64,6 +66,10 @@ Metadata:
         default: VPC CIDR
       PrivateSubnetIds:
         default: Private Subnet IDs within the VPC
+      S3PrefixListId:
+        default: S3 Prefix List ID
+      DDBPrefixListId:
+        default: DynamoDB Prefix List ID
       LambdaStorageBucket:
         default: Lambda Storage Bucket
 
@@ -150,6 +156,18 @@ Parameters:
   PrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: The list of private subnet IDs to use for the pipeline
+
+  S3PrefixListId:
+    Type: String
+    Description: S3 Prefix List ID (e.g. pl-7a3a1b0f)
+    AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid S3 Prefix List ID
+
+  DDBPrefixListId:
+    Type: String
+    Description: DynamoDB Prefix List ID (e.g. pl-1b4c2f9e)
+    AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid DynamoDB Prefix List ID
 
   LambdaStorageBucket:
     Type: String
@@ -347,6 +365,8 @@ Resources:
         VpcId: !Ref VpcId
         VpcCidr: !Ref VpcCidr
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
+        S3PrefixListId: !Ref S3PrefixListId
+        DDBPrefixListId: !Ref DDBPrefixListId
         LambdaStorageBucket: !Ref LambdaStorageBucket
         TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
         ApprovedFileTypes: !Join [",", !Ref PipelineStackApprovedFileTypes]
