@@ -19,6 +19,14 @@ Parameters:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
 
+  S3PrefixListId:
+    Type: String
+    Description: The S3 prefix list ID to use for the pipeline
+
+  DDBPrefixListId:
+    Type: String
+    Description: The DDB prefix list ID to use for the pipeline
+
   LambdaStorageBucket:
     Type: String
     Description: The S3 bucket to store the lambda code in
@@ -169,28 +177,43 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
-  PipelineFunctionSecurityGroup:
+  LambdaFunctionsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security Group for Lambda Functions
       SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
+        - DestinationPrefixListId: !Ref DDBPrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to DDB Gateway Endpoint
       VpcId: !Ref VpcId
 
   AvScanSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: PipelineEc2InstanceSecurityGroup
+      GroupDescription: Security Group for Pipeline EC2 instances
       SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
-      SecurityGroupIngress:
         - CidrIp: !Ref VpcCidr
-          Description: Permit Access from VPC
-          IpProtocol: "-1"
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
       VpcId: !Ref VpcId
 
   InfectedFileTopic:
@@ -361,7 +384,7 @@ Resources:
         S3Key: !Ref TransferResultLambdaCodeKey
       VpcConfig:
         SecurityGroupIds:
-          - !Ref PipelineFunctionSecurityGroup
+          - !Ref LambdaFunctionsSecurityGroup
         SubnetIds: !Ref PrivateSubnetIds
 
   TransferResultEventSourceMapping:
