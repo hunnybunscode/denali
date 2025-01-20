@@ -3,6 +3,14 @@ Parameters:
     Type: String
     Description: Suffix added to the named AWS resources
 
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the existing VPC
+
+  S3PrefixListId:
+    Type: String
+    Description: The S3 prefix list ID to use for the pipeline
+
   Bucket1CDSProfile:
     Type: String
     Description: The CDS Profile for the Bucket 1
@@ -115,9 +123,16 @@ Resources:
     Properties:
       GroupDescription: Security Group for Lambda Functions
       SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
       VpcId: !Ref VpcId
 
   Bucket1ObjectTagger:
@@ -381,7 +396,7 @@ Resources:
   FileUploaderUploadOPTIONS:
     Type: AWS::ApiGateway::Method
     Properties:
-      ApiKeyRequired: false
+      ApiKeyRequired: false # pragma: allowlist secret
       AuthorizationType: NONE
       HttpMethod: OPTIONS
       Integration:
@@ -518,7 +533,7 @@ Resources:
   FileUploaderUploadOPTIONS2:
     Type: AWS::ApiGateway::Method
     Properties:
-      ApiKeyRequired: false
+      ApiKeyRequired: false # pragma: allowlist secret
       AuthorizationType: NONE
       HttpMethod: OPTIONS
       Integration:
