@@ -292,11 +292,14 @@ Resources:
         Types:
           - REGIONAL
 
+  # Specifies the IAM role that Amazon API Gateway uses to write API logs to Amazon CloudWatch Logs
   # To avoid overwriting other roles, you should only have one AWS::ApiGateway::Account resource per region per account.
   # Should we create this outside CloudFormation?
   FileUploaderAccount:
     Type: AWS::ApiGateway::Account
-    DependsOn: FileUploader
+    DependsOn:
+      - FileUploader
+      - FileUploader2
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
     Properties:
@@ -451,16 +454,6 @@ Resources:
         Types:
           - REGIONAL
 
-  # To avoid overwriting other roles, you should only have one AWS::ApiGateway::Account resource per region per account.
-  # Should we create this outside CloudFormation? If not, should we create more than one? Do we retain it?
-  FileUploaderAccount2:
-    Type: AWS::ApiGateway::Account
-    DependsOn: FileUploader2
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
-    Properties:
-      CloudWatchRoleArn: !Ref FileUploaderCloudWatchRole
-
   FileUploaderDeployment2:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -474,7 +467,7 @@ Resources:
 
   FileUploaderDeploymentStageProd2:
     Type: AWS::ApiGateway::Stage
-    DependsOn: FileUploaderAccount2
+    DependsOn: FileUploaderAccount
     Properties:
       AccessLogSetting:
         DestinationArn:
