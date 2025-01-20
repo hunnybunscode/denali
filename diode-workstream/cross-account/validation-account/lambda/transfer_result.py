@@ -32,30 +32,46 @@ def lambda_handler(event, context):
     status = data["status"]
 
     data_owner, gov_poc, key_owner = get_object_tagging(bucket, key)
-    timestamp = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
-
-    put_item_in_ddb(data, timestamp, data_owner, gov_poc, key_owner)
+    put_item_in_ddb(data, data_owner, gov_poc, key_owner)
 
     if status != "SUCCEEDED":
         logger.info(
-            f"Data transfer failed; moving {bucket}/{key} to {FAILED_TRANSFER_BUCKET}",  # noqa: E501
+            f"Data transfer failed; copying {bucket}/{key} to {FAILED_TRANSFER_BUCKET}",  # noqa: E501
         )
-        # Send a message to the SNS topic for failed data transfers
-        send_transfer_error_message(key)
         # Copy the failed S3 object to the failed transfer bucket
         copy_object(DATA_TRANSFER_BUCKET, FAILED_TRANSFER_BUCKET, key)
+        # Send a message to the SNS topic for failed data transfers
+        send_transfer_error_message(key)
 
     delete_object(DATA_TRANSFER_BUCKET, key)
 
-    logger.info("Result Successfully Captured")
+
+def get_object_tagging(bucket: str, key: str):
+    """
+    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner`
+    for `key` in `bucket`.\n
+    If any of these tags are not set, returns "unknown".
+    """
+    unknown = "unknown"
+    try:
+        logger.info(f"Getting tags for {bucket}/{key}")
+
+        tags = _get_object_tagging(bucket, key)
+        data_owner = tags.get("DataOwner", unknown)
+        gov_poc = tags.get("GovPOC", unknown)
+        key_owner = tags.get("KeyOwner", unknown)
+
+        logger.info("Successfully retrieved the tags")
+        return data_owner, gov_poc, key_owner
+    except ClientError as e:
+        logger.error(f"Failed to get object tags: {e}")
+        return unknown, unknown, unknown
 
 
 def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
     """
     Returns `TagSet` for `key` in `bucket` in a dict.
     """
-    logger.info(f"Getting tags for {bucket}/{key}")
-
     tag_set = S3_CLIENT.get_object_tagging(
         Bucket=bucket,
         Key=key,
@@ -67,57 +83,38 @@ def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
     return tags
 
 
-def get_object_tagging(bucket: str, key: str):
-    """
-    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner`
-    for `key` in `bucket`.\n
-    If any of these tags are not set, returns "unknown".
-    """
-    unknown = "unknown"
-    try:
-        tags = _get_object_tagging(bucket, key)
-
-        data_owner = tags.get("DataOwner", unknown)
-        gov_poc = tags.get("GovPOC", unknown)
-        key_owner = tags.get("KeyOwner", unknown)
-
-        return data_owner, gov_poc, key_owner
-    except ClientError as e:
-        logger.error(f"Failed to get object tags: {e}")
-        return unknown, unknown, unknown
-
-
 def put_item_in_ddb(
     data: dict,
-    timestamp: datetime,
     data_owner: str,
     gov_poc: str,
     key_owner: str,
 ):
-    try:
-        DDB_CLIENT.put_item(
-            TableName=DDB_TABLE_NAME,
-            Item={
-                "s3Key": {"S": data["key"]},  # partition key
-                "mappingId": {"S": data["mappingId"]},  # sort key
-                "status": {"S": data["status"]},
-                "transferId": {"S": data["transferId"]},
-                "timestamp": {"S": str(timestamp)},
-                "dataOwner": {"S": data_owner},
-                "govPoc": {"S": gov_poc},
-                "keyOwner": {"S": key_owner},
+    s3_key = data["key"]
+    logger.info(f"Adding an entry into DynamoDB on the transfer status of {s3_key}")
+
+    DDB_CLIENT.put_item(
+        TableName=DDB_TABLE_NAME,
+        Item={
+            "s3Key": {"S": s3_key},  # partition key
+            "timestamp": {
+                "S": str(
+                    datetime.now(zoneinfo.ZoneInfo("America/New_York")),  # sort key
+                ),
             },
-        )
-    except ClientError as e:
-        logger.exception(e)
-        logger.error(
-            f'Error putting metadata about {data["key"]} object into DynamoDB table',  # noqa: E501
-        )
-        raise
+            "mappingId": {"S": data["mappingId"]},
+            "status": {"S": data["status"]},
+            "transferId": {"S": data["transferId"]},
+            "dataOwner": {"S": data_owner},
+            "govPoc": {"S": gov_poc},
+            "keyOwner": {"S": key_owner},
+        },
+    )
+
+    logger.info("Successfully added the entry")
 
 
 def send_transfer_error_message(key: str):
-    logger.info("Sending SNS Message due to failed transfer status")
+    logger.info("Sending an SNS message regarding the failed transfer")
 
     SNS_CLIENT.publish(
         TopicArn=FAILED_TRANSFER_TOPIC_ARN,
@@ -130,23 +127,29 @@ def send_transfer_error_message(key: str):
     )
 
 
-def copy_object(from_bucket: str, to_bucket: str, key: str):
-    response = S3_CLIENT.copy_object(
+def copy_object(src_bucket: str, dest_bucket: str, key: str):
+    logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
+
+    S3_CLIENT.copy_object(
         # Source bucket/key/owner
-        CopySource={"Bucket": from_bucket, "Key": key},
+        CopySource={"Bucket": src_bucket, "Key": key},
         ExpectedSourceBucketOwner=ACCOUNT_ID,
         # Destination bucket/key/owner
-        Bucket=to_bucket,
+        Bucket=dest_bucket,
         Key=key,
         ExpectedBucketOwner=ACCOUNT_ID,
     )
-    logger.info(f"CopyObject response: {response}")
+
+    logger.info("Successfully copied the object")
 
 
 def delete_object(bucket: str, key: str):
-    response = S3_CLIENT.delete_object(
+    logger.info(f"Deleting {bucket}/{key}")
+
+    S3_CLIENT.delete_object(
         Bucket=bucket,
         Key=key,
         ExpectedBucketOwner=ACCOUNT_ID,
     )
-    logger.info(f"DeleteObject response: {response}")
+
+    logger.info("Successfully deleted the object")
