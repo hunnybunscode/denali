@@ -7,7 +7,15 @@ Parameters:
 
   VpcId:
     Type: String
-    Description: VPC ID for AFTAC Cloud
+    Description: VPC ID
+
+  VpcCidr:
+    Type: String
+    Description: VPC CIDR
+
+  S3PrefixListId:
+    Type: String
+    Description: The S3 prefix list ID
 
   PrivateSubnetIds:
     Type: CommaDelimitedList
@@ -63,9 +71,16 @@ Resources:
     Properties:
       GroupDescription: Security Group for Lambda Functions
       SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
       VpcId: !Ref VpcId
 
   SftpBucketObjectTagger:

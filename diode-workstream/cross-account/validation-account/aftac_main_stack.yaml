@@ -392,6 +392,8 @@ Resources:
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         VpcId: !Ref VpcId
+        VpcCidr: !Ref VpcCidr
+        S3PrefixListId: !Ref S3PrefixListId
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
