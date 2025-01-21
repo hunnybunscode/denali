@@ -35,6 +35,10 @@ Parameters:
     Type: String
     Description: The S3 key of the pipeline lambda code
 
+  TransferResultLambdaCodeKeyVersion:
+    Type: String
+    Description: The S3 object version of the pipeline lambda code
+
   PipelineAmiId:
     Type: AWS::EC2::Image::Id
     Description: The AMI ID to use for the pipeline
@@ -371,7 +375,7 @@ Resources:
       Handler: transfer_result.lambda_handler
       Role: !Ref TransferResultServiceRole
       Runtime: python3.11
-      Timeout: 15
+      Timeout: 60
       Environment:
         Variables:
           FAILED_TRANSFER_TOPIC_ARN: !GetAtt FailedTransferTopic.TopicArn
@@ -382,6 +386,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaStorageBucket
         S3Key: !Ref TransferResultLambdaCodeKey
+        S3ObjectVersion: !Ref TransferResultLambdaCodeKeyVersion
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionsSecurityGroup

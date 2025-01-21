@@ -25,6 +25,10 @@ Parameters:
     Type: CommaDelimitedList
     Description: Subnet IDs for SFTP server
 
+  SftpServerIngressRuleCIDR:
+    Type: String
+    Description: CIDR for SFTP Server Ingress Rule
+
   LambdaStorageBucket:
     Type: String
     Description: S3 Bucket for Lambda Storage
@@ -32,6 +36,10 @@ Parameters:
   ObjectTaggerLambdaCodeKey:
     Type: String
     Description: S3 Key for Lambda Code
+
+  ObjectTaggerLambdaCodeKeyVersion:
+    Type: String
+    Description: S3 object version of the Object Tagger Lambda code
 
   SftpUserName:
     Type: String
@@ -102,6 +110,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaStorageBucket
         S3Key: !Ref ObjectTaggerLambdaCodeKey
+        S3ObjectVersion: !Ref ObjectTaggerLambdaCodeKeyVersion
       VpcConfig:
         SecurityGroupIds:
           - !Ref SftpFunctionSecurityGroup
@@ -155,15 +164,11 @@ Resources:
     Properties:
       GroupDescription: Security Group for SFTP Server
       VpcId: !Ref VpcId
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-          Description: Allow all outbound traffic
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref SftpServerIngressRuleCIDR
           Description: Allow SSH access
 
   ElasticIpOne:
@@ -175,6 +180,7 @@ Resources:
   SftpServer:
     Type: AWS::Transfer::Server
     Properties:
+      Domain: S3
       EndpointType: VPC
       EndpointDetails:
         SecurityGroupIds:
@@ -185,11 +191,17 @@ Resources:
           - !GetAtt ElasticIpTwo.AllocationId
         VpcId: !Ref VpcId
       IdentityProviderType: SERVICE_MANAGED
+      Protocols:
+        - SFTP
       ProtocolDetails:
         SetStatOption: ENABLE_NO_OP
+      SecurityPolicyName: TransferSecurityPolicy-2024-01
       LoggingRole: !Ref TransferLoggingRoleArn
       StructuredLogDestinations:
         - Fn::ImportValue: !Sub aftac-pipeline-SftpServerLogGroup-${ResourceSuffix}
+      Tags:
+        - Key: Name
+          Value: !Sub SFTP-Server-${ResourceSuffix}
 
   TransferUser:
     Type: AWS::Transfer::User
