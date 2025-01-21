@@ -375,7 +375,7 @@ Resources:
       Handler: transfer_result.lambda_handler
       Role: !Ref TransferResultServiceRole
       Runtime: python3.11
-      Timeout: 60
+      Timeout: 15
       Environment:
         Variables:
           FAILED_TRANSFER_TOPIC_ARN: !GetAtt FailedTransferTopic.TopicArn
