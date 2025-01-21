@@ -164,6 +164,10 @@ Resources:
     Properties:
       GroupDescription: Security Group for SFTP Server
       VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 127.0.0.1/32
+          Description: Removes default egress rule that allows all egress traffic on all ports and IP protocols to any location
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
