@@ -575,7 +575,7 @@ Resources:
       Description: URL of the SQS Queue which manages AV Scan
       Type: String
       Value: !GetAtt AvScanQueue.QueueUrl
-  
+
   ### WEB ACL RESOURCES
   IngestAPIWebACL:
     Type: AWS::WAFv2::WebACL
@@ -654,8 +654,12 @@ Resources:
   # WAF Logging
   WAFLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
-      LogGroupName: aws-waf-logs-IngestAPIWebACL2
+      LogGroupName: !Sub
+        - aws-waf-logs-${name}
+        - name: !Select [0, !Split ["|", !Ref IngestAPIWebACL]]
       RetentionInDays: 90
 
   WAFLoggingConfiguration:
@@ -664,16 +668,16 @@ Resources:
       LogDestinationConfigs:
         - !GetAtt WAFLogGroup.Arn
       ResourceArn: !GetAtt IngestAPIWebACL.Arn
-  
+
   # Cloudwatch Metric Filter
   MetricFilter:
     Type: AWS::Logs::MetricFilter
-    Properties: 
+    Properties:
       FilterName: WAF Rule Action
       FilterPattern: '{ $.action = "*" }'
       LogGroupName: !Ref WAFLogGroup
-      MetricTransformations: 
-        - Dimensions: 
+      MetricTransformations:
+        - Dimensions:
             - Key: Action
               Value: $.action
           MetricName: RuleAction
@@ -683,8 +687,8 @@ Resources:
 
   InsightsRuleClientIpAllowed:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-ClientIpAllowed
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -713,8 +717,8 @@ Resources:
         }
   InsightsRuleClientIpBlocked:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-ClientIpBlocked
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -743,8 +747,8 @@ Resources:
         }
   InsightsRuleCountryAllowed:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-CountryAllowed
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryAllowed
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -773,8 +777,8 @@ Resources:
         }
   InsightsRuleCountryBlocked:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-CountryBlocked
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryBlocked
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -803,8 +807,8 @@ Resources:
         }
   InsightsRuleUriAllowed:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-UriAllowed
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriAllowed
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -833,8 +837,8 @@ Resources:
         }
   InsightsRuleUriBlocked:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-UriBlocked
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriBlocked
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -863,8 +867,8 @@ Resources:
         }
   InsightsRuleTerminatingRuleAllowed:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-TerminatingRuleAllowed
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -893,8 +897,8 @@ Resources:
         }
   InsightsRuleTerminatingRuleBlocked:
     Type: AWS::CloudWatch::InsightRule
-    Properties: 
-      RuleName:  !Sub ${WAFLogGroup}-TerminatingRuleBlocked
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
       RuleState: ENABLED
       RuleBody: !Sub >
         {
@@ -932,36 +936,36 @@ Resources:
       ComparisonOperator: GreaterThanUpperThreshold
       TreatMissingData: notBreaching
       Metrics:
-          - Id: e1
-            Label: Block Percentage
-            ReturnData: true
-            Expression: m2 / (m2 + m1) * 100
-          - Id: m2
-            ReturnData: false
-            MetricStat:
-                Metric:
-                    Namespace: Custom/WAF
-                    MetricName: RuleAction
-                    Dimensions:
-                        - Name: Action
-                          Value: BLOCK
-                Period: 300
-                Stat: Sum
-          - Id: m1
-            ReturnData: false
-            MetricStat:
-                Metric:
-                    Namespace: Custom/WAF
-                    MetricName: RuleAction
-                    Dimensions:
-                        - Name: Action
-                          Value: ALLOW
-                Period: 300
-                Stat: Sum
-          - Id: ad1
-            Label: Block Ratio (expected)
-            ReturnData: true
-            Expression: ANOMALY_DETECTION_BAND(e1, 2)
+        - Id: e1
+          Label: Block Percentage
+          ReturnData: true
+          Expression: m2 / (m2 + m1) * 100
+        - Id: m2
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: BLOCK
+            Period: 300
+            Stat: Sum
+        - Id: m1
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: ALLOW
+            Period: 300
+            Stat: Sum
+        - Id: ad1
+          Label: Block Ratio (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e1, 2)
       ThresholdMetricId: ad1
   AlarmClientIpAllowed:
     Type: AWS::CloudWatch::Alarm
@@ -974,15 +978,15 @@ Resources:
       ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
       TreatMissingData: notBreaching
       Metrics:
-          - Id: e0
-            Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue
-            ReturnData: true
-            Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpAllowed.RuleName}','MaxContributorValue')
-            Period: 300
-          - Id: ad1
-            Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue (expected)
-            ReturnData: true
-            Expression: ANOMALY_DETECTION_BAND(e0, 2)
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpAllowed.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
       ThresholdMetricId: ad1
   AlarmClientIpBlocked:
     Type: AWS::CloudWatch::Alarm
@@ -995,15 +999,15 @@ Resources:
       ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
       TreatMissingData: notBreaching
       Metrics:
-          - Id: e0
-            Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue
-            ReturnData: true
-            Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpBlocked.RuleName}','MaxContributorValue')
-            Period: 300
-          - Id: ad1
-            Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue (expected)
-            ReturnData: true
-            Expression: ANOMALY_DETECTION_BAND(e0, 2)
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpBlocked.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
       ThresholdMetricId: ad1
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
