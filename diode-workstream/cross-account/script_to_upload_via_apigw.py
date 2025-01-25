@@ -2,6 +2,32 @@
 # https://github.com/aws-samples/sigv4-signing-examples/blob/main/sdk/python/main.py
 # https://github.com/boto/botocore/blob/develop/botocore/auth.py
 # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/s3-presigned-urls.html
+#
+###################################################################################
+#
+# 1. Pre-requisites
+#
+# a. Python 3.11 (or higher)
+#
+# For example:
+# Linux: yum install python3.11
+# Windows: https://www.python.org/downloads/release/python-3110/
+#
+# b. boto3 and requests library
+#
+# For example:
+# Linux: python3.11 -m pip install boto3 requests
+# Windows: py -3.11 -m pip install boto3 requests
+#
+# 2. Set environment variables (see further down)
+#
+# 3. Run the following command for help
+#
+# For example:
+# Linux: python3.11 <name_of_script> -h
+# Windows: py -3.11 <name_of_script> -h
+#
+###################################################################################
 import argparse
 import os
 from pathlib import Path
@@ -14,13 +40,15 @@ from botocore.awsrequest import AWSRequest  # type: ignore
 
 ###################################################################################
 # -----------------     Set these environment variables     -----------------
-# For example: export AWS_ACCESS_KEY_ID="abcdefg"
+# For example:
+# Bash: export AWS_ACCESS_KEY_ID="abcdefg"
+# PowerShell: $Env:AWS_ACCESS_KEY_ID="abcdefg"
 
 ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
 SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 # Set this if using temporary credentials
 SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")
-# Defaults to us-gov-west-1, if not set
+# (Optional) Defaults to us-gov-west-1, if not set
 REGION = os.getenv("AWS_DEFAULT_REGION", "us-gov-west-1")
 # For example: "https://abcdef.execute-api.us-gov-west-1.amazonaws.com/prod/upload"
 INVOKE_URL = os.getenv("INVOKE_URL")
@@ -95,36 +123,36 @@ def get_resolved_file_path(path: Path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Gets a pre-signed URL from the specified API Gateway endpoint and uploads a file to the specified bucket",  # noqa: E501
+        description="Gets a pre-signed URL from the specified API Gateway endpoint and uploads a file to a bucket",  # noqa: E501
         allow_abbrev=False,
     )
 
     parser.add_argument(
         "--bucket",
         type=str,
-        help="Specify the name of the bucket to generate a pre-signed URL for",
+        help="Specify the name of a bucket to which you want to upload a file",
     )
 
     parser.add_argument(
         "--filepath",
         type=str,
-        help="Specify the path of the file to upload",
+        help="Specify the path of a file to upload",
     )
 
     parser.add_argument(
         "--prefix",
         type=str,
         default="",
-        help="Specify the prefix to append to the file. Defaults to an empty string",
+        help="(Optional) Specify the prefix to append to the file. Defaults to an empty string",  # noqa: E501
     )
 
     args = parser.parse_args()
 
     path = Path(args.filepath)
-    prefix: str = args.prefix.strip()
-    if prefix and not prefix.endswith("/"):
-        prefix = prefix + "/"
     filepath = get_resolved_file_path(path)
+    prefix: str = args.prefix.strip()
+    if prefix:
+        prefix = "/".join([part for part in prefix.split("/") if part]) + "/"
     credentials = get_credentials()
 
     main(
