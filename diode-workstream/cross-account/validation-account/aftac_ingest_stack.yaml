@@ -385,28 +385,6 @@ Resources:
       ResourceId: !Ref FileUploaderUpload
       RestApiId: !Ref FileUploader
 
-  FileUploaderUploadPUT:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: AWS_IAM
-      HttpMethod: PUT
-      Integration:
-        Credentials: !Ref APILambdaInvokeRole
-        IntegrationHttpMethod: PUT
-        IntegrationResponses:
-          - StatusCode: "200"
-        PassthroughBehavior: NEVER
-        RequestTemplates:
-          application/json: '{ "statusCode": 200 }'
-        Type: AWS_PROXY
-        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignGenerator.Arn}/invocations
-      MethodResponses:
-        - ResponseModels:
-            application/json: !Ref APIModel
-          StatusCode: "200"
-      ResourceId: !Ref FileUploaderUpload
-      RestApiId: !Ref FileUploader
-
   FileUploaderUploadOPTIONS:
     Type: AWS::ApiGateway::Method
     Properties:
