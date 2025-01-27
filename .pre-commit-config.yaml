@@ -34,7 +34,7 @@ repos:
           - --allow-missing-credentials
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
+    rev: v2.4.0
     hooks:
       - id: codespell
         entry: bash -c 'codespell "$@" || true' -- # Don't block, just alert
@@ -95,7 +95,7 @@ repos:
 
   # CFN CHECKS & LINTING
   - repo: https://github.com/aws-cloudformation/cfn-python-lint
-    rev: v1.22.6 # The version of cfn-lint to use
+    rev: v1.22.7 # The version of cfn-lint to use
     hooks:
       - id: cfn-python-lint
         files: .*\.(ya?ml)$
