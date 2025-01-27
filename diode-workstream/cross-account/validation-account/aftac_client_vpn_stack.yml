@@ -1,0 +1,220 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      # - Label:
+      #     default: General Parameters
+      #   Parameters:
+      #     - ResourceSuffix
+
+      - Label:
+          default: Client VPN Endpoint Parameters
+        Parameters:
+          - ClientCidrBlock
+          - VpcId
+          - VpcCidr
+          - PrivateSubnet1
+          - PrivateSubnet2
+          - ServerCertificateArn
+          - SessionTimeoutHours
+          - DnsServerAddresses
+          - BannerText
+
+    ParameterLabels:
+      # ResourceSuffix:
+      #   default: Resource Suffix
+      ClientCidrBlock:
+        default: Client CIDR Block
+      VpcId:
+        default: VPC ID
+      VpcCidr:
+        default: VPC CIDR
+      PrivateSubnet1:
+        default: Private Subnet 1
+      PrivateSubnet2:
+        default: Private Subnet 2
+      ServerCertificateArn:
+        default: Server Certificate ARN
+      SessionTimeoutHours:
+        default: Session Timeout Hours
+      DnsServerAddresses:
+        default: DNS Server Addresses
+      BannerText:
+        default: Banner Text
+
+Parameters:
+  # ResourceSuffix:
+  #   Type: String
+  #   Description: >
+  #     Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+  #     only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+  #   AllowedPattern: ^[a-z0-9-]{1,20}$
+  #   ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  ClientCidrBlock:
+    Type: String
+    Description: >
+      [IMPORTANT] This value CANNOT be changed after the initial stack creation.
+      The IPv4 address range, in CIDR notation, from which to assign client IP addresses.
+      The address range cannot overlap with the local CIDR of the VPC in which the associated subnet is located, or the routes that you add manually.
+      Client CIDR range must have a size of at least /22 and not be greater than /12; if unsure, specify /16 or larger.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/(1[2-9]|2[0-2]))$
+    ConstraintDescription: Client CIDR range must have a size of at least /22 and must not be greater than /12
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The ID of the VPC to associate with the Client VPN endpoint.
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the VPC
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of a private subnet to associate with the Client VPN endpoint.
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of a private subnet to associate with the Client VPN endpoint, in a DIFFERENT Availability Zone from the one above.
+
+  ServerCertificateArn:
+    Type: String
+    Description: The ARN of the server certificate for the Client VPN endpoint.
+
+  SessionTimeoutHours:
+    Type: Number
+    Description: >
+      The maximum VPN session duration time, in hours, for users who successfully authenticated with the VPN.
+    Default: 8
+    AllowedValues: [8, 10, 12, 24]
+    ConstraintDescription: Must be 8, 10, 12, or 24
+
+  DnsServerAddresses:
+    Type: CommaDelimitedList
+    Description: >
+      [OPTIONAL] A comma-separated list of up to two custom DNS servers.
+      If you want to resolve private resources within the VPC, for example, use the IP address of the base of the VPC network range plus two.
+      If no DNS server is specified, the DNS address configured on the device is used for the DNS server.
+    AllowedPattern: ^$|^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$
+    ConstraintDescription: Must be a comma-separated list of up to two custom DNS servers.
+
+  BannerText:
+    Type: String
+    Description: >
+      [OPTIONAL] Customizable text that will be displayed in a banner on AWS provided clients when a VPN session is established.
+      UTF-8 encoded characters only. Maximum of 1400 characters.
+      If not provided, no banner will be displayed.
+    MinLength: 0
+    MaxLength: 1400
+
+Conditions:
+  UseBannerText: !Not [!Equals [!Ref BannerText, ""]]
+  UseDnsServerAddresses:
+    !Not [!Equals [!Join ["", !Ref DnsServerAddresses], ""]]
+
+Resources:
+  ClientVpnEndpoint:
+    Type: AWS::EC2::ClientVpnEndpoint
+    Properties:
+      Description: Client VPN Endpoint for SFTP server
+      ServerCertificateArn: !Ref ServerCertificateArn # The ARN of the server certificate
+      AuthenticationOptions:
+        - Type: certificate-authentication
+          MutualAuthentication:
+            # The ARN of the client certificate. Must be signed by a CA and be provisioned in ACM
+            # If signed by the same CA as the server, use the server certificate ARN
+            ClientRootCertificateChainArn: !Ref ServerCertificateArn
+          # ActiveDirectory:
+          #   DirectoryId: String
+          # FederatedAuthentication:
+          #   SAMLProviderArn: String
+          #   SelfServiceSAMLProviderArn: String
+      ClientCidrBlock: !Ref ClientCidrBlock
+      ClientConnectOptions:
+        Enabled: false
+        # LambdaFunctionArn: String
+      ClientLoginBannerOptions: !If
+        - UseBannerText
+        - Enabled: true
+          BannerText: !Ref BannerText
+        - !Ref AWS::NoValue
+      ConnectionLogOptions:
+        Enabled: true
+        CloudwatchLogGroup: !Ref ClientVpnEndpointLogs
+      SessionTimeoutHours: !Ref SessionTimeoutHours
+      DisconnectOnSessionTimeout: false # Whether to prompt users to reconnect after the maximum SessionTimeoutHours is reached
+      DnsServers: !If
+        - UseDnsServerAddresses
+        - !Ref DnsServerAddresses
+        - !Ref AWS::NoValue
+      VpcId: !Ref VpcId
+      SecurityGroupIds:
+        - !Ref ClientVpnEndpointSecurityGroup
+      SelfServicePortal: disabled # enabled | disabled # Not available for clients that authenticate using mutual authentication
+      SplitTunnel: true # If true, allows only traffic with a destination to the network matching a route from the Client VPN endpoint route table is routed over the Client VPN tunnel.
+      TransportProtocol: tcp # tcp | udp
+      VpnPort: 443 # 443 | 1194
+      # TagSpecifications:
+      #   - ResourceType: client-vpn-endpoint
+      #     Tags:
+      #       - Key: String
+      #         Value: String
+
+  ClientVpnEndpointLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      RetentionInDays: 90
+      # KmsKeyId: !GetAtt KmsKey.Arn
+
+  ## Security groups, route tables, and authorization rules control access to resources in target networks
+
+  # This will be applied to the ENIs created in target network associations
+  ClientVpnEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Client VPN Endpoint ENIs
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCidr
+          Description: Allow outbound TCP traffic on port 22 to VPC CIDR
+
+  ClientVpnEndpointTargetNetworkAssociation1:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !Ref PrivateSubnet1
+
+  ClientVpnEndpointTargetNetworkAssociation2:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !Ref PrivateSubnet2
+
+  # Network-based authorization rules: Acts as ﬁrewall rules that grant access to networks
+  ClientVpnEndpointAuthorizationRule:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Properties:
+      Description: Authorizes access to the VPC CIDR
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      TargetNetworkCidr: !Ref VpcCidr # We can scope this down further, if needed
+      AuthorizeAllGroups: true
+      # AccessGroupId: String # Only required if AuthorizeAllGroups is false
+
+  # Each AWS Client VPN endpoint has a route table that describes the available destination network routes.
+  # Each route in the route table determines where the network traffic is directed
+  # When you associate a subnet from a VPC with a Client VPN endpoint, a route for the VPC is automatically added to the Client VPN endpoint's route table.
+  # ClientVpnEndpointRoute:
+  #   Type: AWS::EC2::ClientVpnRoute
+  #   # A target network association must be created before you can specify a route
+  #   DependsOn:
+  #     - ClientVpnEndpointTargetNetworkAssociation1
+  #     - ClientVpnEndpointTargetNetworkAssociation2
+  #   Properties:
+  #     Description: String
+  #     ClientVpnEndpointId: !Ref ClientVpnEndpoint
+  #     DestinationCidrBlock: String
+  #     TargetVpcSubnetId: String
