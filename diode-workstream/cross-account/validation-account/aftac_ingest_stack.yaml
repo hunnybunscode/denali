@@ -554,885 +554,885 @@ Resources:
       Type: String
       Value: !GetAtt AvScanQueue.QueueUrl
 
-  # ### WEB ACL RESOURCES
-  # IngestAPIWebACL:
-  #   Type: AWS::WAFv2::WebACL
-  #   Properties:
-  #     Description: WAF for API Gateway protection
-  #     Scope: REGIONAL
-  #     DefaultAction:
-  #       Allow: {}
-  #     VisibilityConfig:
-  #       SampledRequestsEnabled: true
-  #       CloudWatchMetricsEnabled: true
-  #       MetricName: IngestAPILogsWAF
-  #     Rules:
-  #       - Name: AWS-AWSManagedRulesCommonRuleSet
-  #         Priority: 1
-  #         OverrideAction:
-  #           None: {}
-  #         Statement:
-  #           ManagedRuleGroupStatement:
-  #             VendorName: AWS
-  #             Name: AWSManagedRulesCommonRuleSet
-  #         VisibilityConfig:
-  #           SampledRequestsEnabled: true
-  #           CloudWatchMetricsEnabled: true
-  #           MetricName: AWS-AWSManagedRulesCommonRuleSetMetric
-  #       - Name: AWS-AWSManagedRulesAnonymousIpList
-  #         Priority: 2
-  #         OverrideAction:
-  #           None: {}
-  #         Statement:
-  #           ManagedRuleGroupStatement:
-  #             VendorName: AWS
-  #             Name: AWSManagedRulesAnonymousIpList
-  #         VisibilityConfig:
-  #           SampledRequestsEnabled: true
-  #           CloudWatchMetricsEnabled: true
-  #           MetricName: AWS-AWSManagedRulesAnonymousIpListMetric
-  #       - Name: AWS-AWSManagedRulesAmazonIpReputationList
-  #         Priority: 3
-  #         OverrideAction:
-  #           None: {}
-  #         Statement:
-  #           ManagedRuleGroupStatement:
-  #             VendorName: AWS
-  #             Name: AWSManagedRulesAmazonIpReputationList
-  #         VisibilityConfig:
-  #           SampledRequestsEnabled: true
-  #           CloudWatchMetricsEnabled: true
-  #           MetricName: AWS-AWSManagedRulesAmazonIpReputationListMetric
-  #       - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
-  #         Priority: 4
-  #         OverrideAction:
-  #           None: {}
-  #         Statement:
-  #           ManagedRuleGroupStatement:
-  #             VendorName: AWS
-  #             Name: AWSManagedRulesKnownBadInputsRuleSet
-  #         VisibilityConfig:
-  #           SampledRequestsEnabled: true
-  #           CloudWatchMetricsEnabled: true
-  #           MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
+  ### WEB ACL RESOURCES
+  IngestAPIWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Description: WAF for API Gateway protection
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: IngestAPILogsWAF
+      Rules:
+        - Name: AWS-AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesCommonRuleSetMetric
+        - Name: AWS-AWSManagedRulesAnonymousIpList
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAnonymousIpListMetric
+        - Name: AWS-AWSManagedRulesAmazonIpReputationList
+          Priority: 3
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAmazonIpReputationListMetric
+        - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
 
-  # # WAF Association with API Gateway stages
-  # WebACLAssociationAPI1:
-  #   Type: AWS::WAFv2::WebACLAssociation
-  #   Properties:
-  #     ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
-  #     WebACLArn: !GetAtt IngestAPIWebACL.Arn
+  # WAF Association with API Gateway stages
+  WebACLAssociationAPI1:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
+      WebACLArn: !GetAtt IngestAPIWebACL.Arn
 
-  # WebACLAssociationAPI2:
-  #   Type: AWS::WAFv2::WebACLAssociation
-  #   Properties:
-  #     ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader2}/stages/prod
-  #     WebACLArn: !GetAtt IngestAPIWebACL.Arn
+  WebACLAssociationAPI2:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader2}/stages/prod
+      WebACLArn: !GetAtt IngestAPIWebACL.Arn
 
-  # # WAF Logging
-  # WAFLogGroup:
-  #   Type: AWS::Logs::LogGroup
-  #   DeletionPolicy: Delete
-  #   UpdateReplacePolicy: Delete
-  #   Properties:
-  #     LogGroupName: !Sub
-  #       - aws-waf-logs-${name}
-  #       - name: !Select [0, !Split ["|", !Ref IngestAPIWebACL]]
-  #     RetentionInDays: 90
+  # WAF Logging
+  WAFLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub
+        - aws-waf-logs-${name}
+        - name: !Select [0, !Split ["|", !Ref IngestAPIWebACL]]
+      RetentionInDays: 90
 
-  # WAFLoggingConfiguration:
-  #   Type: AWS::WAFv2::LoggingConfiguration
-  #   Properties:
-  #     LogDestinationConfigs:
-  #       - !GetAtt WAFLogGroup.Arn
-  #     ResourceArn: !GetAtt IngestAPIWebACL.Arn
+  WAFLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      LogDestinationConfigs:
+        - !GetAtt WAFLogGroup.Arn
+      ResourceArn: !GetAtt IngestAPIWebACL.Arn
 
-  # # Cloudwatch Metric Filter
-  # MetricFilter:
-  #   Type: AWS::Logs::MetricFilter
-  #   Properties:
-  #     FilterName: WAF Rule Action
-  #     FilterPattern: '{ $.action = "*" }'
-  #     LogGroupName: !Ref WAFLogGroup
-  #     MetricTransformations:
-  #       - Dimensions:
-  #           - Key: Action
-  #             Value: $.action
-  #         MetricName: RuleAction
-  #         MetricNamespace: Custom/WAF
-  #         MetricValue: 1
-  #         Unit: Count
+  # Cloudwatch Metric Filter
+  MetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      FilterName: WAF Rule Action
+      FilterPattern: '{ $.action = "*" }'
+      LogGroupName: !Ref WAFLogGroup
+      MetricTransformations:
+        - Dimensions:
+            - Key: Action
+              Value: $.action
+          MetricName: RuleAction
+          MetricNamespace: Custom/WAF
+          MetricValue: 1
+          Unit: Count
 
-  # InsightsRuleClientIpAllowed:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "ALLOW"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.clientIp"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleClientIpBlocked:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "BLOCK"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.clientIp"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleCountryAllowed:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-CountryAllowed
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "ALLOW"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.country"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleCountryBlocked:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-CountryBlocked
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "BLOCK"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.country"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleUriAllowed:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-UriAllowed
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "ALLOW"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.uri"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleUriBlocked:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-UriBlocked
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "BLOCK"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.httpRequest.uri"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleTerminatingRuleAllowed:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "ALLOW"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.terminatingRuleId"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # InsightsRuleTerminatingRuleBlocked:
-  #   Type: AWS::CloudWatch::InsightRule
-  #   Properties:
-  #     RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
-  #     RuleState: ENABLED
-  #     RuleBody: !Sub >
-  #       {
-  #         "AggregateOn": "Count",
-  #         "Contribution": {
-  #           "Filters": [
-  #             {
-  #               "Match": "$.action",
-  #               "In": [
-  #                 "BLOCK"
-  #               ]
-  #             }
-  #           ],
-  #           "Keys": [
-  #             "$.terminatingRuleId"
-  #           ]
-  #         },
-  #         "LogFormat": "JSON",
-  #         "LogGroupNames": [
-  #           "${WAFLogGroup}"
-  #         ],
-  #         "Schema": {
-  #           "Name": "CloudWatchLogRule",
-  #           "Version": 1
-  #         }
-  #       }
-  # AlarmBlockRatio:
-  #   Type: AWS::CloudWatch::Alarm
-  #   Properties:
-  #     AlarmName: !Sub ${WAFLogGroup}-block-ratio-anomaly
-  #     AlarmDescription: Abnormal percentage of total requests blocked over 5 minute period.
-  #     ActionsEnabled: true
-  #     EvaluationPeriods: 1
-  #     DatapointsToAlarm: 1
-  #     ComparisonOperator: GreaterThanUpperThreshold
-  #     TreatMissingData: notBreaching
-  #     Metrics:
-  #       - Id: e1
-  #         Label: Block Percentage
-  #         ReturnData: true
-  #         Expression: m2 / (m2 + m1) * 100
-  #       - Id: m2
-  #         ReturnData: false
-  #         MetricStat:
-  #           Metric:
-  #             Namespace: Custom/WAF
-  #             MetricName: RuleAction
-  #             Dimensions:
-  #               - Name: Action
-  #                 Value: BLOCK
-  #           Period: 300
-  #           Stat: Sum
-  #       - Id: m1
-  #         ReturnData: false
-  #         MetricStat:
-  #           Metric:
-  #             Namespace: Custom/WAF
-  #             MetricName: RuleAction
-  #             Dimensions:
-  #               - Name: Action
-  #                 Value: ALLOW
-  #           Period: 300
-  #           Stat: Sum
-  #       - Id: ad1
-  #         Label: Block Ratio (expected)
-  #         ReturnData: true
-  #         Expression: ANOMALY_DETECTION_BAND(e1, 2)
-  #     ThresholdMetricId: ad1
-  # AlarmClientIpAllowed:
-  #   Type: AWS::CloudWatch::Alarm
-  #   Properties:
-  #     AlarmName: !Sub ${WAFLogGroup}-top-clientip-allowed-anomaly
-  #     AlarmDescription: Abnormal number of requests for the top allowed client IP over 5 minutes.
-  #     ActionsEnabled: true
-  #     EvaluationPeriods: 1
-  #     DatapointsToAlarm: 1
-  #     ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
-  #     TreatMissingData: notBreaching
-  #     Metrics:
-  #       - Id: e0
-  #         Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue
-  #         ReturnData: true
-  #         Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpAllowed.RuleName}','MaxContributorValue')
-  #         Period: 300
-  #       - Id: ad1
-  #         Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue (expected)
-  #         ReturnData: true
-  #         Expression: ANOMALY_DETECTION_BAND(e0, 2)
-  #     ThresholdMetricId: ad1
-  # AlarmClientIpBlocked:
-  #   Type: AWS::CloudWatch::Alarm
-  #   Properties:
-  #     AlarmName: !Sub ${WAFLogGroup}-top-clientip-blocked-anomaly
-  #     AlarmDescription: Abnormal number of requests for the top blocked client IP over 5 minutes.
-  #     ActionsEnabled: true
-  #     EvaluationPeriods: 1
-  #     DatapointsToAlarm: 1
-  #     ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
-  #     TreatMissingData: notBreaching
-  #     Metrics:
-  #       - Id: e0
-  #         Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue
-  #         ReturnData: true
-  #         Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpBlocked.RuleName}','MaxContributorValue')
-  #         Period: 300
-  #       - Id: ad1
-  #         Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue (expected)
-  #         ReturnData: true
-  #         Expression: ANOMALY_DETECTION_BAND(e0, 2)
-  #     ThresholdMetricId: ad1
-  # Dashboard:
-  #   Type: AWS::CloudWatch::Dashboard
-  #   Properties:
-  #     DashboardName: !Ref WAFLogGroup
-  #     DashboardBody: !Sub >
-  #       {
-  #         "start": "-PT1H",
-  #         "widgets": [
-  #           {
-  #             "height": 3,
-  #             "width": 3,
-  #             "y": 0,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "metrics": [
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "BLOCK",
-  #                   { "label": "Requests Blocked", "color": "#ff7f0e" }
-  #                 ]
-  #               ],
-  #               "view": "singleValue",
-  #               "stacked": true,
-  #               "region": "${AWS::Region}",
-  #               "period": 60,
-  #               "stat": "Sum",
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": false,
-  #                   "label": "Requests",
-  #                   "min": 0
-  #                 },
-  #                 "right": {
-  #                   "showUnits": false
-  #                 }
-  #               },
-  #               "liveData": false,
-  #               "setPeriodToTimeRange": true,
-  #               "title": " ",
-  #               "singleValueFullPrecision": false
-  #             }
-  #           },
-  #           {
-  #             "height": 3,
-  #             "width": 3,
-  #             "y": 3,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "metrics": [
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "ALLOW",
-  #                   { "label": "Requests Allowed" }
-  #                 ]
-  #               ],
-  #               "view": "singleValue",
-  #               "stacked": true,
-  #               "region": "${AWS::Region}",
-  #               "period": 60,
-  #               "stat": "Sum",
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": false,
-  #                   "label": "Requests",
-  #                   "min": 0
-  #                 },
-  #                 "right": {
-  #                   "showUnits": false
-  #                 }
-  #               },
-  #               "setPeriodToTimeRange": true,
-  #               "title": " ",
-  #               "singleValueFullPrecision": false
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 15,
-  #             "y": 0,
-  #             "x": 3,
-  #             "type": "metric",
-  #             "properties": {
-  #               "metrics": [
-  #                 [
-  #                   {
-  #                     "expression": "FILL(METRICS(), 0)",
-  #                     "label": "",
-  #                     "id": "fill",
-  #                     "region": "${AWS::Region}",
-  #                     "color": "#1f77b4"
-  #                   }
-  #                 ],
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "ALLOW",
-  #                   {
-  #                     "id": "allowed",
-  #                     "color": "#1f77b4",
-  #                     "visible": false,
-  #                     "label": "Requests Allowed"
-  #                   }
-  #                 ],
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "BLOCK",
-  #                   {
-  #                     "id": "blocked",
-  #                     "visible": false,
-  #                     "label": "Requests Blocked",
-  #                     "color": "#ff7f0e"
-  #                   }
-  #                 ]
-  #               ],
-  #               "view": "timeSeries",
-  #               "stacked": true,
-  #               "region": "${AWS::Region}",
-  #               "period": 60,
-  #               "stat": "Sum",
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": false,
-  #                   "label": "",
-  #                   "min": 0
-  #                 },
-  #                 "right": {
-  #                   "showUnits": false
-  #                 }
-  #               },
-  #               "setPeriodToTimeRange": true,
-  #               "title": "",
-  #               "legend": {
-  #                 "position": "right"
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 6,
-  #             "y": 0,
-  #             "x": 18,
-  #             "type": "metric",
-  #             "properties": {
-  #               "metrics": [
-  #                 [
-  #                   {
-  #                     "expression": "blocked / (allowed + blocked) * 100",
-  #                     "label": "Block %",
-  #                     "id": "blkratio",
-  #                     "color": "#ff7f0e",
-  #                     "region": "${AWS::Region}"
-  #                   }
-  #                 ],
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "BLOCK",
-  #                   {
-  #                     "id": "blocked",
-  #                     "label": "Blocked",
-  #                     "color": "#ff7f0e",
-  #                     "visible": false
-  #                   }
-  #                 ],
-  #                 [
-  #                   "Custom/WAF",
-  #                   "RuleAction",
-  #                   "Action",
-  #                   "ALLOW",
-  #                   {
-  #                     "id": "allowed",
-  #                     "color": "#1f77b4",
-  #                     "visible": false,
-  #                     "label": "Allowed"
-  #                   }
-  #                 ]
-  #               ],
-  #               "region": "${AWS::Region}",
-  #               "view": "gauge",
-  #               "period": 60,
-  #               "stat": "Sum",
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": false,
-  #                   "min": 0,
-  #                   "max": 100
-  #                 },
-  #                 "right": {
-  #                   "showUnits": false
-  #                 }
-  #               },
-  #               "setPeriodToTimeRange": true,
-  #               "legend": {
-  #                 "position": "bottom"
-  #               },
-  #               "singleValueFullPrecision": true
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 6,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Allowed by Terminating Rule",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleTerminatingRuleAllowed.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 6,
-  #             "x": 12,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Blocked by Terminating Rule",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleTerminatingRuleBlocked.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 12,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Allowed by IP",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleClientIpAllowed.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 12,
-  #             "x": 12,
-  #             "type": "metric",
-  #             "properties": {
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": false,
-  #                   "label": "",
-  #                   "min": 0
-  #                 },
-  #                 "right": {
-  #                   "showUnits": false
-  #                 }
-  #               },
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Blocked by IP",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleClientIpBlocked.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 18,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Allowed by Country",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleCountryAllowed.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "bottom"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 18,
-  #             "x": 12,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Blocked by Country",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleCountryBlocked.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "bottom"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 24,
-  #             "x": 0,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Allowed by Request URI",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleUriAllowed.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           },
-  #           {
-  #             "height": 6,
-  #             "width": 12,
-  #             "y": 24,
-  #             "x": 12,
-  #             "type": "metric",
-  #             "properties": {
-  #               "period": 60,
-  #               "region": "${AWS::Region}",
-  #               "stacked": true,
-  #               "timezone": "local",
-  #               "title": "Top Blocked by URI Path",
-  #               "view": "timeSeries",
-  #               "insightRule": {
-  #                 "maxContributorCount": 10,
-  #                 "orderBy": "Sum",
-  #                 "ruleName": "${InsightsRuleUriBlocked.RuleName}"
-  #               },
-  #               "legend": {
-  #                 "position": "right"
-  #               },
-  #               "yAxis": {
-  #                 "left": {
-  #                   "showUnits": true,
-  #                   "min": 0
-  #                 }
-  #               }
-  #             }
-  #           }
-  #         ]
-  #       }
+  InsightsRuleClientIpAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.clientIp"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleClientIpBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.clientIp"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleCountryAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.country"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleCountryBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.country"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleUriAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.uri"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleUriBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.uri"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleTerminatingRuleAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.terminatingRuleId"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  InsightsRuleTerminatingRuleBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.terminatingRuleId"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+  AlarmBlockRatio:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-block-ratio-anomaly
+      AlarmDescription: Abnormal percentage of total requests blocked over 5 minute period.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: GreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: e1
+          Label: Block Percentage
+          ReturnData: true
+          Expression: m2 / (m2 + m1) * 100
+        - Id: m2
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: BLOCK
+            Period: 300
+            Stat: Sum
+        - Id: m1
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: ALLOW
+            Period: 300
+            Stat: Sum
+        - Id: ad1
+          Label: Block Ratio (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e1, 2)
+      ThresholdMetricId: ad1
+  AlarmClientIpAllowed:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-top-clientip-allowed-anomaly
+      AlarmDescription: Abnormal number of requests for the top allowed client IP over 5 minutes.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpAllowed.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
+      ThresholdMetricId: ad1
+  AlarmClientIpBlocked:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-top-clientip-blocked-anomaly
+      AlarmDescription: Abnormal number of requests for the top blocked client IP over 5 minutes.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpBlocked.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
+      ThresholdMetricId: ad1
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Ref WAFLogGroup
+      DashboardBody: !Sub >
+        {
+          "start": "-PT1H",
+          "widgets": [
+            {
+              "height": 3,
+              "width": 3,
+              "y": 0,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    { "label": "Requests Blocked", "color": "#ff7f0e" }
+                  ]
+                ],
+                "view": "singleValue",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "Requests",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "liveData": false,
+                "setPeriodToTimeRange": true,
+                "title": " ",
+                "singleValueFullPrecision": false
+              }
+            },
+            {
+              "height": 3,
+              "width": 3,
+              "y": 3,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    { "label": "Requests Allowed" }
+                  ]
+                ],
+                "view": "singleValue",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "Requests",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "title": " ",
+                "singleValueFullPrecision": false
+              }
+            },
+            {
+              "height": 6,
+              "width": 15,
+              "y": 0,
+              "x": 3,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    {
+                      "expression": "FILL(METRICS(), 0)",
+                      "label": "",
+                      "id": "fill",
+                      "region": "${AWS::Region}",
+                      "color": "#1f77b4"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    {
+                      "id": "allowed",
+                      "color": "#1f77b4",
+                      "visible": false,
+                      "label": "Requests Allowed"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    {
+                      "id": "blocked",
+                      "visible": false,
+                      "label": "Requests Blocked",
+                      "color": "#ff7f0e"
+                    }
+                  ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "title": "",
+                "legend": {
+                  "position": "right"
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 6,
+              "y": 0,
+              "x": 18,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    {
+                      "expression": "blocked / (allowed + blocked) * 100",
+                      "label": "Block %",
+                      "id": "blkratio",
+                      "color": "#ff7f0e",
+                      "region": "${AWS::Region}"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    {
+                      "id": "blocked",
+                      "label": "Blocked",
+                      "color": "#ff7f0e",
+                      "visible": false
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    {
+                      "id": "allowed",
+                      "color": "#1f77b4",
+                      "visible": false,
+                      "label": "Allowed"
+                    }
+                  ]
+                ],
+                "region": "${AWS::Region}",
+                "view": "gauge",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "min": 0,
+                    "max": 100
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "legend": {
+                  "position": "bottom"
+                },
+                "singleValueFullPrecision": true
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 6,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Terminating Rule",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleTerminatingRuleAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 6,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by Terminating Rule",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleTerminatingRuleBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 12,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by IP",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleClientIpAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 12,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by IP",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleClientIpBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 18,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Country",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleCountryAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "bottom"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 18,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by Country",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleCountryBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "bottom"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 24,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Request URI",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleUriAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 24,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by URI Path",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleUriBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            }
+          ]
+        }
 
 Outputs:
   AvScanQueueUrlExport:
