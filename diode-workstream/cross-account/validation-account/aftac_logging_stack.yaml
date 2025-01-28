@@ -4,15 +4,91 @@ Parameters:
     Description: Suffix added to the named AWS resources
 
 Resources:
-  LogBucket:
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for validation account resources
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: kms-key-policy
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+                kms:ViaService:
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sns.${AWS::Region}.amazonaws.com
+                  - !Sub lambda.${AWS::Region}.amazonaws.com
+          - Sid: Allow logs service principal to use the key
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+          - Sid: Allow service principal to use the key
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudwatch.amazonaws.com
+                - s3.amazonaws.com
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+
+  AccessLogBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35 # S3 Bucket should have access logging configured
+            reason: This bucket is an access log bucket and therefore should not have server access logging enabled
+      checkov:
+        skip:
+          - id: CKV_AWS_18 # Ensure the S3 bucket has access logging enabled
+            comment: This bucket is an access log bucket and therefore should not have server access logging enabled
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt KmsKey.Arn
+            BucketKeyEnabled: true
       ObjectLockConfiguration:
         ObjectLockEnabled: Enabled
         Rule:
@@ -28,10 +104,10 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
-  LogBucketPolicy:
+  AccessLogBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref LogBucket
+      Bucket: !Ref AccessLogBucket
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -39,64 +115,41 @@ Resources:
             Principal: "*"
             Action: s3:*
             Resource:
-              - !Sub ${LogBucket.Arn}
-              - !Sub ${LogBucket.Arn}/*
+              - !Sub ${AccessLogBucket.Arn}
+              - !Sub ${AccessLogBucket.Arn}/*
             Condition:
               Bool:
                 aws:SecureTransport: false
-          - Effect: Allow
+          - Sid: AllowAccessLoggingBucket
+            Effect: Allow
             Principal:
-              Service:
-                - cloudtrail.amazonaws.com
-                - delivery.logs.amazonaws.com
-            Action:
-              - s3:GetBucketAcl
-              - s3:ListBucket
-              - s3:PutObject
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
             Resource:
-              - !Sub ${LogBucket.Arn}
-              - !Sub ${LogBucket.Arn}/*
-
-  SftpServerLogGroup:
-    Type: AWS::Logs::LogGroup
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Delete
-    Properties:
-      RetentionInDays: 731
-
-  ApiGatewayStageLogGroup:
-    Type: AWS::Logs::LogGroup
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Delete
-    Properties:
-      RetentionInDays: 731
-
-  IngestWACLAccessLogGroup:
-    Type: AWS::Logs::LogGroup
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Delete
-    Properties:
-      RetentionInDays: 731
+              - !Sub ${AccessLogBucket.Arn}/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: AllowTls12Only
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${AccessLogBucket.Arn}
+              - !Sub ${AccessLogBucket.Arn}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
 
 Outputs:
-  LogBucketExport:
+  AccessLogBucketExport:
     Description: Name of the S3 Logging Bucket
-    Value: !Ref LogBucket
-
-  SftpServerLogGroupExport:
-    Description: ARN of the SFTP Server Log Group
-    Value: !GetAtt SftpServerLogGroup.Arn
+    Value: !Ref AccessLogBucket
     Export:
-      Name: !Sub aftac-pipeline-SftpServerLogGroup-${ResourceSuffix}
+      Name: !Sub access-logs-bucket-${ResourceSuffix}
 
-  ApiGatewayStageLogGroupARNExport:
-    Description: Name of the API Gateway Stage Log Group
-    Value: !GetAtt ApiGatewayStageLogGroup.Arn
+  KMSArn:
+    Description: KMS Key ARN for the S3 Logging Bucket
+    Value: !GetAtt KmsKey.Arn
     Export:
-      Name: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
-
-  IngestWACLAccessLogGroupExport:
-    Description: Name of the Ingest WACL Access Log Group
-    Value: !Ref IngestWACLAccessLogGroup
-    Export:
-      Name: !Sub aftac-pipeline-IngestWACLAccessLogGroup-${ResourceSuffix}
+      Name: !Sub kms-key-${ResourceSuffix}

@@ -1,7 +1,15 @@
 Parameters:
+  IamPrefix:
+    Type: String
+    Description: Prefix added to all IAM resources
+
   ResourceSuffix:
     Type: String
     Description: Suffix added to the named AWS resources
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
 
   VpcCidr:
     Type: String
@@ -18,14 +26,6 @@ Parameters:
   Bucket2CDSProfile:
     Type: String
     Description: The CDS Profile for the Bucket 2
-
-  ObjectTaggerRoleARN:
-    Type: String
-    Description: ARN of the IAM role for the Object Tagger Lambda
-
-  PresignGeneratorServiceRole:
-    Type: String
-    Description: ARN of the IAM role for the Presign Generator Lambda
 
   ObjectTaggerLambdaCodeKey:
     Type: String
@@ -46,14 +46,6 @@ Parameters:
   ApiGwLambdaCodeKeyVersion:
     Type: String
     Description: S3 object version of the API Gateway Lambda code
-
-  FileUploaderCloudWatchRole:
-    Type: String
-    Description: ARN of the file uploader CloudWatch role
-
-  APILambdaInvokeRole:
-    Type: String
-    Description: ARN of the API Lambda invoke role
 
   VpcId:
     Type: String
@@ -88,6 +80,131 @@ Parameters:
     Description: String to be added as a tag to objects in Bucket 2
 
 Resources:
+  ObjectTaggerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-ObjectTaggerRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: ObjectTaggerRoleDefaultPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObjectTagging
+                  - s3:PutObjectTagging
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+
+  PresignGeneratorServiceRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-PresignGeneratorServiceRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: PresignGeneratorServiceRoleDefaultPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+
+  FileUploaderCloudWatchRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-FileUploaderCloudWatchRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  APILambdaInvokeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-APILambdaInvokeRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: APILambdaInvokeRoleDefaultPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+                  - !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*
+
+  ApiGatewayStageLogGroup:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 731
+
   AvScanDeadLetterQueue:
     Type: AWS::SQS::Queue
     UpdateReplacePolicy: Delete
@@ -148,7 +265,7 @@ Resources:
     Properties:
       FunctionName: !Sub bucket-1-object-tagger-${ResourceSuffix}
       Handler: object_tagger.lambda_handler
-      Role: !Ref ObjectTaggerRoleARN
+      Role: !GetAtt ObjectTaggerRole.Arn
       Runtime: python3.11
       Timeout: 30
       Environment:
@@ -180,7 +297,7 @@ Resources:
     Properties:
       FunctionName: !Sub bucket-2-object-tagger-${ResourceSuffix}
       Handler: object_tagger.lambda_handler
-      Role: !Ref ObjectTaggerRoleARN
+      Role: !GetAtt ObjectTaggerRole.Arn
       Runtime: python3.11
       Timeout: 30
       Environment:
@@ -210,6 +327,9 @@ Resources:
   IngestBucket1:
     Type: AWS::S3::Bucket
     Properties:
+      LoggingConfiguration:
+        DestinationBucketName:
+          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -245,6 +365,9 @@ Resources:
   IngestBucket2:
     Type: AWS::S3::Bucket
     Properties:
+      LoggingConfiguration:
+        DestinationBucketName:
+          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -280,8 +403,9 @@ Resources:
   PresignGenerator:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: !Sub presigned-url-generator-1-${ResourceSuffix}
       Handler: presigner.lambda_handler
-      Role: !Ref PresignGeneratorServiceRole
+      Role: !GetAtt PresignGeneratorServiceRole.Arn
       Runtime: python3.11
       Environment:
         Variables:
@@ -314,12 +438,11 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
     Properties:
-      CloudWatchRoleArn: !Ref FileUploaderCloudWatchRole
+      CloudWatchRoleArn: !GetAtt FileUploaderCloudWatchRole.Arn
 
   FileUploaderDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - APIModel
       - FileUploaderUploadOPTIONS
       - FileUploaderUploadPOST
       - FileUploaderUpload
@@ -329,11 +452,11 @@ Resources:
 
   FileUploaderDeploymentStageProd:
     Type: AWS::ApiGateway::Stage
-    DependsOn: FileUploaderAccount
+    DependsOn:
+      - FileUploaderAccount
     Properties:
       AccessLogSetting:
-        DestinationArn:
-          Fn::ImportValue: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
+        DestinationArn: !GetAtt ApiGatewayStageLogGroup.Arn
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
@@ -369,7 +492,7 @@ Resources:
       AuthorizationType: AWS_IAM
       HttpMethod: POST
       Integration:
-        Credentials: !Ref APILambdaInvokeRole
+        Credentials: !GetAtt APILambdaInvokeRole.Arn
         IntegrationHttpMethod: POST
         IntegrationResponses:
           - StatusCode: "200"
@@ -421,8 +544,9 @@ Resources:
   PresignGenerator2:
     Type: AWS::Lambda::Function
     Properties:
+      FunctionName: !Sub presigned-url-generator-2-${ResourceSuffix}
       Handler: presigner.lambda_handler
-      Role: !Ref PresignGeneratorServiceRole
+      Role: !GetAtt PresignGeneratorServiceRole.Arn
       Runtime: python3.11
       Environment:
         Variables:
@@ -447,7 +571,6 @@ Resources:
   FileUploaderDeployment2:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - APIModel2
       - FileUploaderUploadOPTIONS2
       - FileUploaderUploadPOST2
       - FileUploaderUpload2
@@ -457,11 +580,11 @@ Resources:
 
   FileUploaderDeploymentStageProd2:
     Type: AWS::ApiGateway::Stage
-    DependsOn: FileUploaderAccount
+    DependsOn:
+      - FileUploaderAccount
     Properties:
       AccessLogSetting:
-        DestinationArn:
-          Fn::ImportValue: !Sub aftac-pipeline-ApiGatewayStageLogGroup-${ResourceSuffix}
+        DestinationArn: !GetAtt ApiGatewayStageLogGroup.Arn
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
       CacheClusterEnabled: true
       CacheClusterSize: "0.5"
@@ -489,7 +612,7 @@ Resources:
       FunctionName: !GetAtt PresignGenerator2.Arn
       Principal: apigateway.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd}/POST/upload
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd2}/POST/upload
 
   FileUploaderUploadPOST2:
     Type: AWS::ApiGateway::Method
@@ -497,7 +620,7 @@ Resources:
       AuthorizationType: AWS_IAM
       HttpMethod: POST
       Integration:
-        Credentials: !Ref APILambdaInvokeRole
+        Credentials: !GetAtt APILambdaInvokeRole.Arn
         IntegrationHttpMethod: POST
         IntegrationResponses:
           - StatusCode: "200"
@@ -619,12 +742,14 @@ Resources:
   # WAF Association with API Gateway stages
   WebACLAssociationAPI1:
     Type: AWS::WAFv2::WebACLAssociation
+    DependsOn: FileUploaderDeploymentStageProd
     Properties:
       ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
       WebACLArn: !GetAtt IngestAPIWebACL.Arn
 
   WebACLAssociationAPI2:
     Type: AWS::WAFv2::WebACLAssociation
+    DependsOn: FileUploaderDeploymentStageProd2
     Properties:
       ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader2}/stages/prod
       WebACLArn: !GetAtt IngestAPIWebACL.Arn
@@ -638,7 +763,7 @@ Resources:
       LogGroupName: !Sub
         - aws-waf-logs-${name}
         - name: !Select [0, !Split ["|", !Ref IngestAPIWebACL]]
-      RetentionInDays: 90
+      RetentionInDays: 731
 
   WAFLoggingConfiguration:
     Type: AWS::WAFv2::LoggingConfiguration
@@ -1462,3 +1587,7 @@ Outputs:
   PresignGenerator1InvokeURL:
     Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
     Description: URL of the Presign Generator API Endpoint
+
+  PresignGenerator2InvokeURL:
+    Value: !Sub https://${FileUploader2}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
+    Description: URL of the Presign Generator 2 API Endpoint

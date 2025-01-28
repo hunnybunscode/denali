@@ -6,6 +6,7 @@ Metadata:
         Parameters:
           - IamPrefix
           - ResourceSuffix
+          - PermissionsBoundaryPolicyArn
           - VpcId
           - VpcCidr
           - PrivateSubnetIds
@@ -64,6 +65,8 @@ Metadata:
         default: IAM Prefix
       ResourceSuffix:
         default: Resource Suffix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -156,6 +159,12 @@ Parameters:
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -363,7 +372,9 @@ Resources:
     Properties:
       TemplateURL: !Ref TemplateURLIngestStack
       Parameters:
+        IamPrefix: !Ref IamPrefix
         ResourceSuffix: !Ref ResourceSuffix
+        PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
         VpcId: !Ref VpcId
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         VpcCidr: !Ref VpcCidr
@@ -381,14 +392,6 @@ Resources:
         BucketTwoGovPoc: !Ref IngestStackBucketTwoGovPoc
         BucketTwoDataOwner: !Ref IngestStackBucketTwoDataOwner
         BucketTwoKeyOwner: !Ref IngestStackBucketTwoKeyOwner
-        ObjectTaggerRoleARN:
-          Fn::ImportValue: !Sub ObjectTaggerRoleArn-${ResourceSuffix}
-        PresignGeneratorServiceRole:
-          Fn::ImportValue: !Sub PresignGeneratorServiceRoleArn-${ResourceSuffix}
-        FileUploaderCloudWatchRole:
-          Fn::ImportValue: !Sub FileUploaderCloudWatchRoleArn-${ResourceSuffix}
-        APILambdaInvokeRole:
-          Fn::ImportValue: !Sub APILambdaInvokeRoleArn-${ResourceSuffix}
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
@@ -400,6 +403,7 @@ Resources:
       Parameters:
         IamPrefix: !Ref IamPrefix
         ResourceSuffix: !Ref ResourceSuffix
+        PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
         VpcId: !Ref VpcId
         VpcCidr: !Ref VpcCidr
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
@@ -414,10 +418,6 @@ Resources:
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
-        TransferResultServiceRole:
-          Fn::ImportValue: !Sub TransferResultLambdaRoleArn-${ResourceSuffix}
-        Ec2ScannerInstanceProfileARN:
-          Fn::ImportValue: !Sub Ec2ScannerInstanceProfile-${ResourceSuffix}
 
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
@@ -427,7 +427,9 @@ Resources:
     Properties:
       TemplateURL: !Ref TemplateURLSftpServerStack
       Parameters:
+        IamPrefix: !Ref IamPrefix
         ResourceSuffix: !Ref ResourceSuffix
+        PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
         VpcId: !Ref VpcId
         VpcCidr: !Ref VpcCidr
         S3PrefixListId: !Ref S3PrefixListId
@@ -443,9 +445,3 @@ Resources:
         SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
         SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
         SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
-        TransferUserRoleArn:
-          Fn::ImportValue: !Sub TransferUserRoleArn-${ResourceSuffix}
-        TransferLoggingRoleArn:
-          Fn::ImportValue: !Sub TransferLoggingRoleArn-${ResourceSuffix}
-        ObjectTaggerRoleARN:
-          Fn::ImportValue: !Sub ObjectTaggerRoleArn-${ResourceSuffix}
