@@ -612,7 +612,7 @@ Resources:
       FunctionName: !GetAtt PresignGenerator2.Arn
       Principal: apigateway.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd2}/POST/upload
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader2}/${FileUploaderDeploymentStageProd2}/POST/upload
 
   FileUploaderUploadPOST2:
     Type: AWS::ApiGateway::Method
