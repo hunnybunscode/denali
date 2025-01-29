@@ -5,6 +5,7 @@ Metadata:
           default: General Parameters
         Parameters:
           - IamPrefix
+          - PermissionsBoundaryPolicyArn
           - ResourceSuffix
 
       - Label:
@@ -37,6 +38,8 @@ Metadata:
     ParameterLabels:
       IamPrefix:
         default: IAM Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
       DataTransferBucketName:
@@ -69,6 +72,12 @@ Parameters:
     Default: AFC2S
     AllowedValues: [AFC2S]
     ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
     Type: String
@@ -149,6 +158,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub ${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -174,6 +184,9 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+              - Effect: Allow
+                Action: diode:*
+                Resource: "*"
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref TranferResultSqsQueueArn
@@ -256,7 +269,7 @@ Resources:
             - !Ref DataTransferBucketName
       Targets:
         - Arn: !GetAtt TransferStatusQueue.Arn
-          Id: !GetAtt TransferStatusQueue.QueueName
+          Id: TransferStatusQueue
           # RetryPolicy:
           #   MaximumRetryAttempts: 4
           #   MaximumEventAgeInSeconds: 300
