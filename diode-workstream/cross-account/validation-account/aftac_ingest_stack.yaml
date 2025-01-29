@@ -150,26 +150,6 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
-  FileUploaderCloudWatchRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${IamPrefix}-FileUploaderCloudWatchRole-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apigateway.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
-
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -427,19 +407,6 @@ Resources:
         Types:
           - REGIONAL
 
-  # Specifies the IAM role that Amazon API Gateway uses to write API logs to Amazon CloudWatch Logs
-  # To avoid overwriting other roles, you should only have one AWS::ApiGateway::Account resource per region per account.
-  # Should we create this outside CloudFormation?
-  FileUploaderAccount:
-    Type: AWS::ApiGateway::Account
-    DependsOn:
-      - FileUploader
-      - FileUploader2
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
-    Properties:
-      CloudWatchRoleArn: !GetAtt FileUploaderCloudWatchRole.Arn
-
   FileUploaderDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -452,8 +419,6 @@ Resources:
 
   FileUploaderDeploymentStageProd:
     Type: AWS::ApiGateway::Stage
-    DependsOn:
-      - FileUploaderAccount
     Properties:
       AccessLogSetting:
         DestinationArn: !GetAtt ApiGatewayStageLogGroup.Arn
@@ -580,8 +545,6 @@ Resources:
 
   FileUploaderDeploymentStageProd2:
     Type: AWS::ApiGateway::Stage
-    DependsOn:
-      - FileUploaderAccount
     Properties:
       AccessLogSetting:
         DestinationArn: !GetAtt ApiGatewayStageLogGroup.Arn
