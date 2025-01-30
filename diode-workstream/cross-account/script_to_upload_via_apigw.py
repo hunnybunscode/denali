@@ -30,6 +30,7 @@
 ###################################################################################
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import boto3  # type: ignore
@@ -60,6 +61,7 @@ def main(bucket_name: str, key_name: str, prefix: str, filepath: str, credential
     method = "POST"
     service = "execute-api"
 
+    validate_invoke_url()
     params = dict(bucket=bucket_name, key=prefix + key_name)
     request = AWSRequest(method, INVOKE_URL, params=params)
     SigV4Auth(credentials, service, REGION).add_auth(request)
@@ -67,13 +69,34 @@ def main(bucket_name: str, key_name: str, prefix: str, filepath: str, credential
     upload_file(presigned_url, filepath, params)
 
 
+def validate_invoke_url():
+    if not INVOKE_URL:
+        print(
+            "ERROR: INVOKE_URL must be set as an environment variable. For example: "
+            "https://abcdef.execute-api.us-gov-west-1.amazonaws.com/prod/upload",
+        )
+        sys.exit(1)
+
+
 def get_credentials():
+    if not (ACCESS_KEY and SECRET_KEY):
+        raise ValueError(
+            "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set as environment variables",  # noqa: E501
+        )
+
     session_config = dict(
         aws_access_key_id=ACCESS_KEY,
         aws_secret_access_key=SECRET_KEY,
         region_name=REGION,
     )
-    if SESSION_TOKEN:
+
+    # If using temporary credentials
+    if ACCESS_KEY.startswith("ASIA"):
+        if not SESSION_TOKEN:
+            raise ValueError(
+                "AWS_SESSION_TOKEN must be set as an environment variable",  # noqa: E501
+            )
+
         session_config["aws_session_token"] = SESSION_TOKEN
 
     session = boto3.Session(**session_config)
@@ -153,7 +176,12 @@ if __name__ == "__main__":
     prefix: str = args.prefix.strip()
     if prefix:
         prefix = "/".join([part for part in prefix.split("/") if part]) + "/"
-    credentials = get_credentials()
+
+    try:
+        credentials = get_credentials()
+    except Exception as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
 
     main(
         bucket_name=args.bucket,
