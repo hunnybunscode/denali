@@ -23,13 +23,6 @@ Metadata:
           - DataTransferLambdaCodeKey
 
       - Label:
-          default: Data Transfer Lambda Code
-        Parameters:
-          - Cds1MappingId
-          - Cds2MappingId
-          - Cds3MappingId
-
-      - Label:
           default: Diode Simulator
         Parameters:
           - UseDiodeSimulator
@@ -54,12 +47,6 @@ Metadata:
         default: Data Transfer Lambda Storage Bucket
       DataTransferLambdaCodeKey:
         default: Data Transfer Lambda Code Key
-      Cds1MappingId:
-        default: CDS_1 Mapping Id
-      Cds2MappingId:
-        default: CDS_2 Mapping Id
-      Cds3MappingId:
-        default: CDS_3 Mapping Id
       UseDiodeSimulator:
         default: Use Diode Simulator
       DiodeSimulatorEndpoint:
@@ -121,21 +108,6 @@ Parameters:
     Type: String
     Description: S3 Key of the Lambda code for data transfer
     Default: data_transfer.zip
-
-  Cds1MappingId:
-    Type: String
-    # Description: CDS_1 Mapping Id
-    Default: 12346789-abcd-1234-abcd-123456789012
-
-  Cds2MappingId:
-    Type: String
-    # Description: CDS_2 Mapping Id
-    Default: 12346789-abcd-1234-abcd-123456789012
-
-  Cds3MappingId:
-    Type: String
-    # Description: CDS_3 Mapping Id
-    Default: 12346789-abcd-1234-abcd-123456789012
 
   UseDiodeSimulator:
     Type: String
@@ -223,9 +195,6 @@ Resources:
       Environment:
         Variables:
           TRANSFER_RESULT_QUEUE_URL: !Ref TranferResultSqsQueueUrl
-          CDS1_MAPPING: !Ref Cds1MappingId
-          CDS2_MAPPING: !Ref Cds2MappingId
-          CDS3_MAPPING: !Ref Cds3MappingId
           USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
           DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
 
@@ -256,10 +225,6 @@ Resources:
         detail-type:
           - Diode Transfer Status
         detail:
-          # mappingId:
-          #   - !Ref Cds1MappingId
-          #   - !Ref Cds2MappingId
-          #   - !Ref Cds3MappingId
           status:
             # - IN_TRANSIT
             - SUCCEEDED

@@ -5,18 +5,14 @@ from urllib.parse import unquote_plus
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-QUEUE_URL = os.environ["QUEUE_URL"]
-TAGS = [
-    {"Key": "GovPOC", "Value": os.environ["GOV_POC"]},
-    {"Key": "DataOwner", "Value": os.environ["DATA_OWNER"]},
-    {"Key": "KeyOwner", "Value": os.environ["KEY_OWNER"]},
-    {"Key": "CDSProfile", "Value": os.environ["CDS_PROFILE"]},
-]
+AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
+TAG_KEYS = ["DataOwner", "GovPOC", "KeyOwner", "MappingId"]
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 S3_CLIENT = boto3.client("s3", config=config)
@@ -24,31 +20,70 @@ SQS_CLIENT = boto3.client("sqs", config=config)
 
 
 def lambda_handler(event, context):
+    logger.info(f"Event: {json.dumps(event, default=str)}")
     bucket = event["Records"][0]["s3"]["bucket"]["name"]
     key = unquote_plus(event["Records"][0]["s3"]["object"]["key"])
+    source_ip = event["Records"][0]["requestParameters"]["sourceIPAddress"]
 
-    logger.info(
-        f"Adding tags and sending a message to the SQS queue for Bucket: {bucket}, Key: {key}",  # noqa: E501
-    )
-    add_tags(bucket, key)
+    tagset = get_bucket_tags(bucket)
+    tagset.append({"Key": "SourceIp", "Value": source_ip})
+    add_tags_to_key(bucket, key, tagset)
     send_to_sqs(bucket, key)
     logger.info("SUCCESS")
 
 
-def add_tags(bucket: str, key: str):
-    S3_CLIENT.put_object_tagging(
-        Bucket=bucket,
-        Key=key,
-        Tagging={"TagSet": TAGS},
-        # TODO: We should add this for enhanced security
-        # ExpectedBucketOwner
-    )
+def get_bucket_tags(bucket: str):
+    logger.info(f"Getting tags for {bucket}")
+    try:
+        tagset: list[dict[str, str]] = S3_CLIENT.get_bucket_tagging(Bucket=bucket)[
+            "TagSet"
+        ]
+        # ExpectedBucketOwner='string'
+        user_tagset = [
+            tag for tag in tagset if not tag["Key"].startswith("aws:cloudformation")
+        ]
+
+        if len(user_tagset) != len(TAG_KEYS):
+            raise ValueError(
+                f"Expected {len(TAG_KEYS)} tags, got {len(user_tagset)} instead",
+            )
+
+        for tag in user_tagset:
+            if tag["Key"] not in TAG_KEYS:
+                raise ValueError(f"Unexpected tag key: {tag['Key']}")
+
+        logger.info(f"Retrieved the tags: {user_tagset}")
+        return user_tagset
+    except Exception as e:
+        logger.error(f"Could not get tags for {bucket}: {e}")
+        raise
+
+
+def add_tags_to_key(bucket: str, key: str, tagset: list[dict[str, str]]):
+    logger.info(f"Adding tags to {bucket}/{key}")
+    try:
+        S3_CLIENT.put_object_tagging(
+            Bucket=bucket,
+            Key=key,
+            Tagging={"TagSet": tagset},
+            # TODO: We should add this for enhanced security
+            # ExpectedBucketOwner
+        )
+    except ClientError as e:
+        logger.error(f"Could not add tags: {e}")
+        raise
 
 
 def send_to_sqs(bucket, key):
-    SQS_CLIENT.send_message(
-        QueueUrl=QUEUE_URL,
-        MessageBody=json.dumps(
-            {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
-        ),
-    )
+    logger.info(f"Sending a message to the SQS queue for {bucket}/{key}")
+    try:
+        SQS_CLIENT.send_message(
+            QueueUrl=AV_SCAN_QUEUE_URL,
+            MessageBody=json.dumps(
+                {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
+            ),
+        )
+        logger.info("Sent the message")
+    except ClientError as e:
+        logger.error(f"Could not send message to SQS: {e}")
+        raise

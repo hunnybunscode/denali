@@ -1,0 +1,155 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - ResourceSuffix
+
+      - Label:
+          default: Tags
+        Parameters:
+          - IngestBucketMappingId
+          - IngestBucketGovPoc
+          - IngestBucketDataOwner
+          - IngestBucketKeyOwner
+
+      - Label:
+          default: SFTP [OPTIONAL]
+        Parameters:
+          - SftpUserName
+          - SshPublicKeys
+
+    ParameterLabels:
+      ResourceSuffix:
+        default: Resource Suffix
+      IngestBucketMappingId:
+        default: Mapping ID
+      IngestBucketGovPoc:
+        default: GOV POC
+      IngestBucketDataOwner:
+        default: Data Owner
+      IngestBucketKeyOwner:
+        default: Key Owner
+      SftpUserName:
+        default: SFTP User Name
+      SshPublicKeys:
+        default: SSH Public Keys
+
+Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  IngestBucketMappingId:
+    Type: String
+    Description: Value for tag key MappingId
+    Default: 12346789-abcd-1234-abcd-123456789012
+    AllowedPattern: ^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
+    ConstraintDescription: Must be a valid Mapping ID
+
+  IngestBucketGovPoc:
+    Type: String
+    Description: Value for tag key GovPOC
+    Default: Monica
+
+  IngestBucketDataOwner:
+    Type: String
+    Description: Value for tag key DataOwner
+    Default: Phoebe
+
+  IngestBucketKeyOwner:
+    Type: String
+    Description: Value for tag key KeyOwner
+    Default: Chandler
+
+  SftpUserName:
+    Type: String
+    Description: Username for SFTP user
+    AllowedPattern: ^$|^(?![-.@].*)[a-zA-Z0-9-_.@]{3,100}$
+    ConstraintDescription: >-
+      Username must be a minimum of 3 and a maximum of 100 characters long.
+      The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'.
+      The user name can't start with a hyphen, period, or at sign.
+
+  SshPublicKeys:
+    Type: CommaDelimitedList
+    Description: Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
+
+Conditions:
+  CreateSftpUser: !Not [!Equals [!Ref SftpUserName, ""]]
+  SshPublicKeyProvided: !Not [!Equals [!Join ["", !Ref SshPublicKeys], ""]]
+
+Resources:
+  IngestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LoggingConfiguration:
+        DestinationBucketName:
+          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function:
+              Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
+      Tags:
+        - Key: MappingId
+          Value: !Ref IngestBucketMappingId
+        - Key: GovPOC
+          Value: !Ref IngestBucketGovPoc
+        - Key: DataOwner
+          Value: !Ref IngestBucketDataOwner
+        - Key: KeyOwner
+          Value: !Ref IngestBucketKeyOwner
+
+  IngestBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref IngestBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${IngestBucket.Arn}
+              - !Sub ${IngestBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  TransferUser:
+    Type: AWS::Transfer::User
+    Condition: CreateSftpUser
+    Properties:
+      ServerId:
+        Fn::ImportValue: !Sub SFTPServerId-${ResourceSuffix}
+      Role:
+        Fn::ImportValue: !Sub TransferUserRoleArn-${ResourceSuffix}
+      UserName: !Ref SftpUserName
+      HomeDirectoryType: LOGICAL
+      HomeDirectoryMappings:
+        - Entry: / # chroot
+          Target: !Sub /${IngestBucket}/${SftpUserName} # Limit visibility to this directory (and below) only
+          Type: DIRECTORY
+      SshPublicKeys: !If
+        - SshPublicKeyProvided
+        - !Ref SshPublicKeys
+        - !Ref AWS::NoValue
