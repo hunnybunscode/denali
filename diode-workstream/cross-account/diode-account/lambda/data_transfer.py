@@ -9,9 +9,6 @@ from botocore.exceptions import ClientError  # type: ignore
 
 os.environ["AWS_DATA_PATH"] = "./models"
 
-CDS1_MAPPING = os.environ["CDS1_MAPPING"]
-CDS2_MAPPING = os.environ["CDS2_MAPPING"]
-CDS3_MAPPING = os.environ["CDS3_MAPPING"]
 QUEUE_URL = os.environ["TRANSFER_RESULT_QUEUE_URL"]
 USE_DIODE_SIMULATOR = os.environ["USE_DIODE_SIMULATOR"]
 DIODE_SIMULATOR_ENDPOINT = os.environ["DIODE_SIMULATOR_ENDPOINT"]
@@ -51,7 +48,7 @@ def handle_create_transfer(msg: dict):
     bucket = msg["Records"][0]["s3"]["bucket"]["name"]
     # unquote_plus for handling any whitespaces in the key name
     key = unquote_plus(msg["Records"][0]["s3"]["object"]["key"])
-    mapping_id = get_mapping(bucket, key)
+    mapping_id = get_mapping_id(bucket, key)
 
     logger.info(f"Bucket: {bucket}, Key: {key}")
     logger.info(f"Mapping ID: {mapping_id}")
@@ -115,24 +112,13 @@ def send_status_message(
     logger.info("Message sent successfully")
 
 
-def get_mapping(bucket, key) -> str:
+def get_mapping_id(bucket, key) -> str:
     tags = get_object_tagging(bucket, key)
-    logger.info(f"Tags: {tags}")
+    mapping_id = tags.get("MappingId")
+    if not mapping_id:
+        raise ValueError(f"No MappingId tag found for {bucket}/{key}")
 
-    cds_profile = tags.get("CDSProfile")
-    logger.info(f"CDS Profile: {cds_profile}")
-
-    if cds_profile == "CDS_1":
-        return CDS1_MAPPING
-    if cds_profile == "CDS_2":
-        return CDS2_MAPPING
-    if cds_profile == "CDS_3":
-        return CDS3_MAPPING
-
-    logger.warning(
-        f"CDSProfile tag is missing or its value is unmatched, using {CDS1_MAPPING} mapping",  # noqa: E501
-    )
-    return CDS1_MAPPING
+    return mapping_id
 
 
 def get_object_tagging(
@@ -150,8 +136,10 @@ def get_object_tagging(
         params["ExpectedBucketOwner"] = expected_bucket_owner
 
     tag_set = S3_CLIENT.get_object_tagging(**params)["TagSet"]
+    tags = {tag["Key"]: tag["Value"] for tag in tag_set}
+    logger.info(f"Tags: {tags}")
 
-    return {tag["Key"]: tag["Value"] for tag in tag_set}
+    return tags
 
 
 def create_transfer(mapping_id: str, bucket: str, key: str, include_tags=True):

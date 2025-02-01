@@ -25,10 +25,6 @@ Parameters:
     Type: String
     Description: The S3 prefix list ID
 
-  PrivateSubnetIds:
-    Type: CommaDelimitedList
-    Description: Subnet IDs for Lambda function
-
   SftpServerSubnetIds:
     Type: CommaDelimitedList
     Description: Subnet IDs for SFTP server
@@ -36,38 +32,6 @@ Parameters:
   SftpServerIngressRuleCIDR:
     Type: String
     Description: CIDR for SFTP Server Ingress Rule
-
-  LambdaStorageBucket:
-    Type: String
-    Description: S3 Bucket for Lambda Storage
-
-  ObjectTaggerLambdaCodeKey:
-    Type: String
-    Description: S3 Key for Lambda Code
-
-  ObjectTaggerLambdaCodeKeyVersion:
-    Type: String
-    Description: S3 object version of the Object Tagger Lambda code
-
-  SftpUserName:
-    Type: String
-    Description: Username for SFTP user
-
-  SftpBucketCDSProfile:
-    Type: String
-    Description: The CDS Profile for SFTP Bucket
-
-  SftpBucketDataOwner:
-    Type: String
-    Description: Data Owner for SFTP bucket
-
-  SftpBucketGovPoc:
-    Type: String
-    Description: Gov POC for SFTP bucket
-
-  SftpBucketKeyOwner:
-    Type: String
-    Description: Key Owner for SFTP bucket
 
 Resources:
   TransferLoggingRole:
@@ -198,77 +162,6 @@ Resources:
                   - s3:PutObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 
-  SftpBucketObjectTagger:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub sftp-bucket-object-tagger-${ResourceSuffix}
-      Handler: object_tagger.lambda_handler
-      Role: !GetAtt SftpObjectTaggerRole.Arn
-      Runtime: python3.11
-      Timeout: 30
-      Environment:
-        Variables:
-          DATA_OWNER: !Ref SftpBucketDataOwner
-          GOV_POC: !Ref SftpBucketGovPoc
-          KEY_OWNER: !Ref SftpBucketKeyOwner
-          CDS_PROFILE: !Ref SftpBucketCDSProfile
-          QUEUE_URL:
-            Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
-      Code:
-        S3Bucket: !Ref LambdaStorageBucket
-        S3Key: !Ref ObjectTaggerLambdaCodeKey
-        S3ObjectVersion: !Ref ObjectTaggerLambdaCodeKeyVersion
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref SftpFunctionSecurityGroup
-        SubnetIds: !Ref PrivateSubnetIds
-
-  SftpBucketObjectTaggerPermissions:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref SftpBucketObjectTagger
-      Principal: s3.amazonaws.com
-      Action: lambda:InvokeFunction
-      SourceAccount: !Ref AWS::AccountId
-
-  SftpBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt SftpBucketObjectTagger.Arn
-
-  SftpBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref SftpBucket
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Deny
-            Principal:
-              AWS: "*"
-            Action: s3:*
-            Resource:
-              - !Sub ${SftpBucket.Arn}
-              - !Sub ${SftpBucket.Arn}/*
-            Condition:
-              Bool:
-                aws:SecureTransport: "false"
-
   SftpServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -324,24 +217,15 @@ Resources:
         - Key: Name
           Value: !Sub SFTP-Server-${ResourceSuffix}
 
-  TransferUser:
-    Type: AWS::Transfer::User
-    Properties:
-      ServerId: !GetAtt SftpServer.ServerId
-      UserName: !Ref SftpUserName
-      HomeDirectoryType: LOGICAL
-      HomeDirectoryMappings:
-        - Entry: / # chroot
-          Target: !Sub /${SftpBucket}/${SftpUserName} # Limit visibility to this directory (and below) only
-          Type: DIRECTORY
-      Role: !GetAtt TransferUserRole.Arn
-
 Outputs:
-  S3BucketName:
-    Value: !Ref SftpBucket
-
-  SFTPHostName:
+  SFTPServerId:
+    Description: SFTP Server ID
     Value: !GetAtt SftpServer.ServerId
+    Export:
+      Name: !Sub SFTPServerId-${ResourceSuffix}
 
-  SFTPUserName:
-    Value: !Ref SftpUserName
+  TransferUserRole:
+    Description: ARN of the Transfer User Role
+    Value: !GetAtt TransferUserRole.Arn
+    Export:
+      Name: !Sub TransferUserRoleArn-${ResourceSuffix}

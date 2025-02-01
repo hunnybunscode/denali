@@ -12,9 +12,6 @@ Metadata:
           - PrivateSubnetIds
           - S3PrefixListId
           - DDBPrefixListId
-          - LambdaStorageBucket
-          - ObjectTaggerLambdaCodeKey
-          - ObjectTaggerLambdaCodeKeyVersion
 
       - Label:
           default: Logging Stack Parameters
@@ -25,16 +22,6 @@ Metadata:
           default: Ingest Stack Parameters
         Parameters:
           - TemplateURLIngestStack
-          - IngestStackApiGwLambdaCodeKey
-          - IngestStackApiGwLambdaCodeKeyVersion
-          - IngestStackBucket1CDSProfile
-          - IngestStackBucket2CDSProfile
-          - IngestStackBucketOneGovPoc
-          - IngestStackBucketOneDataOwner
-          - IngestStackBucketOneKeyOwner
-          - IngestStackBucketTwoGovPoc
-          - IngestStackBucketTwoDataOwner
-          - IngestStackBucketTwoKeyOwner
 
       - Label:
           default: Pipeline Stack Parameters
@@ -44,21 +31,14 @@ Metadata:
           - PipelineStackPipelineAmiId
           - PipelineStackApprovedFileTypes
           - PipelineStackDfdlApprovedFileTypes
-          - PipelineStackTransferResultLambdaCodeKey
-          - PipelineStackTransferResultLambdaCodeKeyVersion
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
           default: STFP Stack Parameters
         Parameters:
           - TemplateURLSftpServerStack
-          - SftpServerStackSftpUserName
           - SftpServerStackSftpServerSubnetIds
           - SftpServerIngressRuleCIDR
-          - SftpServerStackSftpBucketCDSProfile
-          - SftpServerStackSftpBucketDataOwner
-          - SftpServerStackSftpBucketGovPoc
-          - SftpServerStackSftpBucketKeyOwner
 
     ParameterLabels:
       IamPrefix:
@@ -77,45 +57,15 @@ Metadata:
         default: S3 Prefix List ID
       DDBPrefixListId:
         default: DynamoDB Prefix List ID
-      LambdaStorageBucket:
-        default: Lambda Storage Bucket
-      ObjectTaggerLambdaCodeKey:
-        default: Object Tagger Lambda Code Key
-      ObjectTaggerLambdaCodeKeyVersion:
-        default: Object Tagger Lambda Code Key Version
 
       TemplateURLLoggingStack:
         default: Logging Stack Template URL
 
       TemplateURLIngestStack:
         default: Ingest Stack Template URL
-      IngestStackApiGwLambdaCodeKey:
-        default: Ingest Stack API Gateway Lambda Code Key
-      IngestStackApiGwLambdaCodeKeyVersion:
-        default: Ingest Stack API Gateway Lambda Code Key Version
-      IngestStackBucket1CDSProfile:
-        default: Ingest Stack Bucket 1 CDS Profile
-      IngestStackBucket2CDSProfile:
-        default: Ingest Stack Bucket 2 CDS Profile
-      IngestStackBucketOneGovPoc:
-        default: Ingest Stack Bucket One Gov POC
-      IngestStackBucketOneDataOwner:
-        default: Pipeline Stack Bucket One Data Owner
-      IngestStackBucketOneKeyOwner:
-        default: Pipeline Stack Bucket One Key Owner
-      IngestStackBucketTwoGovPoc:
-        default: Pipeline Stack Bucket Two Gov POC
-      IngestStackBucketTwoDataOwner:
-        default: Pipeline Stack Bucket Two Data Owner
-      IngestStackBucketTwoKeyOwner:
-        default: Pipeline Stack Bucket Two Key Owner
 
       TemplateURLPipelineStack:
         default: Pipeline Stack Template URL
-      PipelineStackTransferResultLambdaCodeKey:
-        default: Pipeline Stack Transfer Result Lambda Code Key
-      PipelineStackTransferResultLambdaCodeKeyVersion:
-        default: Pipeline Stack Transfer Result Lambda Code Key Version
       PipelineStackDiodeSimulatorInstanceRole:
         default: Pipeline Stack Diode Simulator Instance Role
       PipelineStackPipelineAmiId:
@@ -129,20 +79,10 @@ Metadata:
 
       TemplateURLSftpServerStack:
         default: SFTP Server Stack Template URL
-      SftpServerStackSftpUserName:
-        default: SFTP Server Stack SFTP User Name
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
         default: SFTP Server Stack Ingress Rule CIDR
-      SftpServerStackSftpBucketCDSProfile:
-        default: SFTP Server Stack SFTP Bucket CDS Profile
-      SftpServerStackSftpBucketDataOwner:
-        default: SFTP Server Stack SFTP Bucket Data Owner
-      SftpServerStackSftpBucketGovPoc:
-        default: SFTP Server Stack SFTP Bucket Gov POC
-      SftpServerStackSftpBucketKeyOwner:
-        default: SFTP Server Stack SFTP Bucket Key Owner
 
 Parameters:
   IamPrefix:
@@ -190,20 +130,6 @@ Parameters:
     AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid DynamoDB Prefix List ID
 
-  LambdaStorageBucket:
-    Type: String
-    Description: Name of S3 bucket where the Lambda code is stored
-
-  ObjectTaggerLambdaCodeKey:
-    Type: String
-    Description: S3 key for the Object Tagger Lambda code
-    Default: lambda_functions/object_tagger.zip
-
-  ObjectTaggerLambdaCodeKeyVersion:
-    Type: String
-    Description: S3 object version for the Object Tagger Lambda code
-    AllowedPattern: ^\S+$
-
   TemplateURLLoggingStack:
     Type: String
     Description: >
@@ -216,58 +142,6 @@ Parameters:
       S3 URL for Ingest Stack.
       For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
 
-  IngestStackBucket1CDSProfile:
-    Type: String
-    Description: CDS Profile for Ingest Bucket 1
-    AllowedValues: [CDS_1, CDS_2, CDS_3]
-    ConstraintDescription: Must be CDS_1, CDS_2, or CDS_3
-
-  IngestStackBucket2CDSProfile:
-    Type: String
-    Description: CDS Profile for Ingest Bucket 2
-    AllowedValues: [CDS_1, CDS_2, CDS_3]
-    ConstraintDescription: Must be CDS_1, CDS_2, or CDS_3
-
-  IngestStackApiGwLambdaCodeKey:
-    Type: String
-    Description: S3 key for the API Gateway Lambda code
-    Default: lambda_functions/presigner.zip
-
-  IngestStackApiGwLambdaCodeKeyVersion:
-    Type: String
-    Description: S3 object version for the API Gateway Lambda code
-    AllowedPattern: ^\S+$
-
-  IngestStackBucketOneGovPoc:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 1
-    Default: Monica
-
-  IngestStackBucketOneDataOwner:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 1
-    Default: Phoebe
-
-  IngestStackBucketOneKeyOwner:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 1
-    Default: Chandler
-
-  IngestStackBucketTwoGovPoc:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 2
-    Default: Ross
-
-  IngestStackBucketTwoDataOwner:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 2
-    Default: Rachel
-
-  IngestStackBucketTwoKeyOwner:
-    Type: String
-    Description: String to be added as a tag to objects in Bucket 2
-    Default: Joey
-
   TemplateURLPipelineStack:
     Type: String
     Description: >
@@ -277,16 +151,6 @@ Parameters:
   PipelineStackPipelineAmiId:
     Type: AWS::EC2::Image::Id
     Description: The AMI ID to use for the pipeline.
-
-  PipelineStackTransferResultLambdaCodeKey:
-    Type: String
-    Description: The S3 key of the pipeline lambda code
-    Default: lambda_functions/transfer_result.zip
-
-  PipelineStackTransferResultLambdaCodeKeyVersion:
-    Type: String
-    Description: The S3 object version of the pipeline lambda code
-    AllowedPattern: ^\S+$
 
   PipelineStackDiodeSimulatorInstanceRole:
     Type: String
@@ -317,11 +181,6 @@ Parameters:
       S3 URL for SFTP Server Stack.
       For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_sftp_stack.yaml
 
-  SftpServerStackSftpUserName:
-    Type: String
-    Description: Username for SFTP user
-    Default: sftpuser
-
   SftpServerStackSftpServerSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Two (2) Subnet IDs for SFTP server
@@ -332,27 +191,6 @@ Parameters:
     Default: 0.0.0.0/0
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
-
-  SftpServerStackSftpBucketCDSProfile:
-    Type: String
-    Description: CDS Profile for SFTP Bucket
-    AllowedValues: [CDS_1, CDS_2, CDS_3]
-    ConstraintDescription: Must be CDS_1, CDS_2, or CDS_3
-
-  SftpServerStackSftpBucketDataOwner:
-    Type: String
-    Description: Name of the Sftp Server Data Owner
-    Default: George
-
-  SftpServerStackSftpBucketGovPoc:
-    Type: String
-    Description: Name of the Sftp Server Gov Poc
-    Default: Jerry
-
-  SftpServerStackSftpBucketKeyOwner:
-    Type: String
-    Description: Name of the Sftp Server Key Owner
-    Default: Cosmo
 
 Resources:
   LoggingStack:
@@ -379,19 +217,6 @@ Resources:
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         VpcCidr: !Ref VpcCidr
         S3PrefixListId: !Ref S3PrefixListId
-        LambdaStorageBucket: !Ref LambdaStorageBucket
-        ObjectTaggerLambdaCodeKey: !Ref ObjectTaggerLambdaCodeKey
-        ObjectTaggerLambdaCodeKeyVersion: !Ref ObjectTaggerLambdaCodeKeyVersion
-        ApiGwLambdaCodeKey: !Ref IngestStackApiGwLambdaCodeKey
-        ApiGwLambdaCodeKeyVersion: !Ref IngestStackApiGwLambdaCodeKeyVersion
-        Bucket1CDSProfile: !Ref IngestStackBucket1CDSProfile
-        Bucket2CDSProfile: !Ref IngestStackBucket2CDSProfile
-        BucketOneGovPoc: !Ref IngestStackBucketOneGovPoc
-        BucketOneDataOwner: !Ref IngestStackBucketOneDataOwner
-        BucketOneKeyOwner: !Ref IngestStackBucketOneKeyOwner
-        BucketTwoGovPoc: !Ref IngestStackBucketTwoGovPoc
-        BucketTwoDataOwner: !Ref IngestStackBucketTwoDataOwner
-        BucketTwoKeyOwner: !Ref IngestStackBucketTwoKeyOwner
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
@@ -409,9 +234,6 @@ Resources:
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         S3PrefixListId: !Ref S3PrefixListId
         DDBPrefixListId: !Ref DDBPrefixListId
-        LambdaStorageBucket: !Ref LambdaStorageBucket
-        TransferResultLambdaCodeKey: !Ref PipelineStackTransferResultLambdaCodeKey
-        TransferResultLambdaCodeKeyVersion: !Ref PipelineStackTransferResultLambdaCodeKeyVersion
         ApprovedFileTypes: !Join [",", !Ref PipelineStackApprovedFileTypes]
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
@@ -433,15 +255,6 @@ Resources:
         VpcId: !Ref VpcId
         VpcCidr: !Ref VpcCidr
         S3PrefixListId: !Ref S3PrefixListId
-        PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpServerIngressRuleCIDR: !Ref SftpServerIngressRuleCIDR
-        LambdaStorageBucket: !Ref LambdaStorageBucket
-        ObjectTaggerLambdaCodeKey: !Ref ObjectTaggerLambdaCodeKey
-        ObjectTaggerLambdaCodeKeyVersion: !Ref ObjectTaggerLambdaCodeKeyVersion
-        SftpUserName: !Ref SftpServerStackSftpUserName
-        SftpBucketCDSProfile: !Ref SftpServerStackSftpBucketCDSProfile
-        SftpBucketDataOwner: !Ref SftpServerStackSftpBucketDataOwner
-        SftpBucketGovPoc: !Ref SftpServerStackSftpBucketGovPoc
-        SftpBucketKeyOwner: !Ref SftpServerStackSftpBucketKeyOwner
