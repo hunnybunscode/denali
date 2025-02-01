@@ -99,7 +99,6 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
 
-  # TODO: Remove this and use the Lambda function resource policy
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -124,9 +123,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: lambda:InvokeFunction
-                Resource:
-                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
-                  - !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*
+                Resource: !GetAtt PresignUrlGenerator.Arn
 
   ApiGatewayStageLogGroup:
     Type: AWS::Logs::LogGroup
@@ -396,14 +393,6 @@ Resources:
       ParentId: !GetAtt FileUploader.RootResourceId
       PathPart: upload
       RestApiId: !Ref FileUploader
-
-  FileUploaderUploadPOSTApiPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref PresignUrlGenerator
-      Principal: apigateway.amazonaws.com
-      Action: lambda:InvokeFunction
-      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${FileUploader}/${FileUploaderDeploymentStageProd}/POST/upload
 
   FileUploaderUploadPOST:
     Type: AWS::ApiGateway::Method
