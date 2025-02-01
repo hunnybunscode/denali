@@ -195,8 +195,8 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:user/*
               - Effect: Allow
                 Action:
-                  - secretsmanager:PutSecretValue
-                  - secretsmanager:CreateSecret
+                  - secretsmanager:PutSecretValue # pragma: allowlist secret
+                  - secretsmanager:CreateSecret # pragma: allowlist secret
                 Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*-AccessKey*
               - Effect: Allow
                 Action: sns:Publish
@@ -418,19 +418,19 @@ Resources:
                   secret_name = f"{user_name}-AccessKey"
                   result["ASM Secret Name"] = secret_name
 
-                  secret_string = json.dumps({
+                  secret_string = json.dumps({  # pragma: allowlist secret
                       'aws_access_key_id': new_key['AccessKeyId'],
                       'aws_secret_access_key': new_key['SecretAccessKey']
                   })
 
                   try:
-                      sm.put_secret_value(SecretId=secret_name, SecretString=secret_string)
+                      sm.put_secret_value(SecretId=secret_name, SecretString=secret_string)  # pragma: allowlist secret
                       logger.info(f"Updated existing secret for user {user_name}")
                   except sm.exceptions.ResourceNotFoundException:
                       sm.create_secret(
                           Name=secret_name,
                           Description=f'Access key for IAM user {user_name}',
-                          SecretString=secret_string
+                          SecretString=secret_string  # pragma: allowlist secret
                       )
                       logger.info(f"Created new secret for user {user_name}")
 
