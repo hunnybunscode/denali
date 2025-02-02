@@ -2,11 +2,15 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: General Parameters
+          default: General
         Parameters:
           - IamPrefix
-          - ResourceSuffix
           - PermissionsBoundaryPolicyArn
+          - ResourceSuffix
+
+      - Label:
+          default: Networking
+        Parameters:
           - VpcId
           - VpcCidr
           - PrivateSubnetIds
@@ -14,17 +18,17 @@ Metadata:
           - DDBPrefixListId
 
       - Label:
-          default: Logging Stack Parameters
+          default: Logging Stack
         Parameters:
           - TemplateURLLoggingStack
 
       - Label:
-          default: Ingest Stack Parameters
+          default: Ingest Stack
         Parameters:
           - TemplateURLIngestStack
 
       - Label:
-          default: Pipeline Stack Parameters
+          default: Pipeline Stack
         Parameters:
           - TemplateURLPipelineStack
           - PipelineStackDiodeAccountId
@@ -34,7 +38,7 @@ Metadata:
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
-          default: STFP Stack Parameters
+          default: STFP Stack
         Parameters:
           - TemplateURLSftpServerStack
           - SftpServerStackSftpServerSubnetIds
@@ -43,10 +47,10 @@ Metadata:
     ParameterLabels:
       IamPrefix:
         default: IAM Prefix
-      ResourceSuffix:
-        default: Resource Suffix
       PermissionsBoundaryPolicyArn:
         default: Permissions Boundary Policy ARN
+      ResourceSuffix:
+        default: Resource Suffix
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -92,6 +96,12 @@ Parameters:
     AllowedValues: [AFC2S]
     ConstraintDescription: Must be "AFC2S"
 
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
   ResourceSuffix:
     Type: String
     Description: >-
@@ -99,12 +109,6 @@ Parameters:
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
-
-  PermissionsBoundaryPolicyArn:
-    Type: String
-    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
-    ConstraintDescription: Must be a valid IAM policy ARN
 
   VpcId:
     Type: AWS::EC2::VPC::Id
