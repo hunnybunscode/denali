@@ -1,29 +1,19 @@
-## Deployed Successfully but need to limit the SG Ingress CIDR
-
 Parameters:
   IamPrefix:
     Type: String
     Description: Prefix added to all IAM resources
 
-  ResourceSuffix:
-    Type: String
-    Description: Suffix added to the named AWS resources
-
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
 
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
   VpcId:
     Type: String
     Description: VPC ID
-
-  VpcCidr:
-    Type: String
-    Description: VPC CIDR
-
-  S3PrefixListId:
-    Type: String
-    Description: The S3 prefix list ID
 
   SftpServerSubnetIds:
     Type: CommaDelimitedList
@@ -51,6 +41,9 @@ Resources:
             Principal:
               Service: transfer.amazonaws.com
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
       Policies:
         - PolicyName: TransferLoggingPolicy
           PolicyDocument:
@@ -107,59 +100,6 @@ Resources:
                   - s3:ListBucket
                   - s3:DeleteObject
                   - s3:GetBucketLocation
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-
-  SftpFunctionSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for Lambda Functions
-      SecurityGroupEgress:
-        - CidrIp: !Ref VpcCidr
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          Description: Allow TCP traffic out to VPC CIDR
-        - DestinationPrefixListId: !Ref S3PrefixListId
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          Description: Allow TCP traffic out to S3 Gateway Endpoint
-      VpcId: !Ref VpcId
-
-  SftpObjectTaggerRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${IamPrefix}-sftp-ObjectTaggerRole-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: ObjectTaggerRoleDefaultPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: sqs:SendMessage
-                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-              - Effect: Allow
-                Action: dynamodb:PutItem
-                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
-              - Effect: Allow
-                Action:
-                  - s3:GetObjectTagging
-                  - s3:PutObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 
   SftpServerSecurityGroup:

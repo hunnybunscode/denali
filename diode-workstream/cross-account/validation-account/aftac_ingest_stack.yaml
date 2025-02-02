@@ -3,29 +3,29 @@ Parameters:
     Type: String
     Description: Prefix added to all IAM resources
 
-  ResourceSuffix:
-    Type: String
-    Description: Suffix added to the named AWS resources
-
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
 
-  VpcCidr:
+  ResourceSuffix:
     Type: String
-    Description: The CIDR block of the existing VPC
-
-  S3PrefixListId:
-    Type: String
-    Description: The S3 prefix list ID to use for the pipeline
+    Description: Suffix added to the named AWS resources
 
   VpcId:
     Type: String
     Description: VPC ID
 
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the existing VPC
+
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: The list of private subnet IDs to use for the pipeline
+
+  S3PrefixListId:
+    Type: String
+    Description: The S3 prefix list ID to use for the pipeline
 
 Resources:
   ObjectTaggerRole:
@@ -45,6 +45,9 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
@@ -52,6 +55,20 @@ Resources:
           PolicyDocument:
             Version: 2012-10-17
             Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:bucket-object-tagger-${ResourceSuffix}
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt AvScanQueue.Arn
@@ -65,7 +82,7 @@ Resources:
                   StringEquals:
                     s3:ResourceAccount: !Ref AWS::AccountId
 
-  PresignUrlGeneratorServiceRole:
+  PresignedUrlGeneratorRole:
     Type: AWS::IAM::Role
     Metadata:
       cfn_nag:
@@ -73,7 +90,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
-      RoleName: !Sub ${IamPrefix}-PresignUrlGeneratorServiceRole-${ResourceSuffix}
+      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -82,22 +99,36 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: PresignGeneratorServiceRoleDefaultPolicy
+        - PolicyName: PresignedUrlGeneratorRolePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
 
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
@@ -117,13 +148,13 @@ Resources:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: APILambdaInvokeRoleDefaultPolicy
+        - PolicyName: APILambdaInvokeRolePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: lambda:InvokeFunction
-                Resource: !GetAtt PresignUrlGenerator.Arn
+                Resource: !GetAtt PresignedUrlGenerator.Arn
 
   ApiGatewayStageLogGroup:
     Type: AWS::Logs::LogGroup
@@ -160,8 +191,7 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Deny
-            Principal:
-              AWS: "*"
+            Principal: "*"
             Action: sqs:*
             Resource: !GetAtt AvScanQueue.Arn
             Condition:
@@ -189,12 +219,20 @@ Resources:
 
   BucketObjectTagger:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The managed policy, AWSLambdaVPCAccessExecutionRole, attached to the execution role includes permissions to write to CloudWatch Logs
     Properties:
       FunctionName: !Sub bucket-object-tagger-${ResourceSuffix}
       Handler: index.lambda_handler
       Role: !GetAtt ObjectTaggerRole.Arn
       Runtime: python3.11
       Timeout: 30
+      # LoggingConfig:
+      #   LogGroup: The name of the log group
+      # ReservedConcurrentExecutions: 50
       Environment:
         Variables:
           AV_SCAN_QUEUE_URL: !Ref AvScanQueue
@@ -302,14 +340,22 @@ Resources:
       Action: lambda:InvokeFunction
       SourceAccount: !Ref AWS::AccountId
 
-  PresignUrlGenerator:
+  PresignedUrlGenerator:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The managed policy, AWSLambdaVPCAccessExecutionRole, attached to the execution role includes permissions to write to CloudWatch Logs
     Properties:
-      FunctionName: !Sub presign-url-generator-${ResourceSuffix}
+      FunctionName: !Sub presigned-url-generator-${ResourceSuffix}
       Handler: index.lambda_handler
-      Role: !GetAtt PresignUrlGeneratorServiceRole.Arn
+      Role: !GetAtt PresignedUrlGeneratorRole.Arn
       Runtime: python3.11
       Timeout: 30
+      # LoggingConfig:
+      #   LogGroup: The name of the log group
+      # ReservedConcurrentExecutions: 50
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
@@ -353,7 +399,7 @@ Resources:
   FileUploader:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: FileUploader
+      Name: !Sub FileUploader-${ResourceSuffix}
       EndpointConfiguration:
         Types:
           - REGIONAL
@@ -361,8 +407,8 @@ Resources:
   FileUploaderDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - FileUploaderUploadOPTIONS
-      - FileUploaderUploadPOST
+      - FileUploaderUploadOptions
+      - FileUploaderUploadPost
       - FileUploaderUpload
     Properties:
       Description: File Uploader Deployment
@@ -394,7 +440,7 @@ Resources:
       PathPart: upload
       RestApiId: !Ref FileUploader
 
-  FileUploaderUploadPOST:
+  FileUploaderUploadPost:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: AWS_IAM
@@ -408,7 +454,7 @@ Resources:
         RequestTemplates:
           application/json: '{ "statusCode": 200 }'
         Type: AWS_PROXY
-        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignUrlGenerator.Arn}/invocations
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignedUrlGenerator.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json: !Ref APIModel
@@ -416,7 +462,7 @@ Resources:
       ResourceId: !Ref FileUploaderUpload
       RestApiId: !Ref FileUploader
 
-  FileUploaderUploadOPTIONS:
+  FileUploaderUploadOptions:
     Type: AWS::ApiGateway::Method
     Properties:
       ApiKeyRequired: false # pragma: allowlist secret
@@ -520,7 +566,7 @@ Resources:
             MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
 
   # WAF Association with API Gateway stages
-  WebACLAssociationAPI1:
+  WebACLAssociationAPI:
     Type: AWS::WAFv2::WebACLAssociation
     DependsOn: FileUploaderDeploymentStageProd
     Properties:
@@ -811,6 +857,11 @@ Resources:
 
   AlarmBlockRatio:
     Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       AlarmName: !Sub ${WAFLogGroup}-block-ratio-anomaly
       AlarmDescription: Abnormal percentage of total requests blocked over 5 minute period.
@@ -854,6 +905,11 @@ Resources:
 
   AlarmClientIpAllowed:
     Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       AlarmName: !Sub ${WAFLogGroup}-top-clientip-allowed-anomaly
       AlarmDescription: Abnormal number of requests for the top allowed client IP over 5 minutes.
@@ -876,6 +932,11 @@ Resources:
 
   AlarmClientIpBlocked:
     Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       AlarmName: !Sub ${WAFLogGroup}-top-clientip-blocked-anomaly
       AlarmDescription: Abnormal number of requests for the top blocked client IP over 5 minutes.
@@ -895,6 +956,7 @@ Resources:
           ReturnData: true
           Expression: ANOMALY_DETECTION_BAND(e0, 2)
       ThresholdMetricId: ad1
+
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -1343,13 +1405,13 @@ Resources:
         }
 
 Outputs:
-  AvScanQueueUrlExport:
+  AvScanQueueUrl:
     Description: Queue URL of the SQS AV Scan Queue
     Value: !Ref AvScanQueue
     Export:
       Name: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
 
-  AvScanQueueNameExport:
+  AvScanQueueName:
     Description: Name of the SQS AV Scan Queue
     Value: !GetAtt AvScanQueue.QueueName
     Export:
@@ -1361,6 +1423,6 @@ Outputs:
     Export:
       Name: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
 
-  PresignGenerator1InvokeURL:
+  PresignedUrlGeneratorInvokeUrl:
     Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
     Description: URL of the Presign Generator API Endpoint

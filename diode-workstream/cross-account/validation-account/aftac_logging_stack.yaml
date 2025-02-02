@@ -120,16 +120,6 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
-          - Sid: AllowAccessLoggingBucket
-            Effect: Allow
-            Principal:
-              Service: logging.s3.amazonaws.com
-            Action: s3:PutObject
-            Resource:
-              - !Sub ${AccessLogBucket.Arn}/*
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
           - Sid: AllowTls12Only
             Effect: Deny
             Principal: "*"
@@ -140,9 +130,19 @@ Resources:
             Condition:
               NumericLessThan:
                 s3:TlsVersion: 1.2
+          - Sid: AllowAccessLoggingBucket
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              - !Sub ${AccessLogBucket.Arn}/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
 
 Outputs:
-  AccessLogBucketExport:
+  AccessLogBucketName:
     Description: Name of the S3 Logging Bucket
     Value: !Ref AccessLogBucket
     Export:

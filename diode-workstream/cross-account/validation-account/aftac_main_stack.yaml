@@ -211,11 +211,11 @@ Resources:
       TemplateURL: !Ref TemplateURLIngestStack
       Parameters:
         IamPrefix: !Ref IamPrefix
-        ResourceSuffix: !Ref ResourceSuffix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
+        ResourceSuffix: !Ref ResourceSuffix
         VpcId: !Ref VpcId
-        PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         VpcCidr: !Ref VpcCidr
+        PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         S3PrefixListId: !Ref S3PrefixListId
 
   PipelineStack:
@@ -227,8 +227,8 @@ Resources:
       TemplateURL: !Ref TemplateURLPipelineStack
       Parameters:
         IamPrefix: !Ref IamPrefix
-        ResourceSuffix: !Ref ResourceSuffix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
+        ResourceSuffix: !Ref ResourceSuffix
         VpcId: !Ref VpcId
         VpcCidr: !Ref VpcCidr
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
@@ -250,11 +250,9 @@ Resources:
       TemplateURL: !Ref TemplateURLSftpServerStack
       Parameters:
         IamPrefix: !Ref IamPrefix
-        ResourceSuffix: !Ref ResourceSuffix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
+        ResourceSuffix: !Ref ResourceSuffix
         VpcId: !Ref VpcId
-        VpcCidr: !Ref VpcCidr
-        S3PrefixListId: !Ref S3PrefixListId
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpServerIngressRuleCIDR: !Ref SftpServerIngressRuleCIDR

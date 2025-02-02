@@ -14,7 +14,6 @@ Metadata:
           - DataTransferBucketName
           - DataTransferSqsQueueArn
           - TranferResultSqsQueueArn
-          - TranferResultSqsQueueUrl
 
       - Label:
           default: Data Transfer Lambda Code
@@ -41,8 +40,6 @@ Metadata:
         default: Data Transfer SQS Queue ARN
       TranferResultSqsQueueArn:
         default: Data Transfer Result SQS Queue ARN
-      TranferResultSqsQueueUrl:
-        default: Data Transfer Result SQS Queue URL
       DataTransferLambdaStorageBucket:
         default: Data Transfer Lambda Storage Bucket
       DataTransferLambdaCodeKey:
@@ -92,12 +89,6 @@ Parameters:
     AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
     ConstraintDescription: Must be a valid ARN of the Data Transfer Result SQS queue in the Validation Account
 
-  TranferResultSqsQueueUrl:
-    Type: String
-    Description: URL of the Data Transfer Result SQS queue in the Validation Account
-    AllowedPattern: ^https://sqs\..+
-    ConstraintDescription: Must be a valid URL of the Data Transfer Result SQS queue in the Validation Account
-
   DataTransferLambdaStorageBucket:
     Type: String
     Description: Name of the S3 Bucket that contains the Lambda code for data transfer
@@ -128,6 +119,11 @@ Conditions:
 Resources:
   DataTransferLambdaRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
@@ -157,7 +153,9 @@ Resources:
                   - s3:GetObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
               - Effect: Allow
-                Action: diode:*
+                Action:
+                  - diode:CreateTransfer
+                  - diode:DescribeTransfer
                 Resource: "*"
               - Effect: Allow
                 Action: sqs:SendMessage
@@ -181,22 +179,37 @@ Resources:
 
   DataTransferLambdaFunction:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The execution role includes permissions to write to CloudWatch Logs
     Properties:
       FunctionName: !Sub DataTransferLambdaFunction-${ResourceSuffix}
-      LoggingConfig:
-        LogGroup: !Ref DataTransferLambdaFunctionLogGroup
       Handler: data_transfer.lambda_handler
       Role: !GetAtt DataTransferLambdaRole.Arn
-      Code:
-        S3Bucket: !Ref DataTransferLambdaStorageBucket
-        S3Key: !Ref DataTransferLambdaCodeKey
       Runtime: python3.11
+      LoggingConfig:
+        LogGroup: !Ref DataTransferLambdaFunctionLogGroup
+      # ReservedConcurrentExecutions: 50
       Timeout: 30
       Environment:
         Variables:
-          TRANSFER_RESULT_QUEUE_URL: !Ref TranferResultSqsQueueUrl
+          TRANSFER_RESULT_QUEUE_URL: !Sub
+            - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
+            - AccountId:
+                !Select [4, !Split [":", !Ref TranferResultSqsQueueArn]]
+              QueueName:
+                !Select [5, !Split [":", !Ref TranferResultSqsQueueArn]]
           USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
           DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
+      # VpcConfig:
+      #   SecurityGroupIds:
+      #     - GroupId
+      #   SubnetIds: !Ref PrivateSubnetIds
+      Code:
+        S3Bucket: !Ref DataTransferLambdaStorageBucket
+        S3Key: !Ref DataTransferLambdaCodeKey
 
   DataTransferLambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
