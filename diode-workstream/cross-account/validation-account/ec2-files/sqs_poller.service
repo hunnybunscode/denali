@@ -6,6 +6,7 @@ After=multi-user.target
 Type=simple
 Restart=always
 RestartSec=5
+Environment=""
 ExecStart=/bin/python3.11 /usr/bin/validation-pipeline/sqs_poller.py
 User=root
 
