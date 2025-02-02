@@ -89,12 +89,6 @@ Resources:
               SSEAlgorithm: aws:kms
               KMSMasterKeyID: !GetAtt KmsKey.Arn
             BucketKeyEnabled: true
-      ObjectLockConfiguration:
-        ObjectLockEnabled: Enabled
-        Rule:
-          DefaultRetention:
-            Days: 2555
-            Mode: GOVERNANCE
       ObjectLockEnabled: true
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
