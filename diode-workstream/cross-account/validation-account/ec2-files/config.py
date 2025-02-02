@@ -1,3 +1,9 @@
+import os
+
+
+simulate_av_scan = True if os.getenv("av_scan_mode") == "Test" else False
+resource_suffix = os.getenv("resource_suffix") or ""
+
 file_handler_config = {
     "filename": "/var/log/sqs_poller.log",
     "when": "midnight",
@@ -16,9 +22,6 @@ mime_mapping = {
 
 # File types that puremagic cannot validate
 exempt_file_types = ["csv"]
-
-# Update this to match the value from CloudFormation templates
-resource_suffix = ""
 
 # Populated and updated in the main function
 ssm_params = {

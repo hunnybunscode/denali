@@ -3,6 +3,7 @@ import random
 import subprocess  # nosec B404
 
 from config import resource_suffix
+from config import simulate_av_scan
 from config import ssm_params
 from utils import add_tags
 from utils import copy_object
@@ -10,9 +11,6 @@ from utils import create_tags_for_av_scan
 from utils import delete_av_scan_message
 from utils import delete_object
 from utils import publish_sns_message
-
-# TODO: Set this via SSM parameter store
-TEST_MODE = True
 
 logger = logging.getLogger()
 
@@ -42,14 +40,15 @@ def _run_av_scan(key: str, file_path: str):
     """
     Returns the exit status after running clamdscan on file_path
     """
-    if TEST_MODE:
-        logger.info(
-            f"Testing mode enabled. Simulating clamdscan for {key}",
-        )
+    if simulate_av_scan:
+        logger.info(f"Simulating anti-virus scanning for {key}")
         exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
     else:
         logger.info(f"Scanning {key}")
-        exit_status = subprocess.run(["clamdscan", file_path]).returncode
+        # TODO: Get the full execution path for clamdscan
+        exit_status = subprocess.run(
+            ["clamdscan", file_path],
+        ).returncode  # nosec B603, B607
 
     logger.info(f"ClamAV Scan Exit Code: {exit_status}")
     return exit_status
