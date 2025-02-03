@@ -12,6 +12,7 @@ Metadata:
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
           - AvScanMode
+          - ProxyServerAddress
           - EmailEndPoint
 
       - Label:
@@ -33,6 +34,8 @@ Metadata:
         default: Resource Suffix
       AvScanMode:
         default: Anti-Virus Scan Mode
+      ProxyServerAddress:
+        default: Proxy Server Address
       EmailEndPoint:
         default: Email Notification
       SemVer:
@@ -76,6 +79,12 @@ Parameters:
     Default: Live
     AllowedValues: [Test, Live]
     ConstraintDescription: Must be either "Test" or "Live"
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
 
   EmailEndPoint:
     Type: String
@@ -126,89 +135,6 @@ Conditions:
   IsEmailAddressProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
 
 Resources:
-  BuildComponentPython3AndPipInstall:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub python3-and-pip-${ResourceSuffix}
-      Description: Installs and upgrades Python3 and Pip
-      Version: !Ref SemVer
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
-      ## If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: Python3 and Pip
-        description: Installs and upgrades Python3 and Pip
-        schemaVersion: 1.0
-        parameters:
-          - PythonVersion:
-              type: string
-              default: python3.11
-              description: Python3 version to install
-        phases:
-          - name: build
-            steps:
-              - name: InstallPython3AndPip
-                action: ExecuteBash
-                inputs:
-                  commands:
-                    - yum install -y {{ PythonVersion }}
-                    # - "{{ PythonVersion }} --version 2>/dev/null"
-                    # - exit_code=$?
-                    # - |
-                    #   if [[ $exit_code -ne 0 ]]; then
-                    #     echo {{ PythonVersion }} installation failed"
-                    #     exit $exit_code
-                    #   fi
-                    - yum install -y {{ PythonVersion }}-pip
-                    - "{{ PythonVersion }} -m pip install pip --upgrade"
-
-  BuildComponentPythonPackagesInstall:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub python-packages-${ResourceSuffix}
-      Description: Installs Python packages
-      Version: !Ref SemVer
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: Python package
-        description: Installs Python packages
-        schemaVersion: 1.0
-        parameters:
-          - PythonVersion:
-              type: string
-              default: python3.11
-              description: Python3 version to install
-          - PythonPackages:
-              type: string
-              description: Comma-separated list of Python package to install
-        phases:
-          - name: build
-            steps:
-              - name: Install
-                action: ExecuteBash
-                loop:
-                  forEach:
-                    list: "{{ PythonPackages }}"
-                    delimiter: ","
-                inputs:
-                  commands:
-                    - "{{ PythonVersion }} -m pip install {{ loop.value }}"
-                    # - '{{ PythonVersion }} -c "import {{ loop.value }}"'
-                    # - exit_code=$?
-                    # - |
-                    #   if [[ $exit_code -ne 0 ]]; then
-                    #     echo "{{ loop.value }} installation failed"
-                    #     exit $exit_code
-                    #   fi
-
   BuildComponentS3Download:
     Type: AWS::ImageBuilder::Component
     Properties:
@@ -250,59 +176,77 @@ Resources:
                     destination: "{{ Destination }}"
                     overwrite: true
 
-  BuildComponentEnableSQSPollerService:
+  BuildComponentPrepareImage:
     Type: AWS::ImageBuilder::Component
     Properties:
-      Name: !Sub enable-sqs-poller-service-${ResourceSuffix}
-      Description: Enables SQS poller service
+      Name: !Sub prepare-image-${ResourceSuffix}
+      Description: Prepares the image for data transfer pipeline
       Version: !Ref SemVer
       Platform: Linux
       SupportedOsVersions:
         - Red Hat Enterprise Linux 8
         - Red Hat Enterprise Linux 9
       KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
+      ## If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
       Data: !Sub |
-        name: Enable SQS Poller Service
-        description: Enables SQS poller service
+        name: Prepare image for data transfer pipeline
+        description: Prepares image for data transfer pipeline
         schemaVersion: 1.0
         phases:
           - name: build
             steps:
-              - name: EnablePollerService
+              - name: PrepImage
                 action: ExecuteBash
                 inputs:
                   commands:
+                    # Set environment variables for proxy servers
+                    - export http_proxy=${ProxyServerAddress}:3128
+                    - export https_proxy=${ProxyServerAddress}:3128
+                    - export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+
+                    # Install python3.11, pip, and other libraries
+                    - yum install -y python3.11 python3.11-pip curl unzip
+                    - python3.11 -m pip install pip --upgrade
+                    - python3.11 -m pip install boto3 puremagic pyjwt
+
+                    # Update all packages
+                    - yum update -y
+
+                    # Install awscli
+                    - ARCH=$(uname -m)
+                    - curl "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH.zip" -o /tmp/awscliv2.zip
+                    - echo Unzipping awscliv2.zip
+                    - unzip -q -o /tmp/awscliv2.zip
+                    - BINARY=/usr/local/aws-cli/v2/current/bin/aws
+                    - |
+                      # If the binary exists, update it
+                      if [ -x $BINARY ]; then
+                          echo Updating awscli v2
+                          ./aws/install --update
+                      else
+                          echo Installing awscli v2
+                          ./aws/install
+                      fi
+
+                    # Install CloudWatch Agent
+                    - ARCH=$(arch)
+                    - |
+                      if [ "$ARCH" = "arm64" ]; then
+                          curl https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/redhat/arm64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
+                      else # x86_64
+                          curl https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
+                      fi
+                    - rpm -U /tmp/amazon-cloudwatch-agent.rpm
+
+                    # Enable CloudWatch Agent
+                    - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                    - systemctl enable amazon-cloudwatch-agent
+
+                    # Enable SQS Poller Service
                     # Replaces the placeholder ("") with actual environment variables
                     - sed -i 's/""/av_scan_mode=${AvScanMode} resource_suffix=${ResourceSuffix}/g' /usr/bin/validation-pipeline/sqs_poller.service
                     - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
                     - systemctl enable sqs_poller.service
-
-  BuildComponentEnableCloudWatchAgent:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub enable-cloudwatch-agent-${ResourceSuffix}
-      Description: Enables CloudWatch Agent
-      Version: !Ref SemVer
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: Enable CloudWatch Agent
-        description: Enables CloudWatch Agent
-        schemaVersion: 1.0
-        phases:
-          - name: build
-            steps:
-              - name: EnableCloudWatchAgent
-                action: ExecuteBash
-                inputs:
-                  commands:
-                    - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-                    - systemctl enable amazon-cloudwatch-agent
 
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
@@ -348,15 +292,27 @@ Resources:
         UserDataOverride:
           Fn::Base64: !Sub |
             #!/bin/bash
+            export http_proxy=${ProxyServerAddress}:3128
+            export https_proxy=${ProxyServerAddress}:3128
+            export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+
+            # Install SSM Agent
+            ARCH=$(arch)
+            if [ "$ARCH" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm
+            fi
+
             sudo su
-            # cat << EOF > /etc/profile.d/proxy.sh
-            # #!/bin/bash
-            # export http_proxy=http://proxy.tr.pri.vi2e.io:3128
-            # export https_proxy=http://proxy.tr.pri.vi2e.io:3128
-            # export NO_PROXY='169.254.169.254,vi2e.io,s3.us-gov-west-1.amazonaws.com'
-            # EOF
-            # chmod 755 /etc/profile.d/proxy.sh
-            # sudo /etc/profile.d/proxy.sh
+            cat << EOF > /etc/profile.d/proxy.sh
+            #!/bin/bash
+            export http_proxy=${ProxyServerAddress}:3128
+            export https_proxy=${ProxyServerAddress}:3128
+            export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+            EOF
+            chmod 755 /etc/profile.d/proxy.sh
+            sudo /etc/profile.d/proxy.sh
 
             # For troubleshooting, if necessary
             cat << EOF > /etc/profile.d/set_env.sh
@@ -366,14 +322,6 @@ Resources:
             EOF
             chmod 755 /etc/profile.d/set_env.sh
             sudo /etc/profile.d/set_env.sh
-
-            ARCH=$(arch)
-            case $ARCH in
-                arm64)
-                    dnf install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm;;
-                x86_64)
-                    dnf install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm;;
-            esac
       Components:
         - ComponentArn: !Ref BuildComponentS3Download
           Parameters:
@@ -383,16 +331,7 @@ Resources:
               Value: [!Ref "AWS::AccountId"]
             - Name: Destination
               Value: [/usr/bin/validation-pipeline/]
-        - ComponentArn: !Ref BuildComponentPython3AndPipInstall
-        - ComponentArn: !Ref BuildComponentPythonPackagesInstall
-          Parameters:
-            - Name: PythonPackages
-              Value: ["boto3,puremagic,pyjwt"]
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
-        - ComponentArn: !Ref BuildComponentEnableCloudWatchAgent
-        - ComponentArn: !Ref BuildComponentEnableSQSPollerService
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
       #   - DeviceName: String
       #     Ebs:
@@ -533,6 +472,11 @@ Resources:
           FromPort: 443
           ToPort: 443
           Description: Allow outbound traffic on 443
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          Description: Allow outbound traffic on 3128
       VpcId: !Ref VpcId
 
   ImageBuilderInfraInstanceProfile:
