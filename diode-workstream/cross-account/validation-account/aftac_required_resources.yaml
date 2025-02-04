@@ -135,3 +135,14 @@ Resources:
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
+
+  ImagebuilderVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.imagebuilder
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
