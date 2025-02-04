@@ -174,7 +174,7 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      LogGroupName: !Sub /aws/lambda/DataTransferLambdaFunction-${ResourceSuffix}
+      LogGroupName: !Sub /aws/lambda/data-transfer-function-${ResourceSuffix}
       RetentionInDays: 90
 
   DataTransferLambdaFunction:
@@ -185,7 +185,7 @@ Resources:
           - id: W58 # Lambda functions require permission to write CloudWatch Logs
             reason: The execution role includes permissions to write to CloudWatch Logs
     Properties:
-      FunctionName: !Sub DataTransferLambdaFunction-${ResourceSuffix}
+      FunctionName: !Sub data-transfer-function-${ResourceSuffix}
       Handler: data_transfer.lambda_handler
       Role: !GetAtt DataTransferLambdaRole.Arn
       Runtime: python3.11
