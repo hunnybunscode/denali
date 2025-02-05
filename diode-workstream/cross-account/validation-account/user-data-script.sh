@@ -16,9 +16,9 @@ export NO_PROXY="169.254.169.254,vi2e.io,s3.$region.amazonaws.com"
 # Install SSM Agent
 ARCH=$(arch)
 if [ "$ARCH" = "arm64" ]; then
-    yum install -y https://s3.$region.amazonaws.com/amazon-ssm-$region/latest/linux_arm64/amazon-ssm-agent.rpm
+    yum install -y https://s3."$region".amazonaws.com/amazon-ssm-"$region"/latest/linux_arm64/amazon-ssm-agent.rpm
 else # x86_64
-    yum install -y https://s3.$region.amazonaws.com/amazon-ssm-$region/latest/linux_amd64/amazon-ssm-agent.rpm
+    yum install -y https://s3."$region".amazonaws.com/amazon-ssm-"$region"/latest/linux_amd64/amazon-ssm-agent.rpm
 fi
 
 cat << EOF > /etc/profile.d/proxy.sh
@@ -64,14 +64,14 @@ else
 fi
 
 # Download all files from S3 bucket
-aws s3 cp s3://$ec2_files_bucket/ec2-files/ /usr/bin/validation-pipeline/ --recursive
+aws s3 cp s3://"$ec2_files_bucket"/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
 # Install CloudWatch Agent
 ARCH=$(arch)
 if [ "$ARCH" = "arm64" ]; then
-    curl https://amazoncloudwatch-agent-$region.s3.$region.amazonaws.com/redhat/arm64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
+    curl https://amazoncloudwatch-agent-"$region".s3."$region".amazonaws.com/redhat/arm64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
 else # x86_64
-    curl https://amazoncloudwatch-agent-$region.s3.$region.amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
+    curl https://amazoncloudwatch-agent-"$region".s3."$region".amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
 fi
 rpm -U /tmp/amazon-cloudwatch-agent.rpm
 
