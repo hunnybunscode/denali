@@ -203,12 +203,14 @@ Resources:
                     # Enable CloudWatch Agent
                     - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
                     - systemctl enable amazon-cloudwatch-agent
+                    - systemctl start amazon-cloudwatch-agent
 
                     # Enable SQS Poller Service
                     # Replaces the placeholder ("") with actual environment variables
                     - sed -i 's/""/av_scan_mode=${AvScanMode} resource_suffix=${ResourceSuffix}/g' /usr/bin/validation-pipeline/sqs_poller.service
                     - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
                     - systemctl enable sqs_poller.service
+                    - systemctl start sqs_poller.service
 
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
@@ -266,7 +268,6 @@ Resources:
                 yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm
             fi
 
-            sudo su
             cat << EOF > /etc/profile.d/proxy.sh
             #!/bin/bash
             export http_proxy=${ProxyServerAddress}:3128
@@ -274,7 +275,7 @@ Resources:
             export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
             EOF
             chmod 755 /etc/profile.d/proxy.sh
-            sudo /etc/profile.d/proxy.sh
+            /etc/profile.d/proxy.sh
 
             # For troubleshooting, if necessary
             cat << EOF > /etc/profile.d/set_env.sh
@@ -283,7 +284,7 @@ Resources:
             export resource_suffix=${ResourceSuffix}
             EOF
             chmod 755 /etc/profile.d/set_env.sh
-            sudo /etc/profile.d/set_env.sh
+            /etc/profile.d/set_env.sh
       Components:
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
