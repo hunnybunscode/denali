@@ -135,47 +135,6 @@ Conditions:
   IsEmailAddressProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
 
 Resources:
-  BuildComponentS3Download:
-    Type: AWS::ImageBuilder::Component
-    Properties:
-      Name: !Sub s3-download-overwrite-${ResourceSuffix}
-      Description: Downloads files from S3 to a local path, overwriting any existing files
-      Version: !Ref SemVer
-      Platform: Linux
-      SupportedOsVersions:
-        - Red Hat Enterprise Linux 8
-        - Red Hat Enterprise Linux 9
-      KmsKeyId: !GetAtt ImageBuilderKmsKey.Arn
-      # If there is only one phase, and its name is "test", then the type is TEST. For all other components, the type is BUILD.
-      Data: |
-        name: S3 Download
-        description: Download files from S3
-        schemaVersion: 1.0
-        parameters:
-          - Source:
-              type: string
-              description: >
-                Source S3 bucket for your files. You can specify a path to a specific object; or use a key prefix, that ends with
-                a forward-slash, followed by an asterisk wildcard (/*), to download a set of objects that match the key prefix.
-          - ExpectedBucketOwner:
-              type: string
-              description: Expected owner account ID of the bucket provided in the source path.
-          - Destination:
-              type: string
-              description: >
-                The local path where the S3 objects are downloaded.
-                To download a single file, you must specify the file name as part of the path. For example, /myfolder/package.zip.
-        phases:
-          - name: build
-            steps:
-              - name: DownloadFilesFromS3
-                action: S3Download
-                inputs:
-                  - source: "s3://{{ Source }}"
-                    expectedBucketOwner: "{{ ExpectedBucketOwner }}"
-                    destination: "{{ Destination }}"
-                    overwrite: true
-
   BuildComponentPrepareImage:
     Type: AWS::ImageBuilder::Component
     Properties:
@@ -227,6 +186,9 @@ Resources:
                           echo Installing awscli v2
                           ./aws/install
                       fi
+
+                    # Download all files from S3 bucket
+                    - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
                     # Install CloudWatch Agent
                     - ARCH=$(arch)
@@ -323,14 +285,6 @@ Resources:
             chmod 755 /etc/profile.d/set_env.sh
             sudo /etc/profile.d/set_env.sh
       Components:
-        - ComponentArn: !Ref BuildComponentS3Download
-          Parameters:
-            - Name: Source
-              Value: [!Sub "${EC2RequiredFilesBucket}/ec2-files/*"]
-            - Name: ExpectedBucketOwner
-              Value: [!Ref "AWS::AccountId"]
-            - Name: Destination
-              Value: [/usr/bin/validation-pipeline/]
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
       #   - DeviceName: String
