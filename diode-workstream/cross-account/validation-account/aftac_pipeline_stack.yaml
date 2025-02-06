@@ -55,6 +55,30 @@ Parameters:
     Type: String
     Description: ARN of the IAM role associated with the Diode Simulator instance profile
 
+  TranstionToGlacierIR:
+    Type: Number
+    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class. The value must be between 1 and 365.
+
+  TransitionToDeepArchive:
+    Type: Number
+    Description: Enter the number of days after which to transition to Deep Archive storage class. The value must be between 1 and 365.
+
+  LongTermStorageBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket. The value must be between 366 and 3650 (10 years).
+
+  InvalidFilesBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket. The value must be between 366 and 3650 (10 years).
+
+  FailedTransferBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the FAILED TRANSFER Bucket. The value must be between 366 and 3650 (10 years).
+
+  DataTransferBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket. The value must be between 366 and 3650 (10 years).
+
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
 
@@ -410,14 +434,16 @@ Resources:
         Status: Enabled
       LifecycleConfiguration:
         Rules:
-          - Status: Enabled
-            Id: GlacierTransitions
-            Prefix: Glacier
+          - Id: LifeCycleRule-1
+            Status: Enabled
             Transitions:
-              - TransitionInDays: 30
+              - TransitionInDays: !Ref TranstionToGlacierIR
                 StorageClass: GLACIER_IR
-              - TransitionInDays: 120
-                StorageClass: GLACIER
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref LongTermStorageBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
 
   LongTermStorageBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -492,6 +518,18 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
 
   InvalidFilesBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -529,6 +567,18 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref FailedTransferBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
 
   FailedTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -571,6 +621,18 @@ Resources:
             Queue: !GetAtt TransferQueue.Arn
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref DataTransferBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
 
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
