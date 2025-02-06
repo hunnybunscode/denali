@@ -57,27 +57,27 @@ Parameters:
 
   TranstionToGlacierIR:
     Type: Number
-    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class. The value must be between 1 and 365.
+    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
 
   TransitionToDeepArchive:
     Type: Number
-    Description: Enter the number of days after which to transition to Deep Archive storage class. The value must be between 1 and 365.
+    Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
 
   LongTermStorageBucketExpirationInDays:
     Type: Number
-    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket. The value must be between 366 and 3650 (10 years).
+    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
 
   InvalidFilesBucketExpirationInDays:
     Type: Number
-    Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket. The value must be between 366 and 3650 (10 years).
+    Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket.
 
   FailedTransferBucketExpirationInDays:
     Type: Number
-    Description: Enter the number of days you want to keep objects in the FAILED TRANSFER Bucket. The value must be between 366 and 3650 (10 years).
+    Description: Enter the number of days you want to keep objects in the FAILED TRANSFER Bucket.
 
   DataTransferBucketExpirationInDays:
     Type: Number
-    Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket. The value must be between 366 and 3650 (10 years).
+    Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
 
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
