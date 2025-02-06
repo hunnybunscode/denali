@@ -3,6 +3,18 @@ Parameters:
     Type: String
     Description: Suffix added to the named AWS resources
 
+  TranstionToGlacierIR:
+    Type: Number
+    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
+
+  TransitionToDeepArchive:
+    Type: Number
+    Description: Enter the number of days after which to transition to Deep Archive storage class.
+
+  AccessLogBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the ACCESS LOGGING Bucket.
+
 Resources:
   KmsKey:
     Type: AWS::KMS::Key
@@ -97,6 +109,18 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref AccessLogBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
 
   AccessLogBucketPolicy:
     Type: AWS::S3::BucketPolicy

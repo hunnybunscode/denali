@@ -44,6 +44,17 @@ Metadata:
           - SftpServerStackSftpServerSubnetIds
           - SftpServerIngressRuleCIDR
 
+      - Label:
+          default: Bucket LifeCycle Configuration
+        Parameters:
+          - TranstionToGlacierIR
+          - TransitionToDeepArchive
+          - LongTermStorageBucketExpirationInDays
+          - FailedTransferBucketExpirationInDays
+          - DataTransferBucketExpirationInDays
+          - InvalidFilesBucketExpirationInDays
+          - AccessLogBucketExpirationInDays
+
     ParameterLabels:
       IamPrefix:
         default: IAM Prefix
@@ -61,13 +72,10 @@ Metadata:
         default: S3 Prefix List ID
       DDBPrefixListId:
         default: DynamoDB Prefix List ID
-
       TemplateURLLoggingStack:
         default: Logging Stack Template URL
-
       TemplateURLIngestStack:
         default: Ingest Stack Template URL
-
       TemplateURLPipelineStack:
         default: Pipeline Stack Template URL
       PipelineStackDiodeSimulatorInstanceRole:
@@ -80,13 +88,26 @@ Metadata:
         default: DFDL Approved File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
-
       TemplateURLSftpServerStack:
         default: SFTP Server Stack Template URL
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
         default: SFTP Server Stack Ingress Rule CIDR
+      TranstionToGlacierIR:
+        default: Object Transition To Glacier_IR
+      TransitionToDeepArchive:
+        default: Object Transition To Deep Archive
+      LongTermStorageBucketExpirationInDays:
+        default: Object Expiration In Days For Long Term Storage Bucket
+      FailedTransferBucketExpirationInDays:
+        default: Object Expiration In Days For Failed Transfer Bucket
+      DataTransferBucketExpirationInDays:
+        default: Object Expiration In Days For Data Transfer Bucket
+      InvalidFilesBucketExpirationInDays:
+        default: Object Expiration In Days For Invalid Files Bucket
+      AccessLogBucketExpirationInDays:
+        default: Object Expiration In Days For Access Log Bucket
 
 Parameters:
   IamPrefix:
@@ -196,6 +217,41 @@ Parameters:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
+  TranstionToGlacierIR:
+    Type: Number
+    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
+    Default: 60
+
+  TransitionToDeepArchive:
+    Type: Number
+    Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
+    Default: 150
+
+  LongTermStorageBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
+    Default: 391
+
+  FailedTransferBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the FAILED TRANSFER Bucket.
+    Default: 365
+
+  DataTransferBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
+    Default: 365
+
+  InvalidFilesBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket.
+    Default: 365
+
+  AccessLogBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the ACCESS LOGGING Bucket.
+    Default: 365
+
 Resources:
   LoggingStack:
     Type: AWS::CloudFormation::Stack
@@ -205,6 +261,9 @@ Resources:
       TemplateURL: !Ref TemplateURLLoggingStack
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
+        TranstionToGlacierIR: !Ref TranstionToGlacierIR
+        TransitionToDeepArchive: !Ref TransitionToDeepArchive
+        AccessLogBucketExpirationInDays: !Ref AccessLogBucketExpirationInDays
 
   IngestStack:
     Type: AWS::CloudFormation::Stack
@@ -244,6 +303,12 @@ Resources:
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
+        TranstionToGlacierIR: !Ref TranstionToGlacierIR
+        TransitionToDeepArchive: !Ref TransitionToDeepArchive
+        LongTermStorageBucketExpirationInDays: !Ref LongTermStorageBucketExpirationInDays
+        InvalidFilesBucketExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
+        FailedTransferBucketExpirationInDays: !Ref FailedTransferBucketExpirationInDays
+        DataTransferBucketExpirationInDays: !Ref DataTransferBucketExpirationInDays
 
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
