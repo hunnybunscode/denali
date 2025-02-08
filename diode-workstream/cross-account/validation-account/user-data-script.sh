@@ -63,9 +63,6 @@ else
     ./aws/install
 fi
 
-# Download all files from S3 bucket
-aws s3 cp s3://"$ec2_files_bucket"/ec2-files/ /usr/bin/validation-pipeline/ --recursive
-
 # Install CloudWatch Agent
 ARCH=$(arch)
 if [ "$ARCH" = "arm64" ]; then
@@ -75,9 +72,13 @@ else # x86_64
 fi
 rpm -U /tmp/amazon-cloudwatch-agent.rpm
 
+# Download all files from S3 bucket
+aws s3 cp s3://"$ec2_files_bucket"/ec2-files/ /usr/bin/validation-pipeline/ --recursive
+
 # Enable CloudWatch Agent
 mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 systemctl enable amazon-cloudwatch-agent
+systemctl start amazon-cloudwatch-agent
 
 # Enable SQS Poller Service
 # Replaces the placeholder ("") with actual environment variables

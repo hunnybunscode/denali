@@ -187,9 +187,6 @@ Resources:
                           ./aws/install
                       fi
 
-                    # Download all files from S3 bucket
-                    - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
-
                     # Install CloudWatch Agent
                     - ARCH=$(arch)
                     - |
@@ -199,6 +196,9 @@ Resources:
                           curl https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
                       fi
                     - rpm -U /tmp/amazon-cloudwatch-agent.rpm
+
+                    # Download all files from S3 bucket
+                    - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
                     # Enable CloudWatch Agent
                     - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
