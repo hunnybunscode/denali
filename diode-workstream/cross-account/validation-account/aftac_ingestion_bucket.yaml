@@ -152,4 +152,4 @@ Resources:
       SshPublicKeys: !If
         - SshPublicKeyProvided
         - !Ref SshPublicKeys
-        - !Ref AWS::NoValue
+        - []
