@@ -45,7 +45,6 @@ def _run_av_scan(key: str, file_path: str):
         exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
     else:
         logger.info(f"Scanning {key}")
-        # TODO: Get the full execution path for clamdscan
         exit_status = subprocess.run(
             ["clamdscan", file_path],
         ).returncode  # nosec B603, B607

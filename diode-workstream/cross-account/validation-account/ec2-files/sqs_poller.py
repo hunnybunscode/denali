@@ -67,6 +67,10 @@ def main():
             logger.info("-" * 100)
 
             message = messages[0]
+            logger.info(f"Message: {message}")
+            receive_count = int(message["Attributes"]["ApproximateReceiveCount"])
+            if receive_count > 1:
+                logger.warning(f"This message has been received {receive_count} times")
             receipt_handle = message["ReceiptHandle"]
             message_body = json.loads(message["Body"])
             bucket = message_body["detail"]["requestParameters"]["bucketName"]

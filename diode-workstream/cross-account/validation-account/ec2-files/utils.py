@@ -172,6 +172,8 @@ def receive_sqs_message(queue_url: str, max_num_of_messages=1):
     response: dict = SQS_CLIENT.receive_message(
         QueueUrl=queue_url,
         MaxNumberOfMessages=max_num_of_messages,
+        MessageSystemAttributeNames=["ApproximateReceiveCount"],
+        # VisibilityTimeout=120
     )
     messages: list = response.get("Messages", [])
     if not messages:
