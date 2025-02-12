@@ -791,6 +791,161 @@ Resources:
         - MetricIntervalUpperBound: -10
           ScalingAdjustment: -1
 
+  SetDefaultLaunchTemplateTrigger:
+    Type: Custom::SetDefaultLaunchTemplateTrigger
+    Properties:
+      ServiceToken: !GetAtt SetDefaultLaunchTemplateLambdaFunction.Arn
+      ServiceTimeout: "120"
+      AutoScalingGroupname: !Ref PipelineAutoScalingGroup
+      LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
+
+  SetDefaultLaunchTemplateLambdaFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116 # Ensure that AWS Lambda function is configured for a Dead Letter Queue(DLQ)
+            comment: Invoked by CloudFormation, the function surfaces any errors through the stack, without the need for a DLQ
+          - id: CKV_AWS_117 # Ensure that AWS Lambda function is configured inside a VPC
+            comment: This function is not required to be deployed inside a VPC
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: This function is not required to be deployed inside a VPC
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The execution role includes permissions to write to CloudWatch Logs
+    Properties:
+      FunctionName: !Sub set-default-launch-template-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt SetDefaultLaunchTemplateLambdaFunctionRole.Arn
+      Timeout: 120
+      LoggingConfig:
+        LogGroup: !Ref SetDefaultLaunchTemplateLambdaFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          AUTO_SCALING = boto3.client("autoscaling", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Set_Default_LaunchTemplate_${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  if event["RequestType"] == "Delete":
+                      # Do not do anything on Delete
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                      {}, physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID)
+                      return
+
+                  resource_properties = event["ResourceProperties"]
+                  asg_name: str = resource_properties["AutoScalingGroupname"]
+                  launch_template_id: str = resource_properties["LaunchTemplateId"]
+                  update_auto_scaling_group(asg_name, launch_template_id)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS,
+                                  {}, physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID)
+
+              except Exception as e:
+                  logger.exception(e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED,
+                                  {}, physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID, reason=str(e))
+
+
+          def update_auto_scaling_group(asg_name: str, launch_template_id: str):
+              AUTO_SCALING.update_auto_scaling_group(
+                  AutoScalingGroupName=asg_name,
+                  LaunchTemplate={
+                      "LaunchTemplateId": launch_template_id,
+                      "Version": "$Default"
+                  },
+              )
+
+  SetDefaultLaunchTemplateLambdaFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/set-default-launch-template-${ResourceSuffix}
+      RetentionInDays: 90
+      # KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplateLambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+      checkov:
+        skip:
+          - id: CKV_AWS_111 # Ensure IAM policies does not allow write access without constraints
+            comment: Permission policy set up to allow logging, which mirrors AWSLambdaBasicExecutionRole policy
+    Properties:
+      RoleName: !Sub ${IamPrefix}-SetDefaultLaunchTemplate-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt SetDefaultLaunchTemplateLambdaFunctionLogGroup.Arn
+        - PolicyName: AllowAutoScalingGroupUpdate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:UpdateAutoScalingGroup
+                Resource: !Sub arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${PipelineAutoScalingGroup}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt Ec2ScannerRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:CreateTags
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:*:image/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${AutoScalingGroupLaunchTemplate}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${AvScanSecurityGroup}
+
   AvScanSqsQueueSizeAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
