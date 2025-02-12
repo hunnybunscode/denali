@@ -1,0 +1,35 @@
+Resources:
+  RunCommandDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: AV_Scanner_Run_Command
+      DocumentFormat: YAML
+      DocumentType: Command
+      TargetType: /AWS::EC2::Instance
+      UpdateMethod: NewVersion
+      Content:
+        schemaVersion: "2.2"
+        description: Run a script on Linux instances.
+        parameters:
+          bucketName:
+            type: String
+            description: (Required) The name of the S3 bucket containing the files needed on the AV scanner instances
+        mainSteps:
+          - action: aws:runShellScript
+            name: runCommands
+            inputs:
+              timeoutSeconds: "60"
+              runCommand:
+                # Exit on error
+                - set -e
+
+                # Download all files from S3 bucket
+                - aws s3 cp s3://{{ bucketName }}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
+
+                # Restart CloudWatch Agent
+                - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                - systemctl restart amazon-cloudwatch-agent
+
+                # Restart SQS Poller Service
+                - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
+                - systemctl restart sqs_poller.service
