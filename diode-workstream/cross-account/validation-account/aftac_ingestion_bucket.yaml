@@ -10,9 +10,15 @@ Metadata:
           default: Tags
         Parameters:
           - IngestBucketMappingId
+          - IngestBucketDestionationBucket
           - IngestBucketGovPoc
           - IngestBucketDataOwner
           - IngestBucketKeyOwner
+
+      - Label:
+          default: Bucket Policy [OPTIONAL]
+        Parameters:
+          - AllowedRoleArn
 
       - Label:
           default: SFTP [OPTIONAL]
@@ -24,13 +30,17 @@ Metadata:
       ResourceSuffix:
         default: Resource Suffix
       IngestBucketMappingId:
-        default: Mapping ID
+        default: Mapping ID [Conditional]
+      IngestBucketDestionationBucket:
+        default: Destination Bucket Name [Conditional]
       IngestBucketGovPoc:
         default: GOV POC
       IngestBucketDataOwner:
         default: Data Owner
       IngestBucketKeyOwner:
         default: Key Owner
+      AllowedRoleArn:
+        default: Allowed Role ARN
       SftpUserName:
         default: SFTP User Name
       SshPublicKeys:
@@ -40,36 +50,48 @@ Parameters:
   ResourceSuffix:
     Type: String
     Description: >-
-      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      (Required) Suffix added to the named AWS resources. It must start with a lowercase letter and contain
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
   IngestBucketMappingId:
     Type: String
-    Description: Value for tag key MappingId
+    Description: (Conditional) Value for tag key MappingId. Do not specify a value here if you specify a value in Destination Bucket Name.
     Default: 12346789-abcd-1234-abcd-123456789012
-    AllowedPattern: ^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
+    AllowedPattern: ^$|^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
     ConstraintDescription: Must be a valid Mapping ID
+
+  IngestBucketDestionationBucket:
+    Type: String
+    Description: (Conditional) Value for tag key DestinationBucket. Do not specify a value here if you specify a value in Mapping ID.
+    AllowedPattern: ^$|^(?!\s*arn:)\S+$
+    ConstraintDescription: Must be a valid bucket name
 
   IngestBucketGovPoc:
     Type: String
-    Description: Value for tag key GovPOC
+    Description: (Required) Value for tag key GovPOC
     Default: Monica
 
   IngestBucketDataOwner:
     Type: String
-    Description: Value for tag key DataOwner
+    Description: (Required) Value for tag key DataOwner
     Default: Phoebe
 
   IngestBucketKeyOwner:
     Type: String
-    Description: Value for tag key KeyOwner
+    Description: (Required) Value for tag key KeyOwner
     Default: Chandler
+
+  AllowedRoleArn:
+    Type: String
+    Description: (Optional) ARN of the role that is allowed to write to the ingestion bucket
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/\S+
+    ConstraintDescription: Must start with 'arn:' and be composed of lowercase letters, numbers, and hyphens; it cannot exceed 1024 characters.
 
   SftpUserName:
     Type: String
-    Description: Username for SFTP user
+    Description: Username for SFTP user who is allowed to write to the ingestion bucket via SFTP
     AllowedPattern: ^$|^(?![-.@].*)[a-zA-Z0-9-_.@]{3,100}$
     ConstraintDescription: >-
       Username must be a minimum of 3 and a maximum of 100 characters long.
@@ -78,11 +100,28 @@ Parameters:
 
   SshPublicKeys:
     Type: CommaDelimitedList
-    Description: Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
+    Description: >-
+      Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
+      If you want to delete the key(s), clear out the contents from this field.
+
+Rules:
+  MappingIdOnly:
+    RuleCondition: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
+    Assertions:
+      - Assert: !Equals [!Ref IngestBucketDestionationBucket, ""]
+        AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
+  DestinationBucketOnly:
+    RuleCondition: !Not [!Equals [!Ref IngestBucketDestionationBucket, ""]]
+    Assertions:
+      - Assert: !Equals [!Ref IngestBucketMappingId, ""]
+        AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
 
 Conditions:
   CreateSftpUser: !Not [!Equals [!Ref SftpUserName, ""]]
   SshPublicKeyProvided: !Not [!Equals [!Join ["", !Ref SshPublicKeys], ""]]
+  UseMappingId: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
+  UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestionationBucket, ""]]
+  UseAllowedRoleArn: !Not [!Equals [!Ref AllowedRoleArn, ""]]
 
 Resources:
   IngestBucket:
@@ -108,8 +147,16 @@ Resources:
             Function:
               Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
       Tags:
-        - Key: MappingId
-          Value: !Ref IngestBucketMappingId
+        - !If
+          - UseMappingId
+          - Key: MappingId
+            Value: !Ref IngestBucketMappingId
+          - !Ref AWS::NoValue
+        - !If
+          - UseDestinationBucket
+          - Key: IngestBucketDestionationBucket
+            Value: !Ref IngestBucketDestionationBucket
+          - !Ref AWS::NoValue
         - Key: GovPOC
           Value: !Ref IngestBucketGovPoc
         - Key: DataOwner
@@ -134,6 +181,14 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+          - !If
+            - UseAllowedRoleArn
+            - Effect: Allow
+              Principal:
+                AWS: !Ref AllowedRoleArn
+              Action: s3:PutObject
+              Resource: !Sub ${IngestBucket.Arn}/*
+            - !Ref AWS::NoValue
 
   TransferUser:
     Type: AWS::Transfer::User
