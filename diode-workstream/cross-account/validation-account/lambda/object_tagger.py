@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 
 AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
-TAG_KEYS = ["DataOwner", "GovPOC", "KeyOwner", "MappingId"]
+TAG_KEYS = ["DataOwner", "GovPOC", "KeyOwner", "MappingId", "DestinationBucket"]
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 S3_CLIENT = boto3.client("s3", config=config)
