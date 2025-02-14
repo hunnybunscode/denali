@@ -26,6 +26,11 @@ Metadata:
           - SftpUserName
           - SshPublicKeys
 
+      - Label:
+          default: Bucket LifeCycle Configuration
+        Parameters:
+          - ObjectExpirationInDays
+
     ParameterLabels:
       ResourceSuffix:
         default: Resource Suffix
@@ -45,6 +50,8 @@ Metadata:
         default: SFTP User Name
       SshPublicKeys:
         default: SSH Public Keys
+      ObjectExpirationInDays:
+        default: Object Expiration In Days
 
 Parameters:
   ResourceSuffix:
@@ -104,6 +111,11 @@ Parameters:
       Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
       If you want to delete the key(s), clear out the contents from this field.
 
+  ObjectExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
+    Default: 365
+
 Rules:
   MappingIdOnly:
     RuleCondition: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
@@ -146,6 +158,13 @@ Resources:
           - Event: s3:ObjectCreated:*
             Function:
               Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            ExpirationInDays: !Ref ObjectExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
       Tags:
         - !If
           - UseMappingId
