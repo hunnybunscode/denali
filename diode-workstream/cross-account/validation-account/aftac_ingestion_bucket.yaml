@@ -29,8 +29,6 @@ Metadata:
       - Label:
           default: Bucket LifeCycle Configuration
         Parameters:
-          - TranstionToGlacierIR
-          - TransitionToDeepArchive
           - ObjectExpirationInDays
 
     ParameterLabels:
@@ -52,10 +50,6 @@ Metadata:
         default: SFTP User Name
       SshPublicKeys:
         default: SSH Public Keys
-      TranstionToGlacierIR:
-        default: Object Transition To Glacier_IR
-      TransitionToDeepArchive:
-        default: Object Transition To Deep Archive
       ObjectExpirationInDays:
         default: Object Expiration In Days
 
@@ -117,16 +111,6 @@ Parameters:
       Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
       If you want to delete the key(s), clear out the contents from this field.
 
-  TranstionToGlacierIR:
-    Type: Number
-    Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
-    Default: 60
-
-  TransitionToDeepArchive:
-    Type: Number
-    Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
-    Default: 150
-
   ObjectExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
@@ -178,11 +162,6 @@ Resources:
         Rules:
           - Id: LifeCycleRule-1
             Status: Enabled
-            Transitions:
-              - TransitionInDays: !Ref TranstionToGlacierIR
-                StorageClass: GLACIER_IR
-              - TransitionInDays: !Ref TransitionToDeepArchive
-                StorageClass: DEEP_ARCHIVE
             ExpirationInDays: !Ref ObjectExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
