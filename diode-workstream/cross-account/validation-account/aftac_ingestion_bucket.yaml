@@ -129,7 +129,7 @@ Parameters:
 
   ObjectExpirationInDays:
     Type: Number
-    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
+    Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
     Default: 365
 
 Rules:
