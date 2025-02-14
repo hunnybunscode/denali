@@ -114,13 +114,23 @@ def download_file(
     file_path: str,
     bucket_owner: str | None = None,
 ):
+    """
+    Returns True if download was successful; returns False if object was not found
+    """
     logger.info(f"Downloading {bucket}/{key} to {file_path}")
     params: dict[str, str | dict] = dict(Bucket=bucket, Key=key, Filename=file_path)
     if bucket_owner:
         params["ExtraArgs"] = {"ExpectedBucketOwner": bucket_owner}
 
-    S3_CLIENT.download_file(**params)
-    logger.info("Successfully downloaded the object")
+    try:
+        S3_CLIENT.download_file(**params)
+        logger.info("Successfully downloaded the object")
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            logger.error(f"Object not found: {bucket}/{key}")
+            return False
+        raise
 
 
 def add_tags(
@@ -129,18 +139,11 @@ def add_tags(
     tags_to_add: dict[str, str],
     bucket_owner: str | None = None,
 ):
-    """
-    `ClientError`s are logged, but ignored
-    """
-    try:
-        logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
-        existing_tags = get_object_tagging(bucket, key, bucket_owner)
-        combined_tags = existing_tags | tags_to_add
-        put_object_tagging(bucket, key, combined_tags, bucket_owner)
-        logger.info("Successfully added the new tags")
-    except ClientError as e:
-        logger.warning(f"ERROR: Exception occurred while adding tags: {e}")
-        pass
+    logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
+    existing_tags = get_object_tagging(bucket, key, bucket_owner)
+    combined_tags = existing_tags | tags_to_add
+    put_object_tagging(bucket, key, combined_tags, bucket_owner)
+    logger.info("Successfully added the new tags")
 
 
 def publish_sns_message(topic_arn: str, message: str, subject: str | None = None):
