@@ -12,7 +12,6 @@ logger.setLevel(logging.INFO)
 
 
 AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
-TAG_KEYS = ["DataOwner", "GovPOC", "KeyOwner", "MappingId", "DestinationBucket"]
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 S3_CLIENT = boto3.client("s3", config=config)
@@ -43,18 +42,7 @@ def get_bucket_tags(bucket: str):
             "TagSet"
         ]
         # ExpectedBucketOwner='string'
-        user_tagset = [
-            tag for tag in tagset if not tag["Key"].startswith("aws:cloudformation")
-        ]
-
-        if len(user_tagset) != len(TAG_KEYS):
-            raise ValueError(
-                f"Expected {len(TAG_KEYS)} tags, got {len(user_tagset)} instead",
-            )
-
-        for tag in user_tagset:
-            if tag["Key"] not in TAG_KEYS:
-                raise ValueError(f"Unexpected tag key: {tag['Key']}")
+        user_tagset = [tag for tag in tagset if not tag["Key"].startswith("aws:")]
 
         logger.info(f"Retrieved the tags: {user_tagset}")
         return user_tagset

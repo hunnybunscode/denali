@@ -7,6 +7,7 @@ from config import approved_filetypes
 from config import file_handler_config
 from config import resource_suffix
 from config import ssm_params
+from utils import change_message_visibility
 from utils import get_params_values
 from utils import receive_sqs_message
 from validation import validate_file
@@ -56,11 +57,11 @@ def main():
                 )
                 clock = time.perf_counter()
 
-            messages = receive_sqs_message(
-                ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"],
-                1,
-            )
+            queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
+            # Returns one message only, if any
+            messages = receive_sqs_message(queue_url)
             if not messages:
+                logger.info("No messages were received")
                 continue
 
             logger.info("A message has been received")
@@ -68,10 +69,11 @@ def main():
 
             message = messages[0]
             logger.info(f"Message: {message}")
+            receipt_handle = message["ReceiptHandle"]
             receive_count = int(message["Attributes"]["ApproximateReceiveCount"])
             if receive_count > 1:
                 logger.warning(f"This message has been received {receive_count} times")
-            receipt_handle = message["ReceiptHandle"]
+                change_message_visibility(queue_url, receipt_handle, receive_count * 30)
             message_body = json.loads(message["Body"])
             bucket = message_body["detail"]["requestParameters"]["bucketName"]
             key = message_body["detail"]["requestParameters"]["key"]

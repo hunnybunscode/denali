@@ -129,6 +129,7 @@ Resources:
                   - sqs:DeleteMessage
                   - sqs:ReceiveMessage
                   - sqs:SendMessage
+                  - sqs:ChangeMessageVisibility
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
         - PolicyName: Ec2ScannerS3Policy
           PolicyDocument:
