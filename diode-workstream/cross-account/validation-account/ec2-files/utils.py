@@ -127,7 +127,7 @@ def download_file(
         logger.info("Successfully downloaded the object")
         return True
     except ClientError as e:
-        if e.response["Error"]["Code"] == "404":
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
             logger.error(f"Object not found: {bucket}/{key}")
             return False
         raise
@@ -169,19 +169,15 @@ def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = N
     logger.info("Successfully sent the message")
 
 
-def receive_sqs_message(queue_url: str, max_num_of_messages=1):
+def receive_sqs_message(queue_url: str, max_num_of_messages=1) -> list:
     queue_name = queue_url.split("/")[-1]
     logger.info(f"Checking for messages from {queue_name} SQS queue")
     response: dict = SQS_CLIENT.receive_message(
         QueueUrl=queue_url,
         MaxNumberOfMessages=max_num_of_messages,
         MessageSystemAttributeNames=["ApproximateReceiveCount"],
-        # VisibilityTimeout=120
     )
-    messages: list = response.get("Messages", [])
-    if not messages:
-        logger.info("No messages were received")
-    return messages
+    return response.get("Messages", [])
 
 
 def delete_sqs_message(queue_url: str, receipt_handle: str):
@@ -189,6 +185,25 @@ def delete_sqs_message(queue_url: str, receipt_handle: str):
     logger.info(f"Deleting message from {queue_name} SQS queue")
     SQS_CLIENT.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
     logger.info("Successfully deleted the message")
+
+
+def change_message_visibility(queue_url: str, receipt_handle: str, timeout: int):
+    # Unlike with a queue, when you change the visibility timeout for a specific
+    # message, the timeout value is applied immediately but isn’t saved in memory
+    # for that message. If you don’t delete a message after it is received, the
+    # visibility timeout for the message reverts to the original timeout value
+    # (not to the value you set using the ChangeMessageVisibility action) the
+    # next time the message is received.
+
+    logger.info(f"Updating the visibility timeout to {timeout}")
+
+    # TODO: See if we need to swallow any errors here
+    SQS_CLIENT.change_message_visibility(
+        QueueUrl=queue_url,
+        ReceiptHandle=receipt_handle,
+        VisibilityTimeout=timeout,
+    )
+    logger.info("Successfully updated the visibility timeout")
 
 
 def get_param_value(name: str, with_decryption=False) -> str:

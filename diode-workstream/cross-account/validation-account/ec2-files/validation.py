@@ -42,8 +42,8 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
         file_path = f'{tmpdir}/{key.split("/")[-1]}'
 
         downloaded = download_file(bucket, key, file_path)
+        # If the object does not exist
         if not downloaded:
-            logger.warning(f"File {key} NOT found; unable to validate")
             delete_av_scan_message(receipt_handle)
             return
 
