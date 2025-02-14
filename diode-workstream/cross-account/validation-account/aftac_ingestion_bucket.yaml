@@ -31,7 +31,7 @@ Metadata:
         Parameters:
           - TranstionToGlacierIR
           - TransitionToDeepArchive
-          - BucketExpirationInDays
+          - ObjectExpirationInDays
 
     ParameterLabels:
       ResourceSuffix:
@@ -56,7 +56,7 @@ Metadata:
         default: Object Transition To Glacier_IR
       TransitionToDeepArchive:
         default: Object Transition To Deep Archive
-      BucketExpirationInDays:
+      ObjectExpirationInDays:
         default: Object Expiration In Days
 
 Parameters:
@@ -127,7 +127,7 @@ Parameters:
     Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
     Default: 150
 
-  BucketExpirationInDays:
+  ObjectExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
     Default: 365
@@ -183,7 +183,7 @@ Resources:
                 StorageClass: GLACIER_IR
               - TransitionInDays: !Ref TransitionToDeepArchive
                 StorageClass: DEEP_ARCHIVE
-            ExpirationInDays: !Ref BucketExpirationInDays
+            ExpirationInDays: !Ref ObjectExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
       Tags:
