@@ -40,8 +40,13 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
     with tempfile.TemporaryDirectory() as tmpdir:
         # If key includes prefixes, split it and take the last element
         file_path = f'{tmpdir}/{key.split("/")[-1]}'
-        # TODO: If the object does not exist, delete the sqs message
-        download_file(bucket, key, file_path)
+
+        downloaded = download_file(bucket, key, file_path)
+        if not downloaded:
+            logger.warning(f"File {key} NOT found; unable to validate")
+            delete_av_scan_message(receipt_handle)
+            return
+
         valid = _validate_file(bucket, key, file_path, receipt_handle)
         if valid:
             clamscan.scan(bucket, key, file_path, receipt_handle)
