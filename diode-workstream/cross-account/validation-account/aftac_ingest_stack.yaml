@@ -236,6 +236,7 @@ Resources:
       Environment:
         Variables:
           AV_SCAN_QUEUE_URL: !Ref AvScanQueue
+          ACCOUNT_ID: !Ref AWS::AccountId
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
@@ -249,13 +250,13 @@ Resources:
 
           import boto3  # type: ignore
           from botocore.config import Config  # type: ignore
-          from botocore.exceptions import ClientError  # type: ignore
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
 
           AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
+          ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 
           config = Config(retries={"max_attempts": 5, "mode": "standard"})
           S3_CLIENT = boto3.client("s3", config=config)
@@ -274,55 +275,38 @@ Resources:
               tagset.append(
                   {"Key": "PrincipalId + SourceIp", "Value": f"{principal_id} + {source_ip}"},
               )
-              add_tags_to_key(bucket, key, tagset)
+              add_tags_to_object(bucket, key, tagset)
               send_to_sqs(bucket, key)
               logger.info("SUCCESS")
 
 
           def get_bucket_tags(bucket: str):
               logger.info(f"Getting tags for {bucket}")
-              try:
-                  tagset: list[dict[str, str]] = S3_CLIENT.get_bucket_tagging(Bucket=bucket)[
-                      "TagSet"
-                  ]
-                  # ExpectedBucketOwner='string'
-                  user_tagset = [tag for tag in tagset if not tag["Key"].startswith("aws:")]
-
-                  logger.info(f"Retrieved the tags: {user_tagset}")
-                  return user_tagset
-              except Exception as e:
-                  logger.error(f"Could not get tags for {bucket}: {e}")
-                  raise
+              params = dict(Bucket=bucket, ExpectedBucketOwner=ACCOUNT_ID)
+              tagset: list[dict[str, str]] = S3_CLIENT.get_bucket_tagging(**params)["TagSet"]
+              user_tagset = [tag for tag in tagset if not tag["Key"].startswith("aws:")]
+              logger.info(f"Retrieved the tags: {user_tagset}")
+              return user_tagset
 
 
-          def add_tags_to_key(bucket: str, key: str, tagset: list[dict[str, str]]):
+          def add_tags_to_object(bucket: str, key: str, tagset: list[dict[str, str]]):
               logger.info(f"Adding tags to {bucket}/{key}")
-              try:
-                  S3_CLIENT.put_object_tagging(
-                      Bucket=bucket,
-                      Key=key,
-                      Tagging={"TagSet": tagset},
-                      # TODO: We should add this for enhanced security
-                      # ExpectedBucketOwner
-                  )
-              except ClientError as e:
-                  logger.error(f"Could not add tags: {e}")
-                  raise
+              S3_CLIENT.put_object_tagging(
+                  Bucket=bucket,
+                  Key=key,
+                  Tagging={"TagSet": tagset},
+                  ExpectedBucketOwner=ACCOUNT_ID,
+              )
 
 
           def send_to_sqs(bucket, key):
               logger.info(f"Sending a message to the SQS queue for {bucket}/{key}")
-              try:
-                  SQS_CLIENT.send_message(
-                      QueueUrl=AV_SCAN_QUEUE_URL,
-                      MessageBody=json.dumps(
-                          {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
-                      ),
-                  )
-                  logger.info("Sent the message")
-              except ClientError as e:
-                  logger.error(f"Could not send message to SQS: {e}")
-                  raise
+              SQS_CLIENT.send_message(
+                  QueueUrl=AV_SCAN_QUEUE_URL,
+                  MessageBody=json.dumps(
+                      {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
+                  ),
+              )
 
   BucketObjectTaggerPermission:
     Type: AWS::Lambda::Permission

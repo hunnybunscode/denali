@@ -122,7 +122,7 @@ def get_presigned_post_url(method: str, request, params: dict):
 def upload_file(presigned_url: dict, file_path: str, params: dict):
     with open(file_path, "rb") as f:
         files = {"file": (file_path, f)}
-        response = requests.post(
+        response = requests.post(  # nosemgrep use-raise-for-status
             presigned_url["url"],
             data=presigned_url["fields"],
             files=files,
