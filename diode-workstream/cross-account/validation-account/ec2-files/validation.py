@@ -62,43 +62,9 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
             _process_invalid_file(bucket, key, receipt_handle)
             return False
 
-        if not get_file_ext(file_path) == "zip":
-            return True
-
-        # TODO: What files are allowed to be in a zip file?
-        # For example, should files destined for DFDL be allowed?
-        logger.info("The file is a ZIP file. Validating its contents")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            extract_zipfile(file_path, tmpdir)
-            file_paths = [
-                str(item) for item in Path(tmpdir).rglob("*") if item.is_file()
-            ]
-            for _file_path in file_paths:
-                # Nested zip files are not allowed
-                _file_ext = get_file_ext(_file_path)
-                if _file_ext == "zip":
-                    logger.warning(
-                        f"Nested zip files are not allowed: {_file_path}",
-                    )
-                    error_tags = create_tags_for_file_validation(
-                        "NestedZipFileNotAllowed",
-                        "zip",
-                    )
-                    add_tags(bucket, key, error_tags)
-                    _process_invalid_file(bucket, key, receipt_handle)
-                    return False
-
-                valid, _ = validate_filetype(_file_path, _file_ext)
-                if not valid:
-                    # If one file fails validation, reject the entire zip file
-                    error_tags = create_tags_for_file_validation(
-                        "ZipFileWithInvalidFile",
-                        "zip",
-                    )
-                    add_tags(bucket, key, error_tags)
-                    _process_invalid_file(bucket, key, receipt_handle)
-                    return False
+        if file_ext == "zip":
+            logger.info("The file is a ZIP file. Validating its contents")
+            return _process_zip_file(file_path, bucket, key, receipt_handle)
 
         return True
 
@@ -106,9 +72,48 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
         # TODO: What should happen in case of errors? Is logging it out enough?
         # That means the SQS message will be processed again
         logger.error(f"Could not validate the file: {e}")
+        return False
+
+
+def _process_zip_file(file_path: str, bucket: str, key: str, receipt_handle: str):
+    # TODO: What files are allowed to be in a zip file?
+    # For example, should files destined for DFDL be allowed?
+    with tempfile.TemporaryDirectory() as tmpdir:
+        extract_zipfile(file_path, tmpdir)
+        file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]
+        for _file_path in file_paths:
+            # Nested zip files are NOT allowed
+            _file_ext = get_file_ext(_file_path)
+            if _file_ext == "zip":
+                logger.warning(
+                    f"Nested zip files are not allowed: {_file_path}",
+                )
+                error_tags = create_tags_for_file_validation(
+                    "NestedZipFileNotAllowed",
+                    "zip",
+                )
+                add_tags(bucket, key, error_tags)
+                _process_invalid_file(bucket, key, receipt_handle)
+                return False
+
+            valid, _ = validate_filetype(_file_path, _file_ext)
+            if not valid:
+                # If one file fails validation, reject the entire zip file
+                error_tags = create_tags_for_file_validation(
+                    "ZipFileWithInvalidFile",
+                    "zip",
+                )
+                add_tags(bucket, key, error_tags)
+                _process_invalid_file(bucket, key, receipt_handle)
+                return False
+    return True
 
 
 def _process_invalid_file(bucket: str, key: str, receipt_handle: str):
+    """
+    Moves the invalid file from ingestion bucket to invalid files bucket,
+    deletes the SQS message, and sends a SNS notification
+    """
     invalid_files_bucket = ssm_params[
         f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
     ]
@@ -116,12 +121,9 @@ def _process_invalid_file(bucket: str, key: str, receipt_handle: str):
         f"Copying {key} file to Invalid Files bucket: {invalid_files_bucket}",
     )
     copy_object(bucket, invalid_files_bucket, key)
-
     # Delete it from the ingestion bucket
     delete_object(bucket, key)
-
     delete_av_scan_message(receipt_handle)
-
     _send_file_rejected_sns_msg(invalid_files_bucket, key)
 
 
@@ -139,6 +141,6 @@ def _send_file_rejected_sns_msg(bucket: str, key: str):
             f"Reject Reason: {subject}\n"
         )
         publish_sns_message(topic_arn, message, subject)
-        # logger.info("Successfully sent the SNS message")
     except Exception as e:
-        logger.error(f"Could not publish an SNS message: {e}")
+        # Not critical; allow it to fail
+        logger.warning(f"Could not publish an SNS message: {e}")
