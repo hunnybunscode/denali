@@ -15,8 +15,9 @@ from utils import download_file
 from utils import extract_zipfile
 from utils import get_file_ext
 from utils import publish_sns_message
-from utils import validate_filetype
+from utils import validate_file_type
 
+MAX_DEPTH = 0
 
 logger = logging.getLogger()
 
@@ -27,6 +28,8 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
     file_ext = get_file_ext(key)
     logger.info(f"File extension: {file_ext}")
 
+    # Before downloading the file, check if the claimed file extension
+    # is of an approved file type
     if file_ext not in approved_filetypes:
         logger.warning(f'File extension "{file_ext}" is NOT approved')
         tags = create_tags_for_file_validation(
@@ -40,7 +43,6 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
     with tempfile.TemporaryDirectory() as tmpdir:
         # If key includes prefixes, split it and take the last element
         file_path = f'{tmpdir}/{key.split("/")[-1]}'
-
         downloaded = download_file(bucket, key, file_path)
         # If the object does not exist
         if not downloaded:
@@ -55,17 +57,21 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
 def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
     try:
         file_ext = get_file_ext(file_path)
-        valid, tags = validate_filetype(file_path, file_ext)
-        add_tags(bucket, key, tags)
+        valid, tags = validate_file_type(file_path, file_ext)
 
         if not valid:
+            add_tags(bucket, key, tags)
             _process_invalid_file(bucket, key, receipt_handle)
             return False
 
         if file_ext == "zip":
-            logger.info("The file is a ZIP file. Validating its contents")
-            return _process_zip_file(file_path, bucket, key, receipt_handle)
+            _valid, _tags = _validate_zip_file(file_path)
+            if not _valid:
+                add_tags(bucket, key, _tags)
+                _process_invalid_file(bucket, key, receipt_handle)
+                return False
 
+        add_tags(bucket, key, tags)
         return True
 
     except Exception as e:
@@ -75,38 +81,40 @@ def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
         return False
 
 
-def _process_zip_file(file_path: str, bucket: str, key: str, receipt_handle: str):
+def _validate_zip_file(file_path: str, depth=0):
     # TODO: What files are allowed to be in a zip file?
     # For example, should files destined for DFDL be allowed?
+
+    logger.info(f"Validating the contents of the ZIP file: {file_path}")
+
+    if depth > MAX_DEPTH:
+        logger.warning(f"Nested Zip file; exceeded the max depth level of {MAX_DEPTH}")
+        error_tags = create_tags_for_file_validation(
+            "ZipMaxDepthExceeded",
+            "zip",
+        )
+        return False, error_tags
+
     with tempfile.TemporaryDirectory() as tmpdir:
         extract_zipfile(file_path, tmpdir)
+
         file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]
         for _file_path in file_paths:
-            # Nested zip files are NOT allowed
             _file_ext = get_file_ext(_file_path)
-            if _file_ext == "zip":
-                logger.warning(
-                    f"Nested zip files are not allowed: {_file_path}",
-                )
-                error_tags = create_tags_for_file_validation(
-                    "NestedZipFileNotAllowed",
-                    "zip",
-                )
-                add_tags(bucket, key, error_tags)
-                _process_invalid_file(bucket, key, receipt_handle)
-                return False
+            valid, _ = validate_file_type(_file_path, _file_ext)
 
-            valid, _ = validate_filetype(_file_path, _file_ext)
             if not valid:
-                # If one file fails validation, reject the entire zip file
+                # Even if one file fails validation, reject the entire zip file
                 error_tags = create_tags_for_file_validation(
                     "ZipFileWithInvalidFile",
                     "zip",
                 )
-                add_tags(bucket, key, error_tags)
-                _process_invalid_file(bucket, key, receipt_handle)
-                return False
-    return True
+                return False, error_tags
+
+            if _file_ext == "zip":
+                return _validate_zip_file(_file_path, depth + 1)
+
+    return True, None
 
 
 def _process_invalid_file(bucket: str, key: str, receipt_handle: str):

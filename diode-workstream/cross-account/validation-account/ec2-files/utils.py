@@ -314,7 +314,7 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
         return "Unknown", "Unknown"
 
 
-def validate_filetype(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
+def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
