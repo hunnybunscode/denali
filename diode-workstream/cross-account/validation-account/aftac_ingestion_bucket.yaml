@@ -11,8 +11,9 @@ Metadata:
         Parameters:
           - IngestBucketMappingId
           - IngestBucketDestionationBucket
-          - IngestBucketGovPoc
           - IngestBucketDataOwner
+          - IngestBucketDataSteward
+          - IngestBucketGovPoc
           - IngestBucketKeyOwner
 
       - Label:
@@ -38,10 +39,12 @@ Metadata:
         default: Mapping ID [Conditional]
       IngestBucketDestionationBucket:
         default: Destination Bucket Name [Conditional]
-      IngestBucketGovPoc:
-        default: GOV POC
       IngestBucketDataOwner:
         default: Data Owner
+      IngestBucketDataSteward:
+        default: Data Steward
+      IngestBucketGovPoc:
+        default: GOV POC
       IngestBucketKeyOwner:
         default: Key Owner
       AllowedRoleArn:
@@ -75,15 +78,20 @@ Parameters:
     AllowedPattern: ^$|^(?!\s*arn:)\S+$
     ConstraintDescription: Must be a valid bucket name
 
-  IngestBucketGovPoc:
-    Type: String
-    Description: (Required) Value for tag key GovPOC
-    Default: Monica
-
   IngestBucketDataOwner:
     Type: String
     Description: (Required) Value for tag key DataOwner
     Default: Phoebe
+
+  IngestBucketDataSteward:
+    Type: String
+    Description: (Required) Value for tag key DataSteward
+    Default: Rachel
+
+  IngestBucketGovPoc:
+    Type: String
+    Description: (Required) Value for tag key GovPOC
+    Default: Monica
 
   IngestBucketKeyOwner:
     Type: String
@@ -176,10 +184,12 @@ Resources:
           - Key: IngestBucketDestionationBucket
             Value: !Ref IngestBucketDestionationBucket
           - !Ref AWS::NoValue
-        - Key: GovPOC
-          Value: !Ref IngestBucketGovPoc
         - Key: DataOwner
           Value: !Ref IngestBucketDataOwner
+        - Key: DataSteward
+          Value: !Ref IngestBucketDataSteward
+        - Key: GovPOC
+          Value: !Ref IngestBucketGovPoc
         - Key: KeyOwner
           Value: !Ref IngestBucketKeyOwner
 
