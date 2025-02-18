@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# Ensure security group allows TCP traffic out 3128
-# Update these variables and put ec2-files into a bucket with a prefix of ec2-files
+# Ensure security group allows TCP traffic out on port 3128
+# Update these variables and put ec2-files into a bucket (with a prefix of ec2-files)
+
+export resource_suffix="test2"
+export ec2_files_bucket="name_of_bucket_containing_ec2_files" # Use an existing bucket or create one
 
 export region="us-gov-west-1"
-export av_scan_mode="Test" # Test | Live
-export resource_suffix="test2"
-export ec2_files_bucket="test-ec2-files-bucket" # Use existing one or create one
-export proxy_server="10.162.216.148" # http://proxy.tr.pri.vi2e.io
-
+export av_scan_mode="Live" # Test | Live
+export proxy_server="http://proxy.tr.pri.vi2e.io" # 10.162.216.148
 export http_proxy=$proxy_server:3128
 export https_proxy=$proxy_server:3128
-export NO_PROXY="169.254.169.254,vi2e.io,s3.$region.amazonaws.com"
+export no_proxy="169.254.169.254,vi2e.io,s3.$region.amazonaws.com"
 
 # Install SSM Agent
 ARCH=$(arch)
@@ -21,23 +21,24 @@ else # x86_64
     yum install -y https://s3."$region".amazonaws.com/amazon-ssm-"$region"/latest/linux_amd64/amazon-ssm-agent.rpm
 fi
 
-cat << EOF > /etc/profile.d/proxy.sh
-#!/bin/bash
-export http_proxy=$proxy_server:3128
-export https_proxy=$proxy_server:3128
-export NO_PROXY="169.254.169.254,vi2e.io,s3.$region.amazonaws.com"
-EOF
-chmod 755 /etc/profile.d/proxy.sh
-/etc/profile.d/proxy.sh
+## Uncomment the below lines if an instance requires internet access
+# cat << EOF > /etc/profile.d/proxy.sh
+# #!/bin/bash
+# export http_proxy=$proxy_server:3128
+# export https_proxy=$proxy_server:3128
+# export no_proxy="169.254.169.254,vi2e.io,s3.$region.amazonaws.com"
+# EOF
+# chmod 755 /etc/profile.d/proxy.sh
+# /etc/profile.d/proxy.sh
 
-# For troubleshooting, if necessary
-cat << EOF > /etc/profile.d/set_env.sh
-#!/bin/bash
-export av_scan_mode=$av_scan_mode
-export resource_suffix=$resource_suffix
-EOF
-chmod 755 /etc/profile.d/set_env.sh
-/etc/profile.d/set_env.sh
+## Uncomment the below lines for troubleshooting, if necessary
+# cat << EOF > /etc/profile.d/set_env.sh
+# #!/bin/bash
+# export av_scan_mode=$av_scan_mode
+# export resource_suffix=$resource_suffix
+# EOF
+# chmod 755 /etc/profile.d/set_env.sh
+# /etc/profile.d/set_env.sh
 
 # Install python3.11, pip, and other libraries
 yum install -y python3.11 python3.11-pip curl unzip
