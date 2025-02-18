@@ -1,12 +1,12 @@
 repos:
   # SECURITY
   - repo: https://github.com/PyCQA/bandit
-    rev: "1.8.2"
+    rev: "1.8.3"
     hooks:
       - id: bandit
 
   - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
-    rev: v1.3.3
+    rev: v1.4.0
     hooks:
       - id: python-safety-dependencies-check
 
@@ -34,7 +34,7 @@ repos:
           - --allow-missing-credentials
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.0
+    rev: v2.4.1
     hooks:
       - id: codespell
         entry: bash -c 'codespell "$@" || true' -- # Don't block, just alert
@@ -52,12 +52,12 @@ repos:
 
   # PYTHON FORMATTING
   - repo: https://github.com/ambv/black
-    rev: "24.10.0"
+    rev: "25.1.0"
     hooks:
       - id: black
 
   - repo: https://github.com/pycqa/flake8
-    rev: "7.1.1"
+    rev: "7.1.2"
     hooks:
       - id: flake8
         args: ["--max-line-length=88"] # Same max-length as black
@@ -81,7 +81,7 @@ repos:
         args: [--py36-plus]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v1.15.0
     hooks:
       - id: mypy
         entry: bash -c 'mypy "$@" || true' -- # Don't block, just alert
@@ -95,7 +95,7 @@ repos:
 
   # CFN CHECKS & LINTING
   - repo: https://github.com/aws-cloudformation/cfn-python-lint
-    rev: v1.22.7 # The version of cfn-lint to use
+    rev: v1.25.1 # The version of cfn-lint to use
     hooks:
       - id: cfn-python-lint
         files: .*\.(ya?ml)$
