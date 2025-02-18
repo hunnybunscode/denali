@@ -13,6 +13,7 @@ logger.setLevel(logging.INFO)
 
 AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
 ACCOUNT_ID = os.environ["ACCOUNT_ID"]
+KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 S3_CLIENT = boto3.client("s3", config=config)
@@ -28,9 +29,8 @@ def lambda_handler(event, context):
     source_ip = record.get("requestParameters", {}).get("sourceIPAddress", "")
 
     tagset = get_bucket_tags(bucket)
-    keys_to_combine = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
     tag_indexes_to_remove = sorted(
-        [index for index, tag in enumerate(tagset) if tag["Key"] in keys_to_combine],
+        [index for index, tag in enumerate(tagset) if tag["Key"] in KEYS_TO_COMBINE],
         reverse=True,
     )
 
