@@ -238,19 +238,24 @@ def get_params_values(
 def create_tags_for_file_validation(error_status: str, file_type: str, mime_type=""):
     """
     Returns: {
-        "FileType + MimeType + ErrorStatus": f"{file_type} + {mime_type} + {error_status}"  # noqa: E501
+        "ErrorStatus / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}"  # noqa: E501
     }
     """
+    if mime_type:
+        return {
+            "ErrorStatus / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}",  # noqa: E501
+        }
+
     return {
-        "FileType + MimeType + ErrorStatus": f"{file_type} + {mime_type} + {error_status}",  # noqa: E501
+        "ErrorStatus / FileType": f"{error_status} / {file_type}",
     }
 
 
 def create_tags_for_av_scan(file_status: str, exit_status: int):
     """
-    Returns: {"AvScanStatus + ClamAvExitCode": f"{file_status} + {str(exit_status)}"}
+    Returns: {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
     """
-    return {"AvScanStatus + ClamAvExitCode": f"{file_status} + {str(exit_status)}"}
+    return {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
 
 
 def empty_dir(dir: str):

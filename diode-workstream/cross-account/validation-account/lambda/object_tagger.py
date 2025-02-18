@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from functools import reduce
 from urllib.parse import unquote_plus
 
 import boto3  # type: ignore
@@ -27,9 +28,30 @@ def lambda_handler(event, context):
     source_ip = record.get("requestParameters", {}).get("sourceIPAddress", "")
 
     tagset = get_bucket_tags(bucket)
-    tagset.append(
-        {"Key": "PrincipalId + SourceIp", "Value": f"{principal_id} + {source_ip}"},
+    keys_to_combine = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
+    tag_indexes_to_remove = sorted(
+        [index for index, tag in enumerate(tagset) if tag["Key"] in keys_to_combine],
+        reverse=True,
     )
+
+    tags_to_combine = sorted(
+        [tagset.pop(index) for index in tag_indexes_to_remove],
+        key=lambda x: x["Key"],
+    )
+
+    tagset.extend(
+        [
+            reduce(
+                lambda t1, t2: {
+                    "Key": f'{t1["Key"]} / {t2["Key"]}',
+                    "Value": f'{t1["Value"]} / {t2["Value"]}',
+                },
+                tags_to_combine,
+            ),
+            {"Key": "PrincipalId / SourceIp", "Value": f"{principal_id} / {source_ip}"},
+        ],
+    )
+
     add_tags_to_object(bucket, key, tagset)
     send_to_sqs(bucket, key)
     logger.info("SUCCESS")
