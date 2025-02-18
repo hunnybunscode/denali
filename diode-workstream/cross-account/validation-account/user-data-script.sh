@@ -31,14 +31,13 @@ fi
 # chmod 755 /etc/profile.d/proxy.sh
 # /etc/profile.d/proxy.sh
 
-## Uncomment the below lines for troubleshooting, if necessary
-# cat << EOF > /etc/profile.d/set_env.sh
-# #!/bin/bash
-# export av_scan_mode=$av_scan_mode
-# export resource_suffix=$resource_suffix
-# EOF
-# chmod 755 /etc/profile.d/set_env.sh
-# /etc/profile.d/set_env.sh
+cat << EOF > /etc/profile.d/set_env.sh
+#!/bin/bash
+export av_scan_mode=$av_scan_mode
+export resource_suffix=$resource_suffix
+EOF
+chmod 755 /etc/profile.d/set_env.sh
+/etc/profile.d/set_env.sh
 
 # Install python3.11, pip, and other libraries
 yum install -y python3.11 python3.11-pip curl unzip

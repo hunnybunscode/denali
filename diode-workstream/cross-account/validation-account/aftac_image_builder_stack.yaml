@@ -278,14 +278,13 @@ Resources:
             # chmod 755 /etc/profile.d/proxy.sh
             # /etc/profile.d/proxy.sh
 
-            ## Uncomment the below lines for troubleshooting, if necessary
-            # cat << EOF > /etc/profile.d/set_env.sh
-            # #!/bin/bash
-            # export av_scan_mode=${AvScanMode}
-            # export resource_suffix=${ResourceSuffix}
-            # EOF
-            # chmod 755 /etc/profile.d/set_env.sh
-            # /etc/profile.d/set_env.sh
+            cat << EOF > /etc/profile.d/set_env.sh
+            #!/bin/bash
+            export av_scan_mode=${AvScanMode}
+            export resource_suffix=${ResourceSuffix}
+            EOF
+            chmod 755 /etc/profile.d/set_env.sh
+            /etc/profile.d/set_env.sh
       Components:
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
