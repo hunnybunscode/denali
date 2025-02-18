@@ -161,7 +161,7 @@ Resources:
                     # Set environment variables for proxy servers
                     - export http_proxy=${ProxyServerAddress}:3128
                     - export https_proxy=${ProxyServerAddress}:3128
-                    - export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+                    - export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
 
                     # Install python3.11, pip, and other libraries
                     - yum install -y python3.11 python3.11-pip curl unzip
@@ -258,7 +258,7 @@ Resources:
             #!/bin/bash
             export http_proxy=${ProxyServerAddress}:3128
             export https_proxy=${ProxyServerAddress}:3128
-            export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+            export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
 
             # Install SSM Agent
             ARCH=$(arch)
@@ -268,23 +268,24 @@ Resources:
                 yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm
             fi
 
-            cat << EOF > /etc/profile.d/proxy.sh
-            #!/bin/bash
-            export http_proxy=${ProxyServerAddress}:3128
-            export https_proxy=${ProxyServerAddress}:3128
-            export NO_PROXY='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
-            EOF
-            chmod 755 /etc/profile.d/proxy.sh
-            /etc/profile.d/proxy.sh
+            ## Uncomment the below lines if an instance requires internet access
+            # cat << EOF > /etc/profile.d/proxy.sh
+            # #!/bin/bash
+            # export http_proxy=${ProxyServerAddress}:3128
+            # export https_proxy=${ProxyServerAddress}:3128
+            # export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+            # EOF
+            # chmod 755 /etc/profile.d/proxy.sh
+            # /etc/profile.d/proxy.sh
 
-            # For troubleshooting, if necessary
-            cat << EOF > /etc/profile.d/set_env.sh
-            #!/bin/bash
-            export av_scan_mode=${AvScanMode}
-            export resource_suffix=${ResourceSuffix}
-            EOF
-            chmod 755 /etc/profile.d/set_env.sh
-            /etc/profile.d/set_env.sh
+            ## Uncomment the below lines for troubleshooting, if necessary
+            # cat << EOF > /etc/profile.d/set_env.sh
+            # #!/bin/bash
+            # export av_scan_mode=${AvScanMode}
+            # export resource_suffix=${ResourceSuffix}
+            # EOF
+            # chmod 755 /etc/profile.d/set_env.sh
+            # /etc/profile.d/set_env.sh
       Components:
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
