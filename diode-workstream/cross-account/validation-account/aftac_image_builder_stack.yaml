@@ -13,6 +13,7 @@ Metadata:
           - ResourceSuffix
           - AvScanMode
           - ProxyServerAddress
+          - TemplateBucketName
           - EmailEndPoint
 
       - Label:
@@ -20,6 +21,10 @@ Metadata:
         Parameters:
           - SemVer
           - ParentImage
+          - SourceAccountId
+          - ImageNamePattern
+          - RequiredImageDescriptionPattern
+          - ImageCheckFrequency
           - LaunchTemplateId
           - VpcId
           - SubnetId
@@ -42,6 +47,12 @@ Metadata:
         default: Semantic Version
       ParentImage:
         default: Parent Image
+      ImageNamePattern:
+        default: Image Name Pattern
+      RequiredImageDescriptionPattern:
+        default: Required Image Description Pattern
+      ImageCheckFrequency:
+        default: Image Check Frequency
       LaunchTemplateId:
         default: Launch Template ID
       VpcId:
@@ -50,6 +61,10 @@ Metadata:
         default: Subnet ID
       OutboundCidrIp:
         default: Outbound CIDR
+      SourceAccountId:
+        default: Source Account ID
+      TemplateBucketName:
+        default: Template Bucket Name
 
 Parameters:
   IamPrefix:
@@ -105,6 +120,34 @@ Parameters:
     AllowedPattern: ^(arn:(aws|aws-us-gov):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid Image ARN or AMI ID
 
+  ImageNamePattern:
+    Type: String
+    Description: >-
+      The base image name pattern for image builder output images.
+      This pattern is used to identify the correct source AMI.
+      The pattern must exactly match part of the AMI name.
+    Default: "V12E_RHEL8_Agents_Gold"
+    AllowedPattern: "^[a-zA-Z0-9_-]+$"
+    ConstraintDescription: "Pattern must contain only alphanumeric characters, underscores, and hyphens"
+
+  RequiredImageDescriptionPattern:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated list of required patterns that must be present in the image description.
+      These patterns are used to identify the correct source AMI that contains specific
+      software components (e.g., ClamAV, Nessus).
+    Default: Yum,ClamAV,Nessus
+    ConstraintDescription: "Must be a comma-separated list of patterns"
+
+  ImageCheckFrequency:
+    Type: String
+    Description: >-
+      The frequency to run the check for new base image shared from source account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
+      You can leave this blank if you want to manually check for new AMIs.
+    Default: rate(1 day)
+    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
+
   # This could be imported in later
   LaunchTemplateId:
     Type: String
@@ -130,6 +173,16 @@ Parameters:
     Default: 0.0.0.0/0
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
+
+  SourceAccountId:
+    Type: String
+    Description: AWS Account ID that owns the Parent Image (AMI)
+    AllowedPattern: ^\d{12}$
+    ConstraintDescription: Must be a valid 12-digit AWS account ID
+
+  TemplateBucketName:
+    Type: String
+    Description: Name of the S3 bucket containing the CloudFormation template
 
 Conditions:
   IsEmailAddressProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
@@ -679,3 +732,459 @@ Resources:
   #           onFailure: Continue
   #           inputs:
   #             instanceId.$: "$.stepOutputs.LaunchTestInstance.instanceId"
+
+  NewAmiImageBuilderTriggerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+      Handler: index.handler
+      Role: !GetAtt NewAmiImageBuilderTriggerLambdaRole.Arn
+      Runtime: python3.11
+      Timeout: 300
+      Environment:
+        Variables:
+          PIPELINE_ARN: !GetAtt ImageBuilderImagePipeline.Arn
+          SOURCE_ACCOUNT: !Ref SourceAccountId
+          STACK_NAME: !Ref AWS::StackName
+          TEMPLATE_URL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_image_builder_stack.yaml
+          IMAGE_NAME_PATTERN: !Ref ImageNamePattern
+          REQUIRED_DESCRIPTION_ITEMS:
+            !Join [",", !Ref RequiredImageDescriptionPattern]
+
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import json
+          import logging
+          from datetime import datetime
+
+          # Configure logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          # Initialize AWS clients
+          EC2 = boto3.client('ec2')
+          IMAGE_BUILDER = boto3.client('imagebuilder')
+          CFN = boto3.client('cloudformation')
+
+          # Environment variables
+          STACK_NAME = os.environ['STACK_NAME']
+          TEMPLATE_URL = os.environ['TEMPLATE_URL']
+          SOURCE_ACCOUNT = os.environ['SOURCE_ACCOUNT']
+          PIPELINE_ARN = os.environ['PIPELINE_ARN']
+          IMAGE_NAME_PATTERN = os.environ['IMAGE_NAME_PATTERN']
+          REQUIRED_DESCRIPTION_ITEMS = os.environ['REQUIRED_DESCRIPTION_ITEMS'].split(',')
+
+          def handler(event, context):
+              logger.info(f"Received event: {json.dumps(event)}")
+
+              try:
+                  # Get current stack parameters
+                  current_parameters = get_stack_parameters()
+                  current_ami = current_parameters.get('ParentImage')
+                  current_version = current_parameters.get('SemVer')
+
+                  # Get latest AMI
+                  latest_ami = get_latest_ami()
+                  if not latest_ami:
+                      logger.info("No available AMIs found from source account")
+                      return
+
+                  # Check if this is a new AMI
+                  if latest_ami['ImageId'] == current_ami:
+                      logger.info(f"No new AMI found. Current AMI: {current_ami}")
+                      return
+
+                  logger.info(f"Found new AMI: {latest_ami['ImageId']}")
+
+                  # Increment version
+                  new_version = increment_version(current_version)
+                  logger.info(f"Incrementing version from {current_version} to {new_version}")
+
+                  # Update CloudFormation stack
+                  update_cloudformation_stack(
+                      current_parameters,
+                      latest_ami['ImageId'],
+                      new_version
+                  )
+
+                  # Wait for stack update to complete
+                  wait_for_stack_update()
+
+                  logger.info(f"Updated stack: {STACK_NAME} with new AMI: {latest_ami['ImageId']}")
+
+                  # Start the Image Builder pipeline
+                  start_image_pipeline(context.aws_request_id)
+
+                  logger.info(f"Started image builder pipeline with new parent image: {latest_ami['ImageId']}")
+
+              except Exception as e:
+                  logger.error(f"Error in lambda execution: {str(e)}")
+                  raise
+
+          def get_stack_parameters():
+              stack = CFN.describe_stacks(StackName=STACK_NAME)['Stacks'][0]
+              return {param['ParameterKey']: param['ParameterValue']
+                      for param in stack['Parameters']}
+
+          def get_latest_ami():
+              response = EC2.describe_images(
+                  Owners=[SOURCE_ACCOUNT],
+                  Filters=[
+                      {
+                          'Name': 'state',
+                          'Values': ['available']
+                      }
+                  ]
+              )
+
+              if not response['Images']:
+                  return None
+
+              images = sorted(
+                  response['Images'],
+                  key=lambda x: datetime.strptime(x['CreationDate'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+                  reverse=True
+              )
+
+              # Check both name pattern and description requirements
+              for image in images:
+                  if (IMAGE_NAME_PATTERN.lower() in image['Name'].lower() and
+                          all(item.lower() in image.get('Description', '').lower()
+                              for item in REQUIRED_DESCRIPTION_ITEMS)):
+                      logger.info(f"Found matching AMI: {image['ImageId']}")
+                      logger.info(f"Name: {image['Name']}")
+                      logger.info(f"Description: {image.get('Description', '')}")
+                      return image
+
+              logger.info("No AMI found matching both name pattern and description requirements")
+              return None
+
+          def increment_version(version_str):
+              major, minor, patch = map(int, version_str.split('.'))
+              return f"{major}.{minor}.{patch + 1}"
+
+
+          def update_cloudformation_stack(parameters, new_ami_id, new_version):
+              parameters['ParentImage'] = new_ami_id
+              parameters['SemVer'] = new_version
+
+              parameter_list = [
+                  {
+                      'ParameterKey': key,
+                      'ParameterValue': value
+                  }
+                  for key, value in parameters.items()
+              ]
+
+              CFN.update_stack(
+                  StackName=STACK_NAME,
+                  TemplateURL=TEMPLATE_URL,
+                  Parameters=parameter_list,
+                  Capabilities=['CAPABILITY_NAMED_IAM']
+              )
+
+          def wait_for_stack_update():
+              waiter = CFN.get_waiter('stack_update_complete')
+              waiter.wait(
+                  StackName=STACK_NAME,
+                  WaiterConfig={'Delay': 10, 'MaxAttempts': 30}
+              )
+
+          def start_image_pipeline(client_token):
+              return IMAGE_BUILDER.start_image_pipeline_execution(
+                  imagePipelineArn=PIPELINE_ARN,
+                  clientToken=client_token
+              )
+
+  NewAmiImageBuilderTriggerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+      RetentionInDays: 90
+
+  NewAmiImageBuilderTriggerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                Resource:
+                  - !GetAtt NewAmiImageBuilderTriggerLogGroup.Arn
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group::log-stream:*
+        - PolicyName: ImageBuilderAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - imagebuilder:StartImagePipelineExecution
+                  - imagebuilder:UpdateImagePipeline
+                  - imagebuilder:GetImagePipeline
+                  - imagebuilder:CreateComponent
+                  - imagebuilder:DeleteComponent
+                  - imagebuilder:GetComponent
+                  - imagebuilder:TagResource
+                  - imagebuilder:CreateImageRecipe
+                  - imagebuilder:GetImageRecipe
+                  - imagebuilder:DeleteImageRecipe
+                  - imagebuilder:GetDistributionConfiguration
+                  - imagebuilder:GetInfrastructureConfiguration
+                Resource:
+                  - !GetAtt ImageBuilderImagePipeline.Arn
+                  - !GetAtt InfraConfig.Arn
+                  - !GetAtt ImageBuilderDistroConfig.Arn
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:component/*
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:image-recipe/*
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:distribution-configuration/*
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:infrastructure-configuration/*
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:image/*
+        - PolicyName: CloudFormationAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:UpdateStack
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:UpdateFunctionConfiguration
+                Resource:
+                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+        - PolicyName: KMSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                Resource: !GetAtt ImageBuilderKmsKey.Arn
+        - PolicyName: IAMAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+        - PolicyName: EC2Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeImages
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceAccount": !Ref AWS::AccountId
+
+  NewAmiImageBuilderTriggerScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+      Description: "Periodically check for new AMIs"
+      ScheduleExpression: !Ref ImageCheckFrequency
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt NewAmiImageBuilderTriggerLambda.Arn
+          Id: "NewAmiImageBuilderTrigger"
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref NewAmiImageBuilderTriggerLambda
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NewAmiImageBuilderTriggerScheduleRule.Arn
+
+  CopyEC2RequiredFilesLambdaFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/copy-ec2-required-files-${ResourceSuffix}
+      RetentionInDays: 90
+
+  CopyEC2RequiredFilesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-copy-ec2-required-files-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt CopyEC2RequiredFilesLambdaFunctionLogGroup.Arn
+        - PolicyName: KMSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                Resource: !GetAtt ImageBuilderKmsKey.Arn
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}
+                  - !Sub arn:${AWS::Partition}:s3:::${EC2RequiredFilesBucket}
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${EC2RequiredFilesBucket}/*
+
+  CopyEC2RequiredFilesCustomResource:
+    Type: Custom::CopyEC2Files
+    Properties:
+      ServiceTimeout: 60
+      ServiceToken: !GetAtt CopyEC2RequiredFilesFunction.Arn
+      SourceBucket: !Ref TemplateBucketName
+      DestinationBucket: !Ref EC2RequiredFilesBucket
+      Prefix: ec2-files/
+
+  CopyEC2RequiredFilesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub copy-ec2-required-files-${ResourceSuffix}
+      Handler: index.handler
+      Role: !GetAtt CopyEC2RequiredFilesRole.Arn
+      Runtime: python3.11
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          S3 = boto3.client('s3')
+
+          def copy_files(source_bucket, dest_bucket, prefix):
+              try:
+                  paginator = S3.get_paginator('list_objects_v2')
+                  copied_files = []
+
+                  for page in paginator.paginate(Bucket=source_bucket, Prefix=prefix):
+                      if 'Contents' in page:
+                          for obj in page['Contents']:
+                              source_key = obj['Key']
+
+                              # Skip if this is a folder placeholder
+                              if source_key.endswith('/'):
+                                  continue
+
+                              # Copy with the same key (maintains prefix structure)
+                              copy_source = {
+                                  'Bucket': source_bucket,
+                                  'Key': source_key
+                              }
+
+                              S3.copy_object(
+                                  CopySource=copy_source,
+                                  Bucket=dest_bucket,
+                                  Key=source_key
+                              )
+
+                              copied_files.append({
+                                  'source': f"{source_bucket}/{source_key}",
+                                  'destination': f"{dest_bucket}/{source_key}"
+                              })
+                              logger.info(f"Copied {source_key} to {dest_bucket}/{source_key}")
+
+                  return copied_files
+
+              except Exception as e:
+                  logger.error(f"Error copying files: {str(e)}")
+                  raise
+
+          def handler(event, context):
+              try:
+                  logger.info(f"Received event: {event}")
+
+                  # Get parameters from the event
+                  props = event['ResourceProperties']
+                  source_bucket = props['SourceBucket']
+                  dest_bucket = props['DestinationBucket']
+                  prefix = props['Prefix']
+
+                  if event['RequestType'] in ['Create', 'Update']:
+                      copied_files = copy_files(
+                          source_bucket,
+                          dest_bucket,
+                          prefix
+                      )
+                      logger.info(f"Files copied successfully: {copied_files}")
+
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+              except Exception as e:
+                  error_message = f"Error: {str(e)}"
+                  logger.error(error_message)
+                  cfnresponse.send(event, context, cfnresponse.FAILED,
+                      {'Error': error_message})
