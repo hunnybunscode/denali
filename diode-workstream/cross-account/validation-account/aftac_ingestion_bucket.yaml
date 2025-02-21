@@ -10,19 +10,19 @@ Metadata:
           default: Tags
         Parameters:
           - IngestBucketMappingId
-          - IngestBucketDestionationBucket
+          - IngestBucketDestinationBucket
           - IngestBucketDataOwner
           - IngestBucketDataSteward
           - IngestBucketGovPoc
           - IngestBucketKeyOwner
 
       - Label:
-          default: Bucket Policy [OPTIONAL]
+          default: (OPTIONAL) Bucket Policy
         Parameters:
           - AllowedRoleArn
 
       - Label:
-          default: SFTP [OPTIONAL]
+          default: (OPTIONAL) SFTP
         Parameters:
           - SftpUserName
           - SshPublicKeys
@@ -36,9 +36,9 @@ Metadata:
       ResourceSuffix:
         default: Resource Suffix
       IngestBucketMappingId:
-        default: Mapping ID [Conditional]
-      IngestBucketDestionationBucket:
-        default: Destination Bucket Name [Conditional]
+        default: (Conditional) Mapping ID
+      IngestBucketDestinationBucket:
+        default: (Conditional) Destination Bucket Name
       IngestBucketDataOwner:
         default: Data Owner
       IngestBucketDataSteward:
@@ -72,7 +72,7 @@ Parameters:
     AllowedPattern: ^$|^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
     ConstraintDescription: Must be a valid Mapping ID
 
-  IngestBucketDestionationBucket:
+  IngestBucketDestinationBucket:
     Type: String
     Description: (Conditional) Value for tag key DestinationBucket. Do not specify a value here if you specify a value in Mapping ID.
     AllowedPattern: ^$|^(?!\s*arn:)\S+$
@@ -81,22 +81,26 @@ Parameters:
   IngestBucketDataOwner:
     Type: String
     Description: (Required) Value for tag key DataOwner
-    Default: Phoebe
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
   IngestBucketDataSteward:
     Type: String
     Description: (Required) Value for tag key DataSteward
-    Default: Rachel
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
   IngestBucketGovPoc:
     Type: String
     Description: (Required) Value for tag key GovPOC
-    Default: Monica
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
   IngestBucketKeyOwner:
     Type: String
     Description: (Required) Value for tag key KeyOwner
-    Default: Chandler
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
   AllowedRoleArn:
     Type: String
@@ -128,10 +132,10 @@ Rules:
   MappingIdOnly:
     RuleCondition: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
     Assertions:
-      - Assert: !Equals [!Ref IngestBucketDestionationBucket, ""]
+      - Assert: !Equals [!Ref IngestBucketDestinationBucket, ""]
         AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
   DestinationBucketOnly:
-    RuleCondition: !Not [!Equals [!Ref IngestBucketDestionationBucket, ""]]
+    RuleCondition: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
     Assertions:
       - Assert: !Equals [!Ref IngestBucketMappingId, ""]
         AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
@@ -140,7 +144,7 @@ Conditions:
   CreateSftpUser: !Not [!Equals [!Ref SftpUserName, ""]]
   SshPublicKeyProvided: !Not [!Equals [!Join ["", !Ref SshPublicKeys], ""]]
   UseMappingId: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
-  UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestionationBucket, ""]]
+  UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
   UseAllowedRoleArn: !Not [!Equals [!Ref AllowedRoleArn, ""]]
 
 Resources:
@@ -181,8 +185,8 @@ Resources:
           - !Ref AWS::NoValue
         - !If
           - UseDestinationBucket
-          - Key: IngestBucketDestionationBucket
-            Value: !Ref IngestBucketDestionationBucket
+          - Key: IngestBucketDestinationBucket
+            Value: !Ref IngestBucketDestinationBucket
           - !Ref AWS::NoValue
         - Key: DataOwner
           Value: !Ref IngestBucketDataOwner
