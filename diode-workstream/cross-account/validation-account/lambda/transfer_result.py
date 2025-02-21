@@ -14,6 +14,9 @@ FAILED_TRANSFER_TOPIC_ARN = os.environ["FAILED_TRANSFER_TOPIC_ARN"]
 FAILED_TRANSFER_BUCKET = os.environ["FAILED_TRANSFER_BUCKET"]
 ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 
+DATA_TAG_KEY = "DataOwner / DataSteward / GovPOC / KeyOwner"
+UNKNOWNS = ["Unknown"] * 4
+
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 DDB_CLIENT = boto3.client("dynamodb", config=config)
 S3_CLIENT = boto3.client("s3", config=config)
@@ -31,8 +34,8 @@ def lambda_handler(event, context):
     key = data["key"]
     status = data["status"]
 
-    data_owner, gov_poc, key_owner = get_object_tagging(bucket, key)
-    put_item_in_ddb(data, data_owner, gov_poc, key_owner)
+    data_tag_values = get_data_tag_values(bucket, key)
+    put_item_in_ddb(data, *data_tag_values)
 
     if status != "SUCCEEDED":
         logger.info(
@@ -46,29 +49,27 @@ def lambda_handler(event, context):
     delete_object(DATA_TRANSFER_BUCKET, key)
 
 
-def get_object_tagging(bucket: str, key: str):
+def get_data_tag_values(bucket: str, key: str) -> list[str]:
     """
-    Returns values for tag keys `data_owner`, `gov_poc`, and `key_owner`
-    for `key` in `bucket`.\n
-    If any of these tags are not set, returns "unknown".
+    Returns values for tag key `DataOwner / DataSteward / GovPOC / KeyOwner`
+    as individual values in a list.\n
+    If the tag is not set, returns "Unknown" x 4 in a list.
     """
-    unknown = "unknown"
+    logger.info(f"Getting tags for {bucket}/{key}")
     try:
-        logger.info(f"Getting tags for {bucket}/{key}")
-
-        tags = _get_object_tagging(bucket, key)
-        data_owner = tags.get("DataOwner", unknown)
-        gov_poc = tags.get("GovPOC", unknown)
-        key_owner = tags.get("KeyOwner", unknown)
-
-        logger.info("Successfully retrieved the tags")
-        return data_owner, gov_poc, key_owner
+        tags = get_object_tags(bucket, key)
+        data_tag_value = tags.get(DATA_TAG_KEY)
+        if data_tag_value is None:
+            logger.warning(f"The object did not have {DATA_TAG_KEY} tag key")
+            return UNKNOWNS
+        logger.info("Successfully retrieved the data tag value")
+        return [tag.strip() for tag in data_tag_value.split("/")]
     except ClientError as e:
         logger.error(f"Failed to get object tags: {e}")
-        return unknown, unknown, unknown
+        return UNKNOWNS
 
 
-def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
+def get_object_tags(bucket: str, key: str) -> dict[str, str]:
     """
     Returns `TagSet` for `key` in `bucket` in a dict.
     """
@@ -86,12 +87,12 @@ def _get_object_tagging(bucket: str, key: str) -> dict[str, str]:
 def put_item_in_ddb(
     data: dict,
     data_owner: str,
+    data_steward: str,
     gov_poc: str,
     key_owner: str,
 ):
     s3_key = data["key"]
     logger.info(f"Adding an entry into DynamoDB on the transfer status of {s3_key}")
-
     DDB_CLIENT.put_item(
         TableName=DDB_TABLE_NAME,
         Item={
@@ -105,17 +106,16 @@ def put_item_in_ddb(
             "status": {"S": data["status"]},
             "transferId": {"S": data["transferId"]},
             "dataOwner": {"S": data_owner},
+            "dataSteward": {"S": data_steward},
             "govPoc": {"S": gov_poc},
             "keyOwner": {"S": key_owner},
         },
     )
-
     logger.info("Successfully added the entry")
 
 
 def send_transfer_error_message(key: str):
     logger.info("Sending an SNS message regarding the failed transfer")
-
     SNS_CLIENT.publish(
         TopicArn=FAILED_TRANSFER_TOPIC_ARN,
         Subject="Failed Cross Domain Transfer",
@@ -129,7 +129,6 @@ def send_transfer_error_message(key: str):
 
 def copy_object(src_bucket: str, dest_bucket: str, key: str):
     logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
-
     S3_CLIENT.copy_object(
         # Source bucket/key/owner
         CopySource={"Bucket": src_bucket, "Key": key},
@@ -139,17 +138,14 @@ def copy_object(src_bucket: str, dest_bucket: str, key: str):
         Key=key,
         ExpectedBucketOwner=ACCOUNT_ID,
     )
-
     logger.info("Successfully copied the object")
 
 
 def delete_object(bucket: str, key: str):
     logger.info(f"Deleting {bucket}/{key}")
-
     S3_CLIENT.delete_object(
         Bucket=bucket,
         Key=key,
         ExpectedBucketOwner=ACCOUNT_ID,
     )
-
     logger.info("Successfully deleted the object")
