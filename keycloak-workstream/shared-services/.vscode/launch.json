@@ -1,0 +1,22 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch Program",
+      "skipFiles": ["<node_internals>/**"],
+      "runtimeArgs": ["-r", "./node_modules/ts-node/register/transpile-only"],
+      "args": ["./bin/shared-services.ts"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "AWS_PROFILE": "jktruong+sandbox-sentinel-lza-00-SharedServices-Admin",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "ENVIRONMENT": "local-jktruong"
+      }
+    }
+  ]
+}

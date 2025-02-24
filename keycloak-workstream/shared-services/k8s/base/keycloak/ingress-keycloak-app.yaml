@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-keycloak-app
+  namespace: keycloak
+  annotations:
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/group.name: keycloak-web-ui
+    alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+    alb.ingress.kubernetes.io/success-codes: 200-299,302
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=300
+    alb.ingress.kubernetes.io/mutual-authentication: '[{"port": 443, "mode": "passthrough"}]'
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=160
+
+spec:
+  ingressClassName: alb
+  rules:
+    - host: keycloak.sso.dev.sentinel.proserve.aws.dev
+      http: &default-http
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: service-keycloak-sentinel
+                port:
+                  name: ui
+    - host: sso.dev.sentinel.proserve.aws.dev
+      http: *default-http

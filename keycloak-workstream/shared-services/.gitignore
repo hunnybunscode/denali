@@ -1,0 +1,18 @@
+*.js
+!jest.config.js
+*.d.ts
+!interfaces.d.ts
+node_modules
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+*.cdk.out
+cdk.context.json
+.DS_Store
+realm-export.json
+*.pem
+local-*
+cdk-bootstrap.template.yml
+lib/k8s/base/keycloak/plugins/spi/keycloak-spi-awsalb-mtls.jar
+*.crt

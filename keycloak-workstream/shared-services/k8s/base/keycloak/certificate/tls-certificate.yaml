@@ -1,0 +1,35 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-certificate
+  namespace: keycloak
+spec:
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-root-issuer
+  secretName: tls-certificate-keycloak
+  commonName: keycloak.keycloak.svc.cluster.local
+  privateKey:
+    algorithm: RSA
+    size: 4096
+    rotationPolicy: Always
+  subject:
+    organizations:
+      - Amazon Web Service
+    organizationalUnits:
+      - "WWPS ProServe"
+    countries:
+      - USA
+    provinces:
+      - California
+    postalCodes:
+      - "92121"
+    localities:
+      - San Diego
+  dnsNames:
+    - keycloak
+    - keycloak.keycloak.svc
+    - keycloak.keycloak.svc.cluster.local
+
+    - keycloak.sso.dev.sentinel.proserve.aws.dev
+    - sso.dev.sentinel.proserve.aws.dev

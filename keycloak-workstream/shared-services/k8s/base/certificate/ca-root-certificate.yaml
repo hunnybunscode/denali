@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ca-root-certificate
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: sentinel-dev-ca-root
+  secretName: root-secret
+  privateKey:
+    algorithm: RSA
+    size: 4096
+    rotationPolicy: Always
+  issuerRef:
+    name: ca-self-issuer
+    kind: ClusterIssuer

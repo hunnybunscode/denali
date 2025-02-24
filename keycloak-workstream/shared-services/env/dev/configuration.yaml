@@ -1,0 +1,41 @@
+environment:
+  name: dev
+  region: us-east-1
+  account: "992382523718"
+
+hostedZones: &hostedZones
+  - zoneName: sso.dev.sentinel.proserve.aws.dev
+    private: false
+    createCertificate: true
+  - zoneName: sso.dev.sentinel.proserve.aws.dev
+    private: true
+    vpc:
+      id: &vpcId vpc-07bef8c3f740778ca
+  - zoneName: gitlab.dev.sentinel.proserve.aws.dev
+    private: false
+    createCertificate: false
+  - zoneName: gitlab.dev.sentinel.proserve.aws.dev
+    private: true
+    vpc:
+      id: *vpcId
+
+clusters:
+  - name: SharedServices
+    vpc:
+      id: *vpcId
+      subnets:
+        - id: subnet-0d7dd6fdc871cb18e
+        - id: subnet-0699e9afcdd0122b3
+    hostedZones: *hostedZones
+    nodeGroups:
+      - name: general
+        instanceType: t3a.xlarge
+        storage: &storage
+          rootDeviceName: /dev/xvda
+          sizeInGB: 20
+          type: gp3
+        subnets: &nodeGroupSubnets
+          - id: subnet-013ae71304ff55845
+          - id: subnet-0258d0877b1aac7e9
+        desiredCapacity: 2
+        maxSize: 10
