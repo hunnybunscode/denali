@@ -103,7 +103,7 @@ Parameters:
 
   EmailEndPoint:
     Type: String
-    Description: "[EXPERIMENTAL] The email address at which to receive notifications for ImageBuilder events"
+    Description: "The email address at which to receive notifications for ImageBuilder events"
     AllowedPattern: ^$|^\S+@\S+\.+\S+$
     ConstraintDescription: Must be left blank or a valid email address
 
@@ -184,9 +184,6 @@ Parameters:
     Type: String
     Description: Name of the S3 bucket containing the CloudFormation template
 
-Conditions:
-  IsEmailAddressProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
-
 Resources:
   BuildComponentPrepareImage:
     Type: AWS::ImageBuilder::Component
@@ -239,7 +236,6 @@ Resources:
                           echo Installing awscli v2
                           ./aws/install
                       fi
-
                     # Install CloudWatch Agent
                     - ARCH=$(arch)
                     - |
@@ -457,10 +453,7 @@ Resources:
         - !Ref ImageBuilderInfraSecurityGroup
       TerminateInstanceOnFailure: true # For troubleshooting, set it to false
       InstanceTypes: [t3.small]
-      SnsTopicArn: !If
-        - IsEmailAddressProvided
-        - !Ref ImageBuilderNotificationTopic
-        - !Ref AWS::NoValue
+      SnsTopicArn: !Ref ImageBuilderNotificationTopic
       # KeyPair: String
       # Logging:
       #   S3Logs:
@@ -536,18 +529,24 @@ Resources:
 
   ImageBuilderNotificationTopic:
     Type: AWS::SNS::Topic
-    Condition: IsEmailAddressProvided
     Properties:
       DisplayName: ImageBuilder Event Notification
       KmsMasterKeyId: alias/aws/sns
 
   ImageBuilderNotificationTopicSubscription:
     Type: AWS::SNS::Subscription
-    Condition: IsEmailAddressProvided
     Properties:
       TopicArn: !Ref ImageBuilderNotificationTopic
-      Protocol: email
-      Endpoint: !Ref EmailEndPoint
+      Protocol: lambda
+      Endpoint: !GetAtt AsgInstanceRefreshLambda.Arn
+
+  ImageBuilderNotificationTopicPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AsgInstanceRefreshLambda
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref ImageBuilderNotificationTopic
 
   ImageBuilderKmsKey:
     Type: AWS::KMS::Key
@@ -1188,3 +1187,187 @@ Resources:
                   logger.error(error_message)
                   cfnresponse.send(event, context, cfnresponse.FAILED,
                       {'Error': error_message})
+
+  AsgInstanceRefreshLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/refresh-asg-on-image-completion-${ResourceSuffix}
+      RetentionInDays: 90
+
+  AsgInstanceRefreshLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-refresh-asg-on-image-completion-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt AsgInstanceRefreshLogGroup.Arn
+        - PolicyName: ASGAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:StartInstanceRefresh
+                  - autoscaling:DescribeAutoScalingGroups
+                Resource:
+                  Fn::Sub:
+                    - arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AsgName}
+                    - AsgName: !ImportValue
+                        Fn::Sub: aftac-pipeline-asg-name-${ResourceSuffix}
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeInstanceRefreshes
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceAccount": !Ref AWS::AccountId
+        - PolicyName: SNSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AsgInstanceRefreshNotificationTopic
+
+  AsgInstanceRefreshLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub refresh-asg-on-image-completion-${ResourceSuffix}
+      Handler: index.handler
+      Role: !GetAtt AsgInstanceRefreshLambdaRole.Arn
+      Runtime: python3.11
+      Timeout: 900
+      Environment:
+        Variables:
+          ASG_NAME:
+            Fn::ImportValue: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
+          NOTIFICATION_TOPIC_ARN: !Ref AsgInstanceRefreshNotificationTopic
+
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import logging
+          import os
+          import time
+          from datetime import datetime
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          ASG = boto3.client('autoscaling')
+          SNS = boto3.client('sns')
+          ASG_NAME = os.environ['ASG_NAME']
+          NOTIFICATION_TOPIC_ARN = os.environ['NOTIFICATION_TOPIC_ARN']
+
+          def start_instance_refresh():
+              response = ASG.start_instance_refresh(
+                  AutoScalingGroupName=ASG_NAME,
+                  Strategy='Rolling',
+                  Preferences={
+                      'MinHealthyPercentage': 50
+                  }
+              )
+              refresh_id = response['InstanceRefreshId']
+              logger.info(f"Started instance refresh for ASG {ASG_NAME}: {refresh_id}")
+              return refresh_id
+
+          def wait_for_refresh_completion(refresh_id):
+              while True:
+                  response = ASG.describe_instance_refreshes(
+                      AutoScalingGroupName=ASG_NAME,
+                      InstanceRefreshIds=[refresh_id]
+                  )
+
+                  status = response['InstanceRefreshes'][0]['Status']
+                  logger.info(f"Instance refresh status: {status}")
+
+                  if status in ['Successful', 'Failed', 'Cancelled', 'RollbackSuccessful', 'RollbackFailed']:
+                      return status
+                  time.sleep(10)
+
+          def send_notification(ami_info, refresh_status):
+              if not NOTIFICATION_TOPIC_ARN:
+                  logger.info("No notification topic provided, skipping notification")
+                  return
+
+              timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+              message = (
+                  f"Image Builder Pipeline Update - {timestamp}\n\n"
+                  f"New Image Builder Image Created:\n"
+                  f"- AMI ID: {ami_info['image']}\n"
+                  f"- AMI Name: {ami_info.get('name', 'N/A')}\n\n"
+                  f"Auto Scaling Group Update:\n"
+                  f"- ASG Name: {ASG_NAME}\n"
+                  f"- Refresh Status: {refresh_status}\n"
+              )
+
+              SNS.publish(
+                  TopicArn=NOTIFICATION_TOPIC_ARN,
+                  Subject=f"Image Builder Pipeline Update and ASG Instance Refresh",
+                  Message=message
+              )
+              logger.info("Notification sent successfully")
+
+
+          def handler(event, context):
+              logger.info(f"Received event: {json.dumps(event)}")
+
+              try:
+                  # Parse SNS message
+                  message = json.loads(event['Records'][0]['Sns']['Message'])
+
+                  # Check if this is an AMI build and it's available
+                  if (message.get('state', {}).get('status') == 'AVAILABLE' and
+                      'outputResources' in message and
+                      'amis' in message['outputResources']):
+
+                      ami_info = message['outputResources']['amis'][0]
+                      logger.info(f"New AMI created: {ami_info['image']} - {ami_info.get('name')}")
+
+                      # Start instance refresh
+                      refresh_id = start_instance_refresh()
+
+                      # Wait for refresh completion
+                      refresh_status = wait_for_refresh_completion(refresh_id)
+                      logger.info(f"Instance refresh completed with status: {refresh_status}")
+
+                      # Send notification
+                      send_notification(ami_info, refresh_status)
+
+                  else:
+                      logger.info("Image is not in AVAILABLE state or not an AMI build")
+
+              except Exception as e:
+                  logger.error(f"Error processing event: {str(e)}")
+                  raise
+
+  AsgInstanceRefreshNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ImageBuilder Event Notification
+      KmsMasterKeyId: alias/aws/sns
+
+  AsgInstanceRefreshNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AsgInstanceRefreshNotificationTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint

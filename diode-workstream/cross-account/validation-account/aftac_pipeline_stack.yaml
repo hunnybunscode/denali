@@ -1188,3 +1188,9 @@ Outputs:
   DataTransferResultSqsQueueArn:
     Description: Data Transfer Result SQS Queue ARN
     Value: !GetAtt TransferResultQueue.Arn
+
+  PipelineAutoScalingGroupName:
+    Description: Pipeline AutoScaling Group Name
+    Value: !Ref PipelineAutoScalingGroup
+    Export:
+      Name: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
