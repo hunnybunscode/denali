@@ -31,5 +31,5 @@ spec:
     - keycloak.keycloak.svc
     - keycloak.keycloak.svc.cluster.local
 
-    - keycloak.sso.dev.sentinel.proserve.aws.dev
-    - sso.dev.sentinel.proserve.aws.dev
+    - sso.denali.jktruong.people.aws.dev
+

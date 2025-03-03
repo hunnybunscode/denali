@@ -4,7 +4,7 @@ environment:
   account: "303344244756"
 
 hostedZones: &hostedZones
-  - zoneName: sso.denali.jktruong.people.aws.dev
+  - zoneName: denali.jktruong.people.aws.dev
     private: true
     vpc:
       id: &vpcId vpc-0a1b3d9e9e45c96ab
