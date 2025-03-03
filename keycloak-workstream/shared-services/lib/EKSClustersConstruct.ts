@@ -213,12 +213,7 @@ export class EKSClustersConstruct extends Construct {
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEC2ContainerRegistryReadOnly"),
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKS_CNI_Policy"),
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKSWorkerNodePolicy"),
-          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
-          iam.ManagedPolicy.fromManagedPolicyName(
-            scope,
-            `${clusterName}-customerPolicy-LZA-SessionManagerLogging`,
-            "AWSAccelerator-SessionManagerLogging"
-          ),
+          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore")
         ],
       });
 
