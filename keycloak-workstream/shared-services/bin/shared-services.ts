@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 ///<reference path="../lib/interfaces.d.ts" />
+
 import "source-map-support/register";
 import { App, Aspects, Tags } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NIST80053R4Checks, NagSuppressions } from "cdk-nag";
