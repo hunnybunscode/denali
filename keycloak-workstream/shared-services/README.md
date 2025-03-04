@@ -25,6 +25,14 @@ It is possible to disable mTLS requirements if you don't want to support direct 
 * A valid domain with management
 * Able to create Domain Delegates from your primary Domain
 
+### Subnet Tagging 
+* All public facing subnets to be used as an ingress to the services have have the following tags to support [Subnet auto-discovery](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/subnet_discovery/). Value can be 1 or Empty Value
+  * `kubernetes.io/role/elb`
+* All private subnets for internal load balancers. Value can be 1 or Empty Value
+  * `kubernetes.io/role/internal-elb`
+* For **Pods** deployment subnets. Value can be 1 or Empty Value
+  * `kubernetes.io/role/cni`
+
 ## Notes on Update the Configuration
 All configurations are stored inside the folder `env`. By default, it will use the `/env/dev/configuration.yaml` as environment **dev**.
 In order use alternative `configuration.yaml` files, create a subfolder inside `/env` and export the environment variable **ENVIRONMENT** with the folder name.
