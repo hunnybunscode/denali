@@ -12,6 +12,7 @@ resources:
   # - namespace.yaml
 
   - service-keycloak-sentinel.yaml
+  - ingress-keycloak-app-x509.yaml
   - ingress-keycloak-app.yaml
   - keycloak-sentinel.yaml
 

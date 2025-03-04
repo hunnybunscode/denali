@@ -50,7 +50,11 @@ export class EKSClustersConstruct extends Construct {
     return this._props;
   }
 
-  constructor(scope: Construct, private _id: string, props: EksClustersConstructProps) {
+  constructor(
+    scope: Construct,
+    private _id: string,
+    props: EksClustersConstructProps
+  ) {
     super(scope, _id);
 
     this._props = props;
@@ -213,7 +217,7 @@ export class EKSClustersConstruct extends Construct {
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEC2ContainerRegistryReadOnly"),
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKS_CNI_Policy"),
           iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKSWorkerNodePolicy"),
-          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore")
+          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
         ],
       });
 
