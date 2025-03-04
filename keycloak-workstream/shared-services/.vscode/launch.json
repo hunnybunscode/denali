@@ -13,9 +13,9 @@
       "args": ["./bin/shared-services.ts"],
       "envFile": "${workspaceFolder}/.env",
       "env": {
-        "AWS_PROFILE": "jktruong+sandbox-sentinel-lza-00-SharedServices-Admin",
-        "AWS_DEFAULT_REGION": "us-east-1",
-        "ENVIRONMENT": "local-jktruong"
+        "AWS_PROFILE": "denali-project-consultants-Admin",
+        "AWS_DEFAULT_REGION": "us-gov-west-1",
+        // "ENVIRONMENT": "local-jktruong"
       }
     }
   ]

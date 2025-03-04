@@ -1,6 +1,7 @@
 ///<reference path="interfaces.d.ts" />
 
 import * as path from "path";
+import * as fs from "fs";
 import { Construct } from "constructs";
 import {
   aws_route53 as route53,
@@ -12,6 +13,7 @@ import {
   RemovalPolicy,
   Duration,
   Stack,
+  Tags,
 } from "aws-cdk-lib";
 
 import { globSync } from "glob";
@@ -50,11 +52,7 @@ export class EKSClustersConstruct extends Construct {
     return this._props;
   }
 
-  constructor(
-    scope: Construct,
-    private _id: string,
-    props: EksClustersConstructProps
-  ) {
+  constructor(scope: Construct, private _id: string, props: EksClustersConstructProps) {
     super(scope, _id);
 
     this._props = props;
@@ -149,6 +147,20 @@ export class EKSClustersConstruct extends Construct {
       private: isPrivateCluster,
     } = clusterMetadata;
 
+    // Read the enx-max-pod.txt and generate a hash table of instance limits
+    // https://github.com/awslabs/amazon-eks-ami/blob/main/templates/shared/runtime/eni-max-pods.txt
+    const enxMaxPods = fs
+      .readFileSync(path.join(__dirname, "scripts/eni-max-pods.txt"), {
+        encoding: "utf-8",
+      })
+      .split("\n")
+      .filter(line => !line.startsWith("#"))
+      .map(line => line.split(" "))
+      .reduce((acc, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      }, {} as { [key: string]: string });
+
     const vpc = ec2.Vpc.fromLookup(this, `VPC-${clusterName}`, {
       vpcId: vpcData.id,
     });
@@ -186,14 +198,15 @@ export class EKSClustersConstruct extends Construct {
     });
 
     const blueprintsAddons: blueprints.ClusterAddOn[] = [
-      // new blueprints.addons.SSMAgentAddOn(),
       new blueprints.addons.VpcCniAddOn({
         eniConfigLabelDef: "topology.kubernetes.io/zone",
         serviceAccountPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKS_CNI_Policy")],
         enablePodEni: true,
         enableNetworkPolicy: true,
-        warmIpTarget: 256,
-        minimumIpTarget: 110,
+        warmIpTarget: 2,
+        minimumIpTarget: 20,
+        awsVpcK8sCniLogFile: "stderr",
+        awsVpcK8sPluginLogFile: "stderr",
       }),
       new blueprints.addons.CoreDnsAddOn(),
       new blueprints.addons.KubeProxyAddOn(),
@@ -249,13 +262,6 @@ export class EKSClustersConstruct extends Construct {
           console.info(`[${clusterName}/${nodeGroupName}] - Node Image: ${nodeWorkerImage.getImage(this).imageId}`);
         else console.info(`[${clusterName}/${nodeGroupName}] - Node Image: DEFAULT`);
 
-        // const multipartUserData = new ec2.MultipartUserData()
-
-        // const setupUserData = ec2.UserData.forLinux();
-        // setupUserData.addCommands(`/etc/eks/bootstrap.sh ${clusterName}`);
-
-        // multipartUserData.addUserDataPart(setupUserData, ec2.UserData.)
-
         const blockDevices = [
           {
             deviceName: storage?.rootDeviceName ?? "/dev/xvda",
@@ -268,15 +274,33 @@ export class EKSClustersConstruct extends Construct {
         ];
 
         const eksLaunchTemplate = blueprints.getResource(({ scope }) => {
+          const userData = ec2.UserData.forLinux();
+
+          const maxPodsLimit = enxMaxPods[instanceType] ?? "15";
+
+          let rawUserData = fs.readFileSync(path.join(__dirname, "scripts/worker-node-userdata.sh"), {
+            encoding: "utf-8",
+          });
+
+          rawUserData = rawUserData.replace("{{clusterName}}", clusterName);
+          rawUserData = rawUserData.replace("{{MAX_PODS}}", maxPodsLimit);
+
+          userData.addCommands(...rawUserData.split("\n").filter(line => line.length != 0));
+
+          const keyPairName = (this.node.scope?.node.tryFindChild(this.props.keyPair.node.id) as ec2.IKeyPair)
+            .keyPairName;
+
+          const keyPair = ec2.KeyPair.fromKeyPairName(scope, `${scope.node.id}-keypair`, keyPairName);
+
           const template = new ec2.LaunchTemplate(scope, `${clusterName}-lt-${nodeGroupName}`, {
             machineImage: nodeWorkerImage,
-            // userData: multipartUserData,
+            userData,
             launchTemplateName: `${clusterName}-lt-${nodeGroupName}`,
             httpTokens: ec2.LaunchTemplateHttpTokens.REQUIRED,
             httpPutResponseHopLimit: 2,
             ebsOptimized: true,
             blockDevices,
-            keyPair: this.props.keyPair,
+            keyPair,
           });
 
           return template;
@@ -325,11 +349,15 @@ export class EKSClustersConstruct extends Construct {
     );
 
     const clusterMasterRole = blueprints.getResource(({ scope }) => {
-      return new iam.Role(scope, `${scope.node.id}-admin-role`, {
-        roleName: `${scope.node.id}-cluster-admin-role`,
-        description: `[${clusterName}] - Role for EKS cluster admin`,
+      const role = new iam.Role(scope, `${scope.node.id}-admin-role`, {
+        roleName: `ClusterAdminRole-${clusterName}`,
+        description: `Admin Role for Cluster: ${clusterName}`,
         assumedBy: new iam.AccountRootPrincipal(),
       });
+
+      Tags.of(role).add("eks:cluster-name", clusterName);
+
+      return role;
     });
 
     const clusterProvider = new blueprints.GenericClusterProvider({

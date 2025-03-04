@@ -45,10 +45,11 @@ export class SharedServicesStack extends Stack {
       type: ec2.KeyPairType.RSA,
     });
 
-    // Output of the common ec2 keypair parameter name in Parameter Store
+    // Output of the common ec2 key pair parameter name in Parameter Store
     new CfnOutput(this, "common-ec2-key-pair-parameter-name", {
       value: keyPair.privateKey.parameterName,
     });
+
     return keyPair;
   }
 

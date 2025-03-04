@@ -11,6 +11,7 @@ hostedZones: &hostedZones
 
 clusters:
   - name: SharedServices
+    version: "1.30"
     vpc:
       id: *vpcId
       subnets:
@@ -20,6 +21,8 @@ clusters:
     nodeGroups:
       - name: general
         instanceType: t3a.xlarge
+        ami: &ami
+          name: amazon-eks-node-1.30-*
         storage: &storage
           rootDeviceName: /dev/xvda
           sizeInGB: 20
