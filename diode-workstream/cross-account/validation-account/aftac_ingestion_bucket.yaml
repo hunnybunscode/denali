@@ -4,6 +4,7 @@ Metadata:
       - Label:
           default: General
         Parameters:
+          - IamPrefix
           - ResourceSuffix
 
       - Label:
@@ -11,15 +12,16 @@ Metadata:
         Parameters:
           - IngestBucketMappingId
           - IngestBucketDestinationBucket
+
           - IngestBucketDataOwner
           - IngestBucketDataSteward
           - IngestBucketGovPoc
           - IngestBucketKeyOwner
 
       - Label:
-          default: (OPTIONAL) Bucket Policy
+          default: (OPTIONAL) Bucket Policy Configuration
         Parameters:
-          - AllowedRoleArn
+          - AllowedExternalRoleArn
 
       - Label:
           default: (OPTIONAL) SFTP
@@ -33,6 +35,8 @@ Metadata:
           - ObjectExpirationInDays
 
     ParameterLabels:
+      IamPrefix:
+        default: IAM Prefix
       ResourceSuffix:
         default: Resource Suffix
       IngestBucketMappingId:
@@ -47,8 +51,8 @@ Metadata:
         default: GOV POC
       IngestBucketKeyOwner:
         default: Key Owner
-      AllowedRoleArn:
-        default: Allowed Role ARN
+      AllowedExternalRoleArn:
+        default: Allowed Role ARN from Customer Account
       SftpUserName:
         default: SFTP User Name
       SshPublicKeys:
@@ -57,6 +61,13 @@ Metadata:
         default: Object Expiration In Days
 
 Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
   ResourceSuffix:
     Type: String
     Description: >-
@@ -102,9 +113,9 @@ Parameters:
     AllowedPattern: (?!.*/).+
     ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
-  AllowedRoleArn:
+  AllowedExternalRoleArn:
     Type: String
-    Description: (Optional) ARN of the role that is allowed to write to the ingestion bucket
+    Description: (Optional) ARN of the role that is allowed to put objects into the ingestion bucket
     AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/\S+
     ConstraintDescription: Must start with 'arn:' and be composed of lowercase letters, numbers, and hyphens; it cannot exceed 1024 characters.
 
@@ -126,7 +137,7 @@ Parameters:
   ObjectExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
-    Default: 365
+    Default: 30
 
 Rules:
   MappingIdOnly:
@@ -145,7 +156,7 @@ Conditions:
   SshPublicKeyProvided: !Not [!Equals [!Join ["", !Ref SshPublicKeys], ""]]
   UseMappingId: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
   UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
-  UseAllowedRoleArn: !Not [!Equals [!Ref AllowedRoleArn, ""]]
+  UseAllowedExternalRoleArn: !Not [!Equals [!Ref AllowedExternalRoleArn, ""]]
 
 Resources:
   IngestBucket:
@@ -157,14 +168,14 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref SSES3KmsKey
+            BucketKeyEnabled: true
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
@@ -172,11 +183,14 @@ Resources:
               Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
       LifecycleConfiguration:
         Rules:
-          - Id: LifeCycleRule-1
+          - Id: ExpireObjectsLifecycleRule
             Status: Enabled
             ExpirationInDays: !Ref ObjectExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
       Tags:
         - !If
           - UseMappingId
@@ -204,7 +218,8 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Effect: Deny
+          - Sid: Restrict to TLS requests only
+            Effect: Deny
             Principal:
               AWS: "*"
             Action: s3:*
@@ -214,13 +229,79 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+          - Sid: Deny a presigned URL request if the signature is more than 5 minutes old
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: s3:*
+            Resource: !Sub ${IngestBucket.Arn}/*
+            Condition:
+              NumericGreaterThan:
+                s3:signatureAge: 300000 # in milliseconds
           - !If
-            - UseAllowedRoleArn
-            - Effect: Allow
+            - UseAllowedExternalRoleArn
+            - Sid: Allow customer role to put objects
+              Effect: Allow
               Principal:
-                AWS: !Ref AllowedRoleArn
+                AWS: !Ref AllowedExternalRoleArn
               Action: s3:PutObject
               Resource: !Sub ${IngestBucket.Arn}/*
+            - !Ref AWS::NoValue
+
+  SSES3KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for an ingestion bucket
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: kms-key-policy
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            # Allow all but cryptographic operations via IAM policies
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow presigned URL generator role to encrypt
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
+            Action: kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: Allow EC2 Scanner role to decrypt
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-Ec2ScannerRole-${ResourceSuffix}
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - !If
+            - UseAllowedExternalRoleArn
+            - Sid: Allow customer role to encrypt
+              Effect: Allow
+              Principal:
+                AWS: !Ref AllowedExternalRoleArn
+              Action: kms:GenerateDataKey
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
             - !Ref AWS::NoValue
 
   TransferUser:
@@ -241,3 +322,14 @@ Resources:
         - SshPublicKeyProvided
         - !Ref SshPublicKeys
         - []
+
+Outputs:
+  IngestBucketName:
+    Description: Name of the ingestion bucket
+    Value: !Ref IngestBucket
+  SSES3KmsKeyId:
+    Description: ID of the KMS key for the ingestion bucket
+    Value: !Ref SSES3KmsKey
+  SSES3KmsKeyArn:
+    Description: ARN of the KMS key for the ingestion bucket
+    Value: !GetAtt SSES3KmsKey.Arn

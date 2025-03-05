@@ -82,54 +82,6 @@ Resources:
                   StringEquals:
                     s3:ResourceAccount: !Ref AWS::AccountId
 
-  PresignedUrlGeneratorRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: PresignedUrlGeneratorRolePolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
-              - Effect: Deny
-                Action:
-                  - ec2:CreateNetworkInterface
-                  - ec2:DeleteNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DescribeSubnets
-                  - ec2:DetachNetworkInterface
-                  - ec2:AssignPrivateIpAddresses
-                  - ec2:UnassignPrivateIpAddresses
-                Resource: "*"
-                Condition:
-                  ArnEquals:
-                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
-              - Effect: Allow
-                Action: s3:PutObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-                Condition:
-                  StringEquals:
-                    s3:ResourceAccount: !Ref AWS::AccountId
-
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -369,7 +321,10 @@ Resources:
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
-          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          config = Config(
+              retries={"max_attempts": 5, "mode": "standard"},
+              signature_version="s3v4",
+          )
           S3_CLIENT = boto3.client("s3", config=config)
 
 
@@ -378,11 +333,25 @@ Resources:
 
               bucket = event["queryStringParameters"]["bucket"]
               key = event["queryStringParameters"]["key"]
+              kms_key_id = event["queryStringParameters"]["kms_key_id"]
 
               logger.info(f"Bucket: {bucket}")
               logger.info(f"Key: {key}")
+              logger.info(f"KMS Key ID: {kms_key_id}")
 
-              response = S3_CLIENT.generate_presigned_post(Bucket=bucket, Key=key)
+              # Default encryption is the AWS-managed KMS key
+              fields = {"x-amz-server-side-encryption": "aws:kms"}
+              # If a CMK was specified, the customer-managed KMS key will be used
+              if kms_key_id:
+                  fields |= {"x-amz-server-side-encryption-aws-kms-key-id": kms_key_id}
+
+              params = dict(
+                  Bucket=bucket,
+                  Key=key,
+                  Fields=fields,
+                  Conditions=[{k: v} for k, v in fields.items()],
+              )
+              response = S3_CLIENT.generate_presigned_post(**params)
 
               logger.info(f"Response Body: {response}")
 
@@ -393,6 +362,55 @@ Resources:
               }
 
               return response
+
+  PresignedUrlGeneratorRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      # Note that there is a dependency on this name
+      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: PresignedUrlGeneratorRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
 
   FileUploader:
     Type: AWS::ApiGateway::RestApi
