@@ -2,123 +2,42 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Description: Creates an EC2 Image Builder image pipeline
 
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: General
-        Parameters:
-          - IamPrefix
-          - PermissionsBoundaryPolicyArn
-          - ResourceSuffix
-          - AvScanMode
-          - ProxyServerAddress
-          - TemplateBucketName
-          - EmailEndPoint
-
-      - Label:
-          default: Image Builder
-        Parameters:
-          - SemVer
-          - ParentImage
-          - SourceAccountId
-          - ImageNamePattern
-          - RequiredImageDescriptionPattern
-          - ImageCheckFrequency
-          - LaunchTemplateId
-          - VpcId
-          - SubnetId
-          - OutboundCidrIp
-
-    ParameterLabels:
-      IamPrefix:
-        default: IAM Resource Prefix
-      PermissionsBoundaryPolicyArn:
-        default: Permissions Boundary Policy ARN
-      ResourceSuffix:
-        default: Resource Suffix
-      AvScanMode:
-        default: Anti-Virus Scan Mode
-      ProxyServerAddress:
-        default: Proxy Server Address
-      EmailEndPoint:
-        default: Email Notification
-      SemVer:
-        default: Semantic Version
-      ParentImage:
-        default: Parent Image
-      ImageNamePattern:
-        default: Image Name Pattern
-      RequiredImageDescriptionPattern:
-        default: Required Image Description Pattern
-      ImageCheckFrequency:
-        default: Image Check Frequency
-      LaunchTemplateId:
-        default: Launch Template ID
-      VpcId:
-        default: VPC ID
-      SubnetId:
-        default: Subnet ID
-      OutboundCidrIp:
-        default: Outbound CIDR
-      SourceAccountId:
-        default: Source Account ID
-      TemplateBucketName:
-        default: Template Bucket Name
-
 Parameters:
   IamPrefix:
     Type: String
     Description: Required prefix for IAM resources
-    Default: AFC2S
-    AllowedValues: [AFC2S]
-    ConstraintDescription: Must be "AFC2S"
 
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
-    ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
     Type: String
     Description: >-
       Suffix added to the named AWS resources. It must start with a lowercase letter and contain
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
-    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
-    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
   AvScanMode:
     Type: String
     Description: Select "Test" to simulate anti-virus scanning; otherwise, select "Live"
-    Default: Live
-    AllowedValues: [Test, Live]
-    ConstraintDescription: Must be either "Test" or "Live"
 
   ProxyServerAddress:
     Type: String
     Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128
-    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
-    ConstraintDescription: Must be a valid http or IP address, without the port number
 
   EmailEndPoint:
     Type: String
     Description: "The email address at which to receive notifications for ImageBuilder events"
-    AllowedPattern: ^$|^\S+@\S+\.+\S+$
-    ConstraintDescription: Must be left blank or a valid email address
 
   SemVer:
     Type: String
     Description: >
       Semantic version of the Diode Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
       The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
-    Default: "1.0.0"
 
   ParentImage:
     Type: String
     Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
-    AllowedPattern: ^(arn:(aws|aws-us-gov):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be a valid Image ARN or AMI ID
 
   ImageNamePattern:
     Type: String
@@ -126,9 +45,6 @@ Parameters:
       The base image name pattern for image builder output images.
       This pattern is used to identify the correct source AMI.
       The pattern must exactly match part of the AMI name.
-    Default: "V12E_RHEL8_Agents_Gold"
-    AllowedPattern: "^[a-zA-Z0-9_-]+$"
-    ConstraintDescription: "Pattern must contain only alphanumeric characters, underscores, and hyphens"
 
   RequiredImageDescriptionPattern:
     Type: CommaDelimitedList
@@ -136,49 +52,32 @@ Parameters:
       Comma-separated list of required patterns that must be present in the image description.
       These patterns are used to identify the correct source AMI that contains specific
       software components (e.g., ClamAV, Nessus).
-    Default: Yum,ClamAV,Nessus
-    ConstraintDescription: "Must be a comma-separated list of patterns"
 
   ImageCheckFrequency:
     Type: String
     Description: >-
       The frequency to run the check for new base image shared from source account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
       You can leave this blank if you want to manually check for new AMIs.
-    Default: rate(1 day)
-    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
-    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
 
-  # This could be imported in later
   LaunchTemplateId:
     Type: String
     Description: The ID of the launch template to be used to launch EC2 instances.
-    AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be a valid launch template ID
 
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC ID
-    AllowedPattern: \S+
-    ConstraintDescription: Must select a VPC
 
   SubnetId:
     Type: AWS::EC2::Subnet::Id
     Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
-    AllowedPattern: \S+
-    ConstraintDescription: Must select a subnet
 
   OutboundCidrIp:
     Type: String
     Description: Outbound CIDR block for ImageBuilder instances
-    Default: 0.0.0.0/0
-    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
-    ConstraintDescription: Must be a valid CIDR block
 
   SourceAccountId:
     Type: String
     Description: AWS Account ID that owns the Parent Image (AMI)
-    AllowedPattern: ^\d{12}$
-    ConstraintDescription: Must be a valid 12-digit AWS account ID
 
   TemplateBucketName:
     Type: String
