@@ -303,6 +303,9 @@ Resources:
                 StringEquals:
                   kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
             - !Ref AWS::NoValue
+      Tags:
+        - Key: CreatedByCloudFormationStack
+          Value: !Ref AWS::StackName
 
   TransferUser:
     Type: AWS::Transfer::User

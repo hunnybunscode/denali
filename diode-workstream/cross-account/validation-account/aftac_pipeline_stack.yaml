@@ -63,10 +63,6 @@ Parameters:
     Type: Number
     Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
 
-  LongTermStorageBucketExpirationInDays:
-    Type: Number
-    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
-
   InvalidFilesBucketExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket.
@@ -411,53 +407,6 @@ Resources:
                   ExpectedBucketOwner=ACCOUNT_ID,
               )
               logger.info("Successfully deleted the object")
-
-  LongTermStorageBucket:
-    Type: AWS::S3::Bucket
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
-    Properties:
-      LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          - Id: LifeCycleRule-1
-            Status: Enabled
-            Transitions:
-              - TransitionInDays: !Ref TranstionToGlacierIR
-                StorageClass: GLACIER_IR
-              - TransitionInDays: !Ref TransitionToDeepArchive
-                StorageClass: DEEP_ARCHIVE
-            ExpirationInDays: !Ref LongTermStorageBucketExpirationInDays
-            NoncurrentVersionExpiration:
-              NoncurrentDays: 1
-
-  LongTermStorageBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref LongTermStorageBucket
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Deny
-            Principal:
-              AWS: "*"
-            Action: s3:*
-            Resource:
-              - !Sub ${LongTermStorageBucket.Arn}
-              - !Sub ${LongTermStorageBucket.Arn}/*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
 
   QuarantineBucket:
     Type: AWS::S3::Bucket
@@ -1150,14 +1099,6 @@ Resources:
       Description: Name of the Bucket where files which are deemed to potentially contain malware are stored
       Type: String
       Value: !Ref QuarantineBucket
-
-  LongTermStorageBucketNameParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /pipeline/LongTermStorageBucketName-${ResourceSuffix}
-      Description: Name of the Archive Bucket
-      Type: String
-      Value: !Ref LongTermStorageBucket
 
   QuarantineTopicARNParameter:
     Type: AWS::SSM::Parameter
