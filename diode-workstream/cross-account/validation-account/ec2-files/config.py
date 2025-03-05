@@ -28,7 +28,6 @@ ssm_params = {
     f"/pipeline/AvScanQueueUrl-{resource_suffix}": "",
     f"/pipeline/QuarantineBucketName-{resource_suffix}": "",
     f"/pipeline/DataTransferIngestBucketName-{resource_suffix}": "",
-    f"/pipeline/LongTermStorageBucketName-{resource_suffix}": "",
     f"/pipeline/QuarantineTopicArn-{resource_suffix}": "",
     f"/pipeline/ApprovedFileTypes-{resource_suffix}": "",
     f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}": "",

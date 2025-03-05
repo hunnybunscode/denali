@@ -73,12 +73,6 @@ def _process_clean_file(bucket: str, key: str, exit_status: int, receipt_handle:
     )
     copy_object(bucket, data_transfer_bucket, key)
 
-    lts_bucket = ssm_params[f"/pipeline/LongTermStorageBucketName-{resource_suffix}"]
-    logger.info(
-        f"Copying {key} file to Long-term Storage bucket: {lts_bucket}",
-    )
-    copy_object(bucket, lts_bucket, key)
-
     # Delete it from the ingestion bucket
     delete_object(bucket, key)
 
