@@ -127,20 +127,15 @@ def get_presigned_post_url(method: str, request, params: dict):
 
 
 def upload_file(presigned_url: dict, file_path: str, params: dict):
-    headers = {"x-amz-server-side-encryption": "aws:kms"}
-    kms_key_id = params["kms_key_id"]
-    headers |= (
-        {"x-amz-server-side-encryption-aws-kms-key-id": kms_key_id}
-        if kms_key_id
-        else {}
-    )
-
     with open(file_path, "rb") as f:
         files = {"file": (file_path, f)}
         response = requests.post(  # nosemgrep use-raise-for-status
             presigned_url["url"],
             data=presigned_url["fields"],
-            headers=headers,
+            headers={
+                "x-amz-server-side-encryption": "aws:kms",
+                "x-amz-server-side-encryption-aws-kms-key-id": params["kms_key_id"],
+            },
             files=files,
             timeout=300,  # Adjust this as necessary
         )
@@ -168,14 +163,23 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--bucket",
+        required=True,
         type=str,
         help="Specify the name of a bucket to which you want to upload a file",
     )
 
     parser.add_argument(
         "--filepath",
+        required=True,
         type=str,
         help="Specify the path of a file to upload",
+    )
+
+    parser.add_argument(
+        "--kms-key-id",
+        required=True,
+        type=str,
+        help="Specify the customer-managed KMS key ID to encrypt the file with",  # noqa: E501
     )
 
     parser.add_argument(
@@ -183,16 +187,6 @@ if __name__ == "__main__":
         type=str,
         default="",
         help="(Optional) Specify the prefix to append to the file. Defaults to an empty string",  # noqa: E501
-    )
-
-    parser.add_argument(
-        "--kms-key-id",
-        type=str,
-        default="",
-        help=(
-            "(Optional) Specify the customer-managed KMS key ID to encrypt the file with. Defaults to an empty string. "  # noqa: E501
-            "If not specified, the file will be encrypted with the AWS-managed KMS key"
-        ),
     )
 
     args = parser.parse_args()

@@ -220,8 +220,7 @@ Resources:
         Statement:
           - Sid: Restrict to TLS requests only
             Effect: Deny
-            Principal:
-              AWS: "*"
+            Principal: "*"
             Action: s3:*
             Resource:
               - !Sub ${IngestBucket.Arn}
@@ -231,13 +230,20 @@ Resources:
                 aws:SecureTransport: false
           - Sid: Deny a presigned URL request if the signature is more than 5 minutes old
             Effect: Deny
-            Principal:
-              AWS: "*"
+            Principal: "*"
             Action: s3:*
             Resource: !Sub ${IngestBucket.Arn}/*
             Condition:
               NumericGreaterThan:
                 s3:signatureAge: 300000 # in milliseconds
+          - Sid: Require use of KMS key for encryption
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub ${IngestBucket.Arn}/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt SSES3KmsKey.Arn
           - !If
             - UseAllowedExternalRoleArn
             - Sid: Allow customer role to put objects
