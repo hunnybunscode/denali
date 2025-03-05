@@ -57,12 +57,19 @@ INVOKE_URL = os.getenv("INVOKE_URL")
 ###################################################################################
 
 
-def main(bucket_name: str, key_name: str, prefix: str, filepath: str, credentials):
+def main(
+    bucket_name: str,
+    key_name: str,
+    kms_key_id: str,
+    prefix: str,
+    filepath: str,
+    credentials,
+):
     method = "POST"
     service = "execute-api"
 
     validate_invoke_url()
-    params = dict(bucket=bucket_name, key=prefix + key_name)
+    params = dict(bucket=bucket_name, key=prefix + key_name, kms_key_id=kms_key_id)
     request = AWSRequest(method, INVOKE_URL, params=params)
     SigV4Auth(credentials, service, REGION).add_auth(request)
     presigned_url = get_presigned_post_url(method, request, params)
@@ -120,11 +127,20 @@ def get_presigned_post_url(method: str, request, params: dict):
 
 
 def upload_file(presigned_url: dict, file_path: str, params: dict):
+    headers = {"x-amz-server-side-encryption": "aws:kms"}
+    kms_key_id = params["kms_key_id"]
+    headers |= (
+        {"x-amz-server-side-encryption-aws-kms-key-id": kms_key_id}
+        if kms_key_id
+        else {}
+    )
+
     with open(file_path, "rb") as f:
         files = {"file": (file_path, f)}
         response = requests.post(  # nosemgrep use-raise-for-status
             presigned_url["url"],
             data=presigned_url["fields"],
+            headers=headers,
             files=files,
             timeout=300,  # Adjust this as necessary
         )
@@ -169,6 +185,16 @@ if __name__ == "__main__":
         help="(Optional) Specify the prefix to append to the file. Defaults to an empty string",  # noqa: E501
     )
 
+    parser.add_argument(
+        "--kms-key-id",
+        type=str,
+        default="",
+        help=(
+            "(Optional) Specify the customer-managed KMS key ID to encrypt the file with. Defaults to an empty string. "  # noqa: E501
+            "If not specified, the file will be encrypted with the AWS-managed KMS key"
+        ),
+    )
+
     args = parser.parse_args()
 
     path = Path(args.filepath)
@@ -186,6 +212,7 @@ if __name__ == "__main__":
     main(
         bucket_name=args.bucket,
         key_name=path.name,
+        kms_key_id=args.kms_key_id,
         prefix=prefix,
         filepath=filepath,
         credentials=credentials,

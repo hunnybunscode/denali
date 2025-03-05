@@ -91,6 +91,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
+      # Note that there is a dependency on this name
       RoleName: !Sub ${IamPrefix}-Ec2ScannerRole-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       Description: Role to be assumed by EC2 Anti-Virus Scanner instances
