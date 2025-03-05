@@ -10,7 +10,7 @@ import {
 import { Construct } from "constructs";
 import { EksBlueprint } from "@aws-quickstart/eks-blueprints";
 import { EKSClustersConstruct } from "./EKSClustersConstruct";
-import EKSUpdateNodeGroupVersionConstruct from "./EKSUpdateNodeGroupVersionConstruct";
+import EKSUpdateNodeGroupVersion from "./EKSUpdateNodeGroupVersion";
 
 export interface SharedServicesStackProps extends StackProps, Document {}
 
@@ -33,9 +33,9 @@ export class SharedServicesStack extends Stack {
       },
     });
 
-    new EKSUpdateNodeGroupVersionConstruct(this, "EKSUpdateNodeGroupVersion", {
-      stacks: Object.values(clustersBuilderConstruct.ClusterStacks) as EksBlueprint[],
-    });
+    // new EKSUpdateNodeGroupVersion(this, {
+    //   stacks: Object.values(clustersBuilderConstruct.ClusterStacks) as EksBlueprint[],
+    // });
   }
   private createCommonKeyPair() {
     // Create a common ec2 key pair for SSH access for SSM

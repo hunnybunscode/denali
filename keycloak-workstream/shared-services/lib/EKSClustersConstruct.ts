@@ -290,11 +290,11 @@ export class EKSClustersConstruct extends Construct {
           const keyPairName = (this.node.scope?.node.tryFindChild(this.props.keyPair.node.id) as ec2.IKeyPair)
             .keyPairName;
 
-          const keyPair = ec2.KeyPair.fromKeyPairName(scope, `${scope.node.id}-keypair`, keyPairName);
+          const keyPair = ec2.KeyPair.fromKeyPairName(scope, `${scope.node.id}-${nodeGroupName}-keypair`, keyPairName);
 
           const template = new ec2.LaunchTemplate(scope, `${clusterName}-lt-${nodeGroupName}`, {
             machineImage: nodeWorkerImage,
-            userData,
+            userData: nodeWorkerImage ? userData : undefined,
             launchTemplateName: `${clusterName}-lt-${nodeGroupName}`,
             httpTokens: ec2.LaunchTemplateHttpTokens.REQUIRED,
             httpPutResponseHopLimit: 2,

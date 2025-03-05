@@ -30,7 +30,7 @@ It is possible to disable mTLS requirements if you don't want to support direct 
   * `kubernetes.io/role/elb`
 * All private subnets for internal load balancers. Value can be 1 or Empty Value
   * `kubernetes.io/role/internal-elb`
-* For **Pods** deployment subnets. Value can be 1 or Empty Value
+* To specify **pods** deployment subnets using [vpc-cni subnet discovery](https://github.com/aws/amazon-vpc-cni-k8s?tab=readme-ov-file#enable_subnet_discovery-v1180). Value can be 1 or Empty Value
   * `kubernetes.io/role/cni`
 
 ## Notes on Update the Configuration

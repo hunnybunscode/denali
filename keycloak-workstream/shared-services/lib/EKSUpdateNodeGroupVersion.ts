@@ -14,14 +14,12 @@ import {
 import { EksBlueprint } from "@aws-quickstart/eks-blueprints";
 import { NagSuppressions } from "cdk-nag";
 
-export interface EKSUpdateNodeGroupVersionConstructProps {
+export interface EKSUpdateNodeGroupVersionProps {
   stacks: EksBlueprint[];
 }
 
-export default class EKSUpdateNodeGroupVersionConstruct extends Construct {
-  constructor(scope: Construct, id: string, props: EKSUpdateNodeGroupVersionConstructProps) {
-    super(scope, id);
-
+export default class EKSUpdateNodeGroupVersion {
+  constructor(private scope: Construct, props: EKSUpdateNodeGroupVersionProps) {
     this.createUpdateClusterFunction();
     this.createUpdateClusterTriggerFunction(props.stacks);
   }
@@ -30,7 +28,7 @@ export default class EKSUpdateNodeGroupVersionConstruct extends Construct {
     clusterStackBuilders.forEach(builder => {
       const { cluster } = builder.getClusterInfo();
 
-      const outputUpdateClusterFunctionArn = this.node.findChild("UpdateClusterFunctionArn") as CfnOutput;
+      const outputUpdateClusterFunctionArn = this.scope.node.findChild("UpdateClusterFunctionArn") as CfnOutput;
 
       const eventHandler: cr.AwsSdkCall = {
         service: "Lambda",
@@ -68,14 +66,14 @@ export default class EKSUpdateNodeGroupVersionConstruct extends Construct {
   }
 
   private createUpdateClusterFunction() {
-    const updateClusterFunctionLogGroup = new logs.LogGroup(this, "UpdateClusterFunctionLogGroup", {
+    const updateClusterFunctionLogGroup = new logs.LogGroup(this.scope, "UpdateClusterFunctionLogGroup", {
       logGroupName: `/aws/lambda/UpdateClusterFunction`,
       logGroupClass: logs.LogGroupClass.INFREQUENT_ACCESS,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const updateClusterFunctionRole = new iam.Role(this, "UpdateClusterFunctionRole", {
+    const updateClusterFunctionRole = new iam.Role(this.scope, "UpdateClusterFunctionRole", {
       roleName: "UpdateClusterFunctionRole",
       description: "Role for the UpdateClusterFunction",
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -103,7 +101,7 @@ export default class EKSUpdateNodeGroupVersionConstruct extends Construct {
     });
 
     const updateClusterFunctionUUID: string = "f56f0b66-b3fd-4a38-a397-a4d79835544e";
-    const updateClusterFunction = new lambda.SingletonFunction(this, "UpdateClusterFunction", {
+    const updateClusterFunction = new lambda.SingletonFunction(this.scope, "UpdateClusterFunction", {
       uuid: updateClusterFunctionUUID,
       code: new lambda.InlineCode(
         fs.readFileSync(path.join(__dirname, "lambda/python/set-cluster-nodegroups-version/index.py"), {
@@ -121,7 +119,7 @@ export default class EKSUpdateNodeGroupVersionConstruct extends Construct {
       description: "Update Cluster Managed Node Groups Version to the latest launch template version",
     });
 
-    new CfnOutput(this, "UpdateClusterFunctionArn", {
+    new CfnOutput(this.scope, "UpdateClusterFunctionArn", {
       exportName: "UpdateClusterFunctionArn",
       value: updateClusterFunction.functionArn,
     });
