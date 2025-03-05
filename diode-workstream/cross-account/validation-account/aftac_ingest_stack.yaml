@@ -339,11 +339,10 @@ Resources:
               logger.info(f"Key: {key}")
               logger.info(f"KMS Key ID: {kms_key_id}")
 
-              # Default encryption is the AWS-managed KMS key
-              fields = {"x-amz-server-side-encryption": "aws:kms"}
-              # If a CMK was specified, the customer-managed KMS key will be used
-              if kms_key_id:
-                  fields |= {"x-amz-server-side-encryption-aws-kms-key-id": kms_key_id}
+              fields = {
+                  "x-amz-server-side-encryption": "aws:kms",
+                  "x-amz-server-side-encryption-aws-kms-key-id": kms_key_id,
+              }
 
               params = dict(
                   Bucket=bucket,

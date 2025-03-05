@@ -424,6 +424,11 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   QuarantineBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -471,6 +476,9 @@ Resources:
             ExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   InvalidFilesBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -518,6 +526,9 @@ Resources:
             ExpirationInDays: !Ref FailedTransferBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   FailedTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -570,6 +581,9 @@ Resources:
             ExpirationInDays: !Ref DataTransferBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
