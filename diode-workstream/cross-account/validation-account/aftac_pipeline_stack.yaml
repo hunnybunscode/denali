@@ -428,8 +428,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -477,8 +475,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
 
   QuarantineBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -514,8 +510,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -563,8 +557,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -617,8 +609,6 @@ Resources:
         QueueConfigurations:
           - Event: s3:ObjectCreated:*
             Queue: !GetAtt TransferQueue.Arn
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
