@@ -48,7 +48,6 @@ Metadata:
           - ImageNamePattern
           - RequiredImageDescriptionPattern
           - ImageCheckFrequency
-          - LaunchTemplateId
           - SubnetId
           - OutboundCidrIp
           - SourceAccountId
@@ -112,8 +111,6 @@ Metadata:
         default: Image Builder Golden Image Description Pattern
       ImageCheckFrequency:
         default: Image Builder Golden Image Check Frequency
-      LaunchTemplateId:
-        default: Image Builder Launch Template ID
       SubnetId:
         default: Image Builder Subnet ID
       OutboundCidrIp:
@@ -281,12 +278,6 @@ Parameters:
     AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
     ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
 
-  LaunchTemplateId:
-    Type: String
-    Description: The ID of the launch template to be used to launch EC2 instances.
-    AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be a valid launch template ID
-
   SubnetId:
     Type: AWS::EC2::Subnet::Id
     Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
@@ -429,7 +420,7 @@ Resources:
         RequiredImageDescriptionPattern:
           !Join [",", !Ref RequiredImageDescriptionPattern]
         ImageCheckFrequency: !Ref ImageCheckFrequency
-        LaunchTemplateId: !Ref LaunchTemplateId
+        LaunchTemplateId: !GetAtt PipelineStack.Outputs.LaunchTemplateId
         VpcId: !Ref VpcId
         SubnetId: !Ref SubnetId
         OutboundCidrIp: !Ref OutboundCidrIp
