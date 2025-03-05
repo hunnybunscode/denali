@@ -9,6 +9,11 @@ Metadata:
           - ResourceSuffix
 
       - Label:
+          default: Templates Location
+        Parameters:
+          - TemplateBucketName
+
+      - Label:
           default: Networking
         Parameters:
           - VpcId
@@ -18,19 +23,8 @@ Metadata:
           - DDBPrefixListId
 
       - Label:
-          default: Logging Stack
-        Parameters:
-          - TemplateURLLoggingStack
-
-      - Label:
-          default: Ingest Stack
-        Parameters:
-          - TemplateURLIngestStack
-
-      - Label:
           default: Pipeline Stack
         Parameters:
-          - TemplateURLPipelineStack
           - PipelineStackDiodeAccountId
           - PipelineStackPipelineAmiId
           - PipelineStackApprovedFileTypes
@@ -40,9 +34,24 @@ Metadata:
       - Label:
           default: STFP Stack
         Parameters:
-          - TemplateURLSftpServerStack
           - SftpServerStackSftpServerSubnetIds
           - SftpServerIngressRuleCIDR
+
+      - Label:
+          default: Image Builder Stack
+        Parameters:
+          - AvScanMode
+          - ProxyServerAddress
+          - EmailEndPoint
+          - SemVer
+          - ParentImage
+          - ImageNamePattern
+          - RequiredImageDescriptionPattern
+          - ImageCheckFrequency
+          - LaunchTemplateId
+          - SubnetId
+          - OutboundCidrIp
+          - SourceAccountId
 
       - Label:
           default: Bucket LifeCycle Configuration
@@ -61,6 +70,8 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
+      TemplateBucketName:
+        default: Template Bucket Name
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -71,12 +82,6 @@ Metadata:
         default: S3 Prefix List ID
       DDBPrefixListId:
         default: DynamoDB Prefix List ID
-      TemplateURLLoggingStack:
-        default: Logging Stack Template URL
-      TemplateURLIngestStack:
-        default: Ingest Stack Template URL
-      TemplateURLPipelineStack:
-        default: Pipeline Stack Template URL
       PipelineStackDiodeSimulatorInstanceRole:
         default: Pipeline Stack Diode Simulator Instance Role
       PipelineStackPipelineAmiId:
@@ -87,12 +92,34 @@ Metadata:
         default: DFDL Approved File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
-      TemplateURLSftpServerStack:
-        default: SFTP Server Stack Template URL
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
         default: SFTP Server Stack Ingress Rule CIDR
+      AvScanMode:
+        default: Image Builder AV Scan Mode
+      ProxyServerAddress:
+        default: Image Builder Proxy Server Address
+      EmailEndPoint:
+        default: Image Builder SNS Email Endpoint
+      SemVer:
+        default: Image Builder Semantic Version
+      ParentImage:
+        default: Image Builder Parent Image
+      ImageNamePattern:
+        default: Image Builder Golden Image Name Pattern
+      RequiredImageDescriptionPattern:
+        default: Image Builder Golden Image Description Pattern
+      ImageCheckFrequency:
+        default: Image Builder Golden Image Check Frequency
+      LaunchTemplateId:
+        default: Image Builder Launch Template ID
+      SubnetId:
+        default: Image Builder Subnet ID
+      OutboundCidrIp:
+        default: Image Builder Outbound CIDR IP
+      SourceAccountId:
+        default: Image Builder Base Image Source Account ID
       TranstionToGlacierIR:
         default: Object Transition To Glacier_IR
       TransitionToDeepArchive:
@@ -128,6 +155,10 @@ Parameters:
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
+  TemplateBucketName:
+    Type: String
+    Description: Name of the S3 bucket that contains the templates
+
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC ID
@@ -151,24 +182,6 @@ Parameters:
     Description: DynamoDB Prefix List ID (e.g. pl-1b4c2f9e)
     AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid DynamoDB Prefix List ID
-
-  TemplateURLLoggingStack:
-    Type: String
-    Description: >
-      S3 URL for Logging Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml
-
-  TemplateURLIngestStack:
-    Type: String
-    Description: >
-      S3 URL for Ingest Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
-
-  TemplateURLPipelineStack:
-    Type: String
-    Description: >
-      S3 URL for Pipeline Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml
 
   PipelineStackPipelineAmiId:
     Type: AWS::EC2::Image::Id
@@ -197,12 +210,6 @@ Parameters:
     Description: A comma-separated list of file types allowed through the DFDL validation pipeline
     Default: infoset, xml
 
-  TemplateURLSftpServerStack:
-    Type: String
-    Description: >
-      S3 URL for SFTP Server Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_sftp_stack.yaml
-
   SftpServerStackSftpServerSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Two (2) Subnet IDs for SFTP server
@@ -213,6 +220,91 @@ Parameters:
     Default: 0.0.0.0/0
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
+
+  AvScanMode:
+    Type: String
+    Description: Select "Test" to simulate anti-virus scanning; otherwise, select "Live"
+    Default: Live
+    AllowedValues: [Test, Live]
+    ConstraintDescription: Must be either "Test" or "Live"
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  EmailEndPoint:
+    Type: String
+    Description: "The email address at which to receive notifications for ImageBuilder events"
+    AllowedPattern: ^$|^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be left blank or a valid email address
+
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the Diode Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+
+  ParentImage:
+    Type: String
+    Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+    AllowedPattern: ^(arn:(aws|aws-us-gov):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid Image ARN or AMI ID
+
+  ImageNamePattern:
+    Type: String
+    Description: >-
+      The base image name pattern for image builder output images.
+      This pattern is used to identify the correct source AMI.
+      The pattern must exactly match part of the AMI name.
+    Default: "V12E_RHEL8_Agents_Gold"
+    AllowedPattern: "^[a-zA-Z0-9_-]+$"
+    ConstraintDescription: "Pattern must contain only alphanumeric characters, underscores, and hyphens"
+
+  RequiredImageDescriptionPattern:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated list of required patterns that must be present in the image description.
+      These patterns are used to identify the correct source AMI that contains specific
+      software components (e.g., ClamAV, Nessus).
+    Default: Yum,ClamAV,Nessus
+    ConstraintDescription: "Must be a comma-separated list of patterns"
+
+  ImageCheckFrequency:
+    Type: String
+    Description: >-
+      The frequency to run the check for new base image shared from source account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
+      You can leave this blank if you want to manually check for new AMIs.
+    Default: rate(1 day)
+    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
+
+  LaunchTemplateId:
+    Type: String
+    Description: The ID of the launch template to be used to launch EC2 instances.
+    AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid launch template ID
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet
+
+  OutboundCidrIp:
+    Type: String
+    Description: Outbound CIDR block for ImageBuilder instances
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  SourceAccountId:
+    Type: String
+    Description: AWS Account ID that owns the Parent Image (AMI)
+    AllowedPattern: ^\d{12}$
+    ConstraintDescription: Must be a valid 12-digit AWS account ID
 
   TranstionToGlacierIR:
     Type: Number
@@ -250,7 +342,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLLoggingStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_logging_stack.yaml
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
@@ -263,7 +355,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLIngestStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_ingest_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -279,7 +371,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLPipelineStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_pipeline_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -307,7 +399,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLSftpServerStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_sftp_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -316,3 +408,30 @@ Resources:
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpServerIngressRuleCIDR: !Ref SftpServerIngressRuleCIDR
+
+  ImageBuilderStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SftpServerStack
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_image_builder_stack.yaml
+      Parameters:
+        IamPrefix: !Ref IamPrefix
+        PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
+        ResourceSuffix: !Ref ResourceSuffix
+        AvScanMode: !Ref AvScanMode
+        ProxyServerAddress: !Ref ProxyServerAddress
+        EmailEndPoint: !Ref EmailEndPoint
+        SemVer: !Ref SemVer
+        ParentImage: !Ref ParentImage
+        ImageNamePattern: !Ref ImageNamePattern
+        RequiredImageDescriptionPattern:
+          !Join [",", !Ref RequiredImageDescriptionPattern]
+        ImageCheckFrequency: !Ref ImageCheckFrequency
+        LaunchTemplateId: !Ref LaunchTemplateId
+        VpcId: !Ref VpcId
+        SubnetId: !Ref SubnetId
+        OutboundCidrIp: !Ref OutboundCidrIp
+        SourceAccountId: !Ref SourceAccountId
+        TemplateBucketName: !Ref TemplateBucketName
