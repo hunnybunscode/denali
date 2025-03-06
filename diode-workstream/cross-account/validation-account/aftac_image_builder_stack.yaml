@@ -25,7 +25,6 @@ Metadata:
           - ImageNamePattern
           - RequiredImageDescriptionPattern
           - ImageCheckFrequency
-          - LaunchTemplateId
           - VpcId
           - SubnetId
           - OutboundCidrIp
@@ -53,8 +52,6 @@ Metadata:
         default: Required Image Description Pattern
       ImageCheckFrequency:
         default: Image Check Frequency
-      LaunchTemplateId:
-        default: Launch Template ID
       VpcId:
         default: VPC ID
       SubnetId:
@@ -147,13 +144,6 @@ Parameters:
     Default: rate(1 day)
     AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
     ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
-
-  # This could be imported in later
-  LaunchTemplateId:
-    Type: String
-    Description: The ID of the launch template to be used to launch EC2 instances.
-    AllowedPattern: ^lt-([a-f0-9]{8}|[a-f0-9]{17})$
-    ConstraintDescription: Must be a valid launch template ID
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -378,7 +368,8 @@ Resources:
       Distributions:
         - LaunchTemplateConfigurations:
             - AccountId: !Ref AWS::AccountId
-              LaunchTemplateId: !Ref LaunchTemplateId # Identifies the Amazon EC2 launch template to use.
+              LaunchTemplateId:
+                Fn::ImportValue: !Sub aftac-pipeline-launch-template-name-${ResourceSuffix}
               SetDefaultVersion: true # Set the specified Amazon EC2 launch template as the default launch template for the specified account.
           # AmiDistributionConfiguration:
           #   Name: String
