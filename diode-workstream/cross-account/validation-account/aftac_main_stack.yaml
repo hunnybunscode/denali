@@ -9,6 +9,11 @@ Metadata:
           - ResourceSuffix
 
       - Label:
+          default: Templates Location
+        Parameters:
+          - TemplateBucketName
+
+      - Label:
           default: Networking
         Parameters:
           - VpcId
@@ -18,19 +23,8 @@ Metadata:
           - DDBPrefixListId
 
       - Label:
-          default: Logging Stack
-        Parameters:
-          - TemplateURLLoggingStack
-
-      - Label:
-          default: Ingest Stack
-        Parameters:
-          - TemplateURLIngestStack
-
-      - Label:
           default: Pipeline Stack
         Parameters:
-          - TemplateURLPipelineStack
           - PipelineStackDiodeAccountId
           - PipelineStackPipelineAmiId
           - PipelineStackApprovedFileTypes
@@ -40,7 +34,6 @@ Metadata:
       - Label:
           default: STFP Stack
         Parameters:
-          - TemplateURLSftpServerStack
           - SftpServerStackSftpServerSubnetIds
           - SftpServerIngressRuleCIDR
 
@@ -61,6 +54,8 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
+      TemplateBucketName:
+        default: Template Bucket Name
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -71,12 +66,6 @@ Metadata:
         default: S3 Prefix List ID
       DDBPrefixListId:
         default: DynamoDB Prefix List ID
-      TemplateURLLoggingStack:
-        default: Logging Stack Template URL
-      TemplateURLIngestStack:
-        default: Ingest Stack Template URL
-      TemplateURLPipelineStack:
-        default: Pipeline Stack Template URL
       PipelineStackDiodeSimulatorInstanceRole:
         default: Pipeline Stack Diode Simulator Instance Role
       PipelineStackPipelineAmiId:
@@ -87,8 +76,6 @@ Metadata:
         default: DFDL Approved File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
-      TemplateURLSftpServerStack:
-        default: SFTP Server Stack Template URL
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
@@ -128,6 +115,10 @@ Parameters:
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
+  TemplateBucketName:
+    Type: String
+    Description: Name of S3 bucket that contains the CloudFormation templates
+
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC ID
@@ -151,24 +142,6 @@ Parameters:
     Description: DynamoDB Prefix List ID (e.g. pl-1b4c2f9e)
     AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid DynamoDB Prefix List ID
-
-  TemplateURLLoggingStack:
-    Type: String
-    Description: >
-      S3 URL for Logging Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml
-
-  TemplateURLIngestStack:
-    Type: String
-    Description: >
-      S3 URL for Ingest Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
-
-  TemplateURLPipelineStack:
-    Type: String
-    Description: >
-      S3 URL for Pipeline Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml
 
   PipelineStackPipelineAmiId:
     Type: AWS::EC2::Image::Id
@@ -196,12 +169,6 @@ Parameters:
     Type: CommaDelimitedList
     Description: A comma-separated list of file types allowed through the DFDL validation pipeline
     Default: infoset, xml
-
-  TemplateURLSftpServerStack:
-    Type: String
-    Description: >
-      S3 URL for SFTP Server Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_sftp_stack.yaml
 
   SftpServerStackSftpServerSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
@@ -250,7 +217,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLLoggingStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_logging_stack.yaml
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
@@ -263,7 +230,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLIngestStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_ingest_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -279,7 +246,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLPipelineStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_pipeline_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -307,7 +274,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLSftpServerStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_sftp_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
