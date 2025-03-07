@@ -25,6 +25,7 @@ Metadata:
           - ImageNamePattern
           - RequiredImageDescriptionPattern
           - ImageCheckFrequency
+          - BypassGpgCheck
           - VpcId
           - SubnetId
           - OutboundCidrIp
@@ -52,6 +53,8 @@ Metadata:
         default: Required Image Description Pattern
       ImageCheckFrequency:
         default: Image Check Frequency
+      BypassGpgCheck:
+        default: Bypass GPG Check
       VpcId:
         default: VPC ID
       SubnetId:
@@ -144,6 +147,13 @@ Parameters:
     Default: rate(1 day)
     AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
     ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
+
+  BypassGpgCheck:
+    Type: String
+    Description: Select "true" to bypass GPG check for SSM Agent installation file; otherwise, select "false"
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    ConstraintDescription: Must be either "true" or "false"
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -300,11 +310,12 @@ Resources:
             export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
 
             # Install SSM Agent
+            BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
             ARCH=$(arch)
             if [ "$ARCH" = "arm64" ]; then
-                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm
+                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
             else # x86_64
-                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm
+                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
             fi
 
             ## Uncomment the below lines if an instance requires internet access
