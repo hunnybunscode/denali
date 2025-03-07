@@ -20,6 +20,7 @@ Metadata:
         Parameters:
           - DataTransferLambdaStorageBucket
           - DataTransferLambdaCodeKey
+          - DataTransferLambdaCodeKeyVersion
 
       - Label:
           default: Diode Simulator
@@ -44,6 +45,8 @@ Metadata:
         default: Data Transfer Lambda Storage Bucket
       DataTransferLambdaCodeKey:
         default: Data Transfer Lambda Code Key
+      DataTransferLambdaCodeKeyVersion:
+        default: Data Transfer Lambda Code Key Version
       UseDiodeSimulator:
         default: Use Diode Simulator
       DiodeSimulatorEndpoint:
@@ -99,6 +102,12 @@ Parameters:
     Type: String
     Description: S3 Key of the Lambda code for data transfer
     Default: data_transfer.zip
+
+  DataTransferLambdaCodeKeyVersion:
+    Type: String
+    Description: Object version of S3 key of the Lambda code for data transfer
+    AllowedPattern: ^[a-zA-Z0-9_.]{1,128}$
+    ConstraintDescription: Must be a valid object version of the Lambda code for data transfer
 
   UseDiodeSimulator:
     Type: String
@@ -210,6 +219,7 @@ Resources:
       Code:
         S3Bucket: !Ref DataTransferLambdaStorageBucket
         S3Key: !Ref DataTransferLambdaCodeKey
+        S3ObjectVersion: !Ref DataTransferLambdaCodeKeyVersion
 
   DataTransferLambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
