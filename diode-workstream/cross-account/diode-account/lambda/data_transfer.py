@@ -12,9 +12,10 @@ os.environ["AWS_DATA_PATH"] = "./models"
 QUEUE_URL = os.environ["TRANSFER_RESULT_QUEUE_URL"]
 USE_DIODE_SIMULATOR = os.environ["USE_DIODE_SIMULATOR"]
 DIODE_SIMULATOR_ENDPOINT = os.environ["DIODE_SIMULATOR_ENDPOINT"]
+AWS_REGION = os.environ["AWS_REGION"]
 
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
-diode_endpoint_url = "https://diode.us-gov-west-1.amazonaws.com"
+diode_endpoint_url = f"https://diode.{AWS_REGION}.amazonaws.com"
 if USE_DIODE_SIMULATOR == "True":
     diode_endpoint_url = DIODE_SIMULATOR_ENDPOINT
 
