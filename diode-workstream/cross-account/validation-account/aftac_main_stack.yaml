@@ -12,6 +12,7 @@ Metadata:
           default: Templates Location
         Parameters:
           - TemplateBucketName
+          - TemplatePrefix
 
       - Label:
           default: Networking
@@ -56,6 +57,8 @@ Metadata:
         default: Resource Suffix
       TemplateBucketName:
         default: Template Bucket Name
+      TemplatePrefix:
+        default: Template Prefix
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -118,6 +121,12 @@ Parameters:
   TemplateBucketName:
     Type: String
     Description: Name of S3 bucket that contains the CloudFormation templates
+
+  TemplatePrefix:
+    Type: String
+    Description: The prefix for the CloudFormation templates.
+    AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
+    ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -217,7 +226,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_logging_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_logging_stack.yaml
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
@@ -230,7 +239,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_ingest_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_ingest_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -246,7 +255,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_pipeline_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_pipeline_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -274,7 +283,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_sftp_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_sftp_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn

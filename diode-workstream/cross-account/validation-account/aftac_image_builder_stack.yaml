@@ -13,8 +13,13 @@ Metadata:
           - ResourceSuffix
           - AvScanMode
           - ProxyServerAddress
-          - TemplateBucketName
           - EmailEndPoint
+
+      - Label:
+          default: Templates Location
+        Parameters:
+          - TemplateBucketName
+          - TemplatePrefix
 
       - Label:
           default: Image Builder
@@ -62,6 +67,8 @@ Metadata:
         default: Source Account ID
       TemplateBucketName:
         default: Template Bucket Name
+      TemplatePrefix:
+        default: Template Prefix
 
 Parameters:
   IamPrefix:
@@ -172,7 +179,13 @@ Parameters:
 
   TemplateBucketName:
     Type: String
-    Description: Name of the S3 bucket containing the CloudFormation template
+    Description: Name of S3 bucket that contains the CloudFormation templates
+
+  TemplatePrefix:
+    Type: String
+    Description: The prefix for the CloudFormation templates.
+    AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
+    ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
 Resources:
   BuildComponentPrepareImage:
@@ -736,7 +749,7 @@ Resources:
           PIPELINE_ARN: !GetAtt ImageBuilderImagePipeline.Arn
           SOURCE_ACCOUNT: !Ref SourceAccountId
           STACK_NAME: !Ref AWS::StackName
-          TEMPLATE_URL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/aftac_image_builder_stack.yaml
+          TEMPLATE_URL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_image_builder_stack.yaml
           IMAGE_NAME_PATTERN: !Ref ImageNamePattern
           REQUIRED_DESCRIPTION_ITEMS:
             !Join [",", !Ref RequiredImageDescriptionPattern]
@@ -1094,7 +1107,8 @@ Resources:
       ServiceToken: !GetAtt CopyEC2RequiredFilesFunction.Arn
       SourceBucket: !Ref TemplateBucketName
       DestinationBucket: !Ref EC2RequiredFilesBucket
-      Prefix: ec2-files/
+      SourcePrefix: !Sub ${TemplatePrefix}/ec2-files/
+      DestinationPrefix: ec2-files/
 
   CopyEC2RequiredFilesFunction:
     Type: AWS::Lambda::Function
@@ -1115,12 +1129,12 @@ Resources:
 
           S3 = boto3.client('s3')
 
-          def copy_files(source_bucket, dest_bucket, prefix):
+          def copy_files(source_bucket, dest_bucket, source_prefix, dest_prefix):
               try:
                   paginator = S3.get_paginator('list_objects_v2')
                   copied_files = []
 
-                  for page in paginator.paginate(Bucket=source_bucket, Prefix=prefix):
+                  for page in paginator.paginate(Bucket=source_bucket, Prefix=source_prefix):
                       if 'Contents' in page:
                           for obj in page['Contents']:
                               source_key = obj['Key']
@@ -1129,7 +1143,12 @@ Resources:
                               if source_key.endswith('/'):
                                   continue
 
-                              # Copy with the same key (maintains prefix structure)
+                              # Calculate the relative path from source_prefix
+                              relative_path = source_key[len(source_prefix):]
+
+                              # Construct new destination key with dest_prefix
+                              dest_key = f"{dest_prefix.rstrip('/')}/{relative_path}"
+
                               copy_source = {
                                   'Bucket': source_bucket,
                                   'Key': source_key
@@ -1138,14 +1157,14 @@ Resources:
                               S3.copy_object(
                                   CopySource=copy_source,
                                   Bucket=dest_bucket,
-                                  Key=source_key
+                                  Key=dest_key
                               )
 
                               copied_files.append({
                                   'source': f"{source_bucket}/{source_key}",
-                                  'destination': f"{dest_bucket}/{source_key}"
+                                  'destination': f"{dest_bucket}/{dest_key}"
                               })
-                              logger.info(f"Copied {source_key} to {dest_bucket}/{source_key}")
+                              logger.info(f"Copied {source_key} to {dest_bucket}/{dest_key}")
 
                   return copied_files
 
@@ -1161,13 +1180,15 @@ Resources:
                   props = event['ResourceProperties']
                   source_bucket = props['SourceBucket']
                   dest_bucket = props['DestinationBucket']
-                  prefix = props['Prefix']
+                  source_prefix = props['SourcePrefix']
+                  dest_prefix = props['DestinationPrefix']
 
                   if event['RequestType'] in ['Create', 'Update']:
                       copied_files = copy_files(
                           source_bucket,
                           dest_bucket,
-                          prefix
+                          source_prefix,
+                          dest_prefix
                       )
                       logger.info(f"Files copied successfully: {copied_files}")
 
