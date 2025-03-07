@@ -32,7 +32,7 @@ Resources:
           - Sid: Allow administration of the key via IAM policies
             Effect: Allow
             Principal:
-              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+              AWS: !Ref AWS::AccountId
             NotAction:
               - kms:Encrypt
               - kms:Decrypt
@@ -43,11 +43,10 @@ Resources:
           - Sid: Allow use of the key only for AWS via IAM policies
             Effect: Allow
             Principal:
-              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+              AWS: !Ref AWS::AccountId
             Action:
               - kms:Encrypt
               - kms:Decrypt
-              - kms:DescribeKey
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
               - kms:CreateGrant

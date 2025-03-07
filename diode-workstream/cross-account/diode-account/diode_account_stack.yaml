@@ -14,6 +14,7 @@ Metadata:
           - DataTransferBucketName
           - DataTransferSqsQueueArn
           - TranferResultSqsQueueArn
+          - PipelineKmsKeyArn
 
       - Label:
           default: Data Transfer Lambda Code
@@ -41,6 +42,8 @@ Metadata:
         default: Data Transfer SQS Queue ARN
       TranferResultSqsQueueArn:
         default: Data Transfer Result SQS Queue ARN
+      PipelineKmsKeyArn:
+        default: Pipeline KMS Key ARN
       DataTransferLambdaStorageBucket:
         default: Data Transfer Lambda Storage Bucket
       DataTransferLambdaCodeKey:
@@ -91,6 +94,12 @@ Parameters:
     Description: ARN of the Data Transfer Result SQS queue in the Validation Account
     AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
     ConstraintDescription: Must be a valid ARN of the Data Transfer Result SQS queue in the Validation Account
+
+  PipelineKmsKeyArn:
+    Type: String
+    Description: ARN of the KMS key used for the data transfer pipeline
+    AllowedPattern: ^arn:(aws|aws-us-gov):kms:[a-z0-9-]+:\d{12}:key/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
+    ConstraintDescription: Must be a valid ARN of the KMS key used for the data transfer pipeline
 
   DataTransferLambdaStorageBucket:
     Type: String
@@ -161,6 +170,12 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref PipelineKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
               - Effect: Allow
                 Action:
                   - diode:CreateTransfer
