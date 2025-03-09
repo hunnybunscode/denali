@@ -1,4 +1,5 @@
 import logging
+import os
 import zipfile
 from pathlib import Path
 
@@ -14,8 +15,7 @@ from config import ssm_params
 
 logger = logging.getLogger()
 
-# TODO: Do not hard-code the region
-region = "us-gov-west-1"
+region = os.environ["region"]
 config = Config(retries={"max_attempts": 5, "mode": "standard"})
 S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)

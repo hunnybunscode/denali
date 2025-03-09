@@ -269,7 +269,7 @@ Resources:
 
                     # Enable SQS Poller Service
                     # Replaces the placeholder ("") with actual environment variables
-                    - sed -i 's/""/av_scan_mode=${AvScanMode} resource_suffix=${ResourceSuffix}/g' /usr/bin/validation-pipeline/sqs_poller.service
+                    - sed -i 's/""/av_scan_mode=${AvScanMode} resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
                     - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
                     - systemctl enable sqs_poller.service
                     - systemctl start sqs_poller.service
@@ -345,6 +345,7 @@ Resources:
             #!/bin/bash
             export av_scan_mode=${AvScanMode}
             export resource_suffix=${ResourceSuffix}
+            export region=${AWS::Region}
             EOF
             chmod 755 /etc/profile.d/set_env.sh
             /etc/profile.d/set_env.sh
