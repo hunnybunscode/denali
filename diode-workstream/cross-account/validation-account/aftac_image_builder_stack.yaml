@@ -768,127 +768,132 @@ Resources:
 
       Code:
         ZipFile: |
-          import boto3
-          import os
           import json
           import logging
+          import os
           from datetime import datetime
+
+          import boto3  # type: ignore
 
           # Configure logging
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
           # Initialize AWS clients
-          EC2 = boto3.client('ec2')
-          IMAGE_BUILDER = boto3.client('imagebuilder')
-          CFN = boto3.client('cloudformation')
+          EC2 = boto3.client("ec2")
+          IMAGE_BUILDER = boto3.client("imagebuilder")
+          CFN = boto3.client("cloudformation")
 
           # Environment variables
-          STACK_NAME = os.environ['STACK_NAME']
-          TEMPLATE_URL = os.environ['TEMPLATE_URL']
-          SOURCE_ACCOUNT = os.environ['SOURCE_ACCOUNT']
-          PIPELINE_ARN = os.environ['PIPELINE_ARN']
-          IMAGE_NAME_PATTERN = os.environ['IMAGE_NAME_PATTERN']
-          REQUIRED_DESCRIPTION_ITEMS = os.environ['REQUIRED_DESCRIPTION_ITEMS'].split(',')
+          STACK_NAME = os.environ["STACK_NAME"]
+          TEMPLATE_URL = os.environ["TEMPLATE_URL"]
+          SOURCE_ACCOUNT = os.environ["SOURCE_ACCOUNT"]
+          PIPELINE_ARN = os.environ["PIPELINE_ARN"]
+          IMAGE_NAME_PATTERN = os.environ["IMAGE_NAME_PATTERN"]
+          REQUIRED_DESCRIPTION_ITEMS = os.environ["REQUIRED_DESCRIPTION_ITEMS"].split(",")
+
 
           def handler(event, context):
-              logger.info(f"Received event: {json.dumps(event)}")
+              logger.info(f"Event: {json.dumps(event)}")
 
-              try:
-                  # Get current stack parameters
-                  current_parameters = get_stack_parameters()
-                  current_ami = current_parameters.get('ParentImage')
-                  current_version = current_parameters.get('SemVer')
+              # Get current stack parameters
+              current_parameters = get_stack_parameters()
+              current_base_ami = current_parameters.get("ParentImage")
+              current_semver = current_parameters.get("SemVer")
 
-                  # Get latest AMI
-                  latest_ami = get_latest_ami()
-                  if not latest_ami:
-                      logger.info("No available AMIs found from source account")
-                      return
+              # Get latest AMI
+              latest_image_id = get_latest_image_id()
+              if not latest_image_id:
+                  return
 
-                  # Check if this is a new AMI
-                  if latest_ami['ImageId'] == current_ami:
-                      logger.info(f"No new AMI found. Current AMI: {current_ami}")
-                      return
+              # Check if this is a new AMI
+              if latest_image_id == current_base_ami:
+                  logger.info(f"No new AMI found. Current AMI: {current_base_ami}")
+                  return
 
-                  logger.info(f"Found new AMI: {latest_ami['ImageId']}")
+              logger.info(f"Found new AMI: {latest_image_id}")
 
-                  # Increment version
-                  new_version = increment_version(current_version)
-                  logger.info(f"Incrementing version from {current_version} to {new_version}")
+              # Increment version
+              new_semver = increment_version(current_semver)
+              logger.info(f"Incrementing version from {current_semver} to {new_semver}")
 
-                  # Update CloudFormation stack
-                  update_cloudformation_stack(
-                      current_parameters,
-                      latest_ami['ImageId'],
-                      new_version
-                  )
+              # Update CloudFormation stack
+              update_cloudformation_stack(current_parameters, latest_image_id, new_semver)
 
-                  # Wait for stack update to complete
-                  wait_for_stack_update()
+              # Wait for stack update to complete
+              wait_for_stack_update()
 
-                  logger.info(f"Updated stack: {STACK_NAME} with new AMI: {latest_ami['ImageId']}")
+              logger.info(f"Updated stack: {STACK_NAME} with new AMI: {latest_image_id}")
 
-                  # Start the Image Builder pipeline
-                  start_image_pipeline(context.aws_request_id)
+              # Start the Image Builder pipeline
+              start_image_pipeline()
 
-                  logger.info(f"Started image builder pipeline with new parent image: {latest_ami['ImageId']}")
+              logger.info(f"Started image builder pipeline with new parent image: {latest_image_id}")
 
-              except Exception as e:
-                  logger.error(f"Error in lambda execution: {str(e)}")
-                  raise
 
-          def get_stack_parameters():
-              stack = CFN.describe_stacks(StackName=STACK_NAME)['Stacks'][0]
-              return {param['ParameterKey']: param['ParameterValue']
-                      for param in stack['Parameters']}
+          def get_stack_parameters() -> dict[str, str]:
+              stack_params = CFN.describe_stacks(StackName=STACK_NAME)["Stacks"][0]["Parameters"]
+              return {
+                  param["ParameterKey"]: param["ParameterValue"]
+                  for param in stack_params
+              }
 
-          def get_latest_ami():
-              response = EC2.describe_images(
+
+          def get_latest_image_id() -> dict | None:
+              paginator = EC2.get_paginator("describe_images")
+              page_iterator = paginator.paginate(
                   Owners=[SOURCE_ACCOUNT],
                   Filters=[
                       {
-                          'Name': 'state',
-                          'Values': ['available']
+                          "Name": "state",
+                          "Values": ["available"]
                       }
                   ]
               )
 
-              if not response['Images']:
+              images = [
+                  image
+                  for page in page_iterator
+                  for image in page["Images"]
+                  if IMAGE_NAME_PATTERN.lower() in image["Name"].lower() and
+                  all(item.lower() in image.get("Description", "").lower()
+                      for item in REQUIRED_DESCRIPTION_ITEMS)
+              ]
+
+              if not images:
+                  logger.info("No AMI found matching both name pattern and description requirements")
                   return None
 
+              # Sort the images by creation date in descending order
               images = sorted(
-                  response['Images'],
-                  key=lambda x: datetime.strptime(x['CreationDate'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+                  images,
+                  key=lambda image: datetime.strptime(image["CreationDate"], "%Y-%m-%dT%H:%M:%S.%fZ"),
                   reverse=True
               )
 
-              # Check both name pattern and description requirements
-              for image in images:
-                  if (IMAGE_NAME_PATTERN.lower() in image['Name'].lower() and
-                          all(item.lower() in image.get('Description', '').lower()
-                              for item in REQUIRED_DESCRIPTION_ITEMS)):
-                      logger.info(f"Found matching AMI: {image['ImageId']}")
-                      logger.info(f"Name: {image['Name']}")
-                      logger.info(f"Description: {image.get('Description', '')}")
-                      return image
+              latest_image = images[0]
+              latest_image_id = latest_image["ImageId"]
+              logger.info(f"Found matching AMI: {latest_image_id}")
+              logger.info(f"Name: {latest_image['Name']}")
+              logger.info(f"Description: {latest_image.get('Description', '')}")
+              return latest_image_id
 
-              logger.info("No AMI found matching both name pattern and description requirements")
-              return None
 
-          def increment_version(version_str):
-              major, minor, patch = map(int, version_str.split('.'))
+          def increment_version(semver: str) -> str:
+              major, minor, patch = map(int, semver.split("."))
               return f"{major}.{minor}.{patch + 1}"
 
 
-          def update_cloudformation_stack(parameters, new_ami_id, new_version):
-              parameters['ParentImage'] = new_ami_id
-              parameters['SemVer'] = new_version
+          def update_cloudformation_stack(parameters: dict, new_ami_id: str, new_semver: str):
+              # Overwrite the parameters for ParentImage and SemVer
+              parameters["ParentImage"] = new_ami_id
+              parameters["SemVer"] = new_semver
 
+              # Generate an updated parameter list
               parameter_list = [
                   {
-                      'ParameterKey': key,
-                      'ParameterValue': value
+                      "ParameterKey": key,
+                      "ParameterValue": value
                   }
                   for key, value in parameters.items()
               ]
@@ -897,20 +902,21 @@ Resources:
                   StackName=STACK_NAME,
                   TemplateURL=TEMPLATE_URL,
                   Parameters=parameter_list,
-                  Capabilities=['CAPABILITY_NAMED_IAM']
+                  Capabilities=["CAPABILITY_NAMED_IAM"]
               )
+
 
           def wait_for_stack_update():
-              waiter = CFN.get_waiter('stack_update_complete')
+              waiter = CFN.get_waiter("stack_update_complete")
               waiter.wait(
                   StackName=STACK_NAME,
-                  WaiterConfig={'Delay': 10, 'MaxAttempts': 30}
+                  WaiterConfig={"Delay": 10, "MaxAttempts": 30}
               )
 
-          def start_image_pipeline(client_token):
-              return IMAGE_BUILDER.start_image_pipeline_execution(
+
+          def start_image_pipeline():
+              IMAGE_BUILDER.start_image_pipeline_execution(
                   imagePipelineArn=PIPELINE_ARN,
-                  clientToken=client_token
               )
 
   NewAmiImageBuilderTriggerLogGroup:
