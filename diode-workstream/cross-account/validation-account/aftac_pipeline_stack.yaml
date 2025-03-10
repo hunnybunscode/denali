@@ -55,6 +55,18 @@ Parameters:
     Type: String
     Description: ARN of the IAM role associated with the Diode Simulator instance profile
 
+  SsmAgentUpdateInterval:
+    Type: String
+    Description: Determines whether and when the SSM Agent is updated on EC2 scanner instances.
+
+  MaxConcurrency:
+    Type: String
+    Description: The maximum number of EC2 scanner instances, in percentage, on which to update SSM Agent at the same time.
+
+  MaxErrors:
+    Type: String
+    Description: Maximum allowable error percentage before aborting the SSM Agent update process.
+
   TranstionToGlacierIR:
     Type: Number
     Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
@@ -717,6 +729,20 @@ Resources:
         - Key: Name
           PropagateAtLaunch: false
           Value: !Sub ValidationPipeline/AutoScalingGroup-${ResourceSuffix}
+
+  SsmAgentUpdateAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: !Sub UpdateSSMAgent-${ResourceSuffix}
+      Name: AWS-UpdateSSMAgent
+      ScheduleExpression: !Ref SsmAgentUpdateInterval
+      ApplyOnlyAtCronInterval: true
+      MaxConcurrency: !Ref MaxConcurrency
+      MaxErrors: !Ref MaxErrors
+      Targets:
+        - Key: tag:Name
+          Values:
+            - !Sub ValidationPipeline/ValidationInstance-${ResourceSuffix}
 
   AsgScaleUpAction:
     Type: AWS::AutoScaling::ScalingPolicy

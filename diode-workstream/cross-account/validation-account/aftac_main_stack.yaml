@@ -33,6 +33,13 @@ Metadata:
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
+          default: SSM Agent Update Configuration
+        Parameters:
+          - SsmAgentUpdateInterval
+          - MaxConcurrency
+          - MaxErrors
+
+      - Label:
           default: STFP Stack
         Parameters:
           - SftpServerStackSftpServerSubnetIds
@@ -79,6 +86,12 @@ Metadata:
         default: DFDL Approved File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
+      SsmAgentUpdateInterval:
+        default: SSM Agent Update Interval
+      MaxConcurrency:
+        default: Max Concurrency
+      MaxErrors:
+        default: Max Errors
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
@@ -179,6 +192,33 @@ Parameters:
     Description: A comma-separated list of file types allowed through the DFDL validation pipeline
     Default: infoset, xml
 
+  SsmAgentUpdateInterval:
+    Type: String
+    Description: >-
+      Determines whether and when the SSM Agent is updated on all EC2 scanner instances.
+      Default value of "cron(0 0 ? * SUNL *)" sets the schedule to the last Sunday of every month at 12:00 AM UTC.
+      For more options, go to https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html.
+      If you leave this blank, SSM Agent will stop being updated.
+    Default: cron(0 0 ? * SUNL *)
+    AllowedPattern: ^$|^cron\(.*\)$ # |^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: >-
+      Must be either blank or a valid cron.
+      https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html
+
+  MaxConcurrency:
+    Type: String
+    Description: The maximum number of managed nodes, in percentage, on which to update SSM Agent at the same time.
+    Default: 100%
+    AllowedPattern: ^([1-9]|[1-9][0-9]|100)%$
+    ConstraintDescription: Must be a valid percentage between 1% and 100%.
+
+  MaxErrors:
+    Type: String
+    Description: The number of errors, in percentage, that are allowed before stopping the SSM Agent update.
+    Default: 10%
+    AllowedPattern: ^([0-9]|[1-9][0-9]|100)%$
+    ConstraintDescription: Must be a valid percentage between 0% and 100%.
+
   SftpServerStackSftpServerSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Two (2) Subnet IDs for SFTP server
@@ -271,6 +311,9 @@ Resources:
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
+        SsmAgentUpdateInterval: !Ref SsmAgentUpdateInterval
+        MaxConcurrency: !Ref MaxConcurrency
+        MaxErrors: !Ref MaxErrors
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
         TransitionToDeepArchive: !Ref TransitionToDeepArchive
         InvalidFilesBucketExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
