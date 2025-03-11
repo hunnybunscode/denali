@@ -761,7 +761,6 @@ Resources:
           PIPELINE_ARN: !GetAtt ImageBuilderImagePipeline.Arn
           SOURCE_ACCOUNT: !Ref SourceAccountId
           STACK_NAME: !Ref AWS::StackName
-          TEMPLATE_URL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_image_builder_stack.yaml
           IMAGE_NAME_PATTERN: !Ref ImageNamePattern
           REQUIRED_DESCRIPTION_ITEMS:
             !Join [",", !Ref RequiredImageDescriptionPattern]
@@ -786,7 +785,6 @@ Resources:
 
           # Environment variables
           STACK_NAME = os.environ["STACK_NAME"]
-          TEMPLATE_URL = os.environ["TEMPLATE_URL"]
           SOURCE_ACCOUNT = os.environ["SOURCE_ACCOUNT"]
           PIPELINE_ARN = os.environ["PIPELINE_ARN"]
           IMAGE_NAME_PATTERN = os.environ["IMAGE_NAME_PATTERN"]
@@ -900,7 +898,7 @@ Resources:
 
               CFN.update_stack(
                   StackName=STACK_NAME,
-                  TemplateURL=TEMPLATE_URL,
+                  UsePreviousTemplate=True,
                   Parameters=parameter_list,
                   Capabilities=["CAPABILITY_NAMED_IAM"]
               )
