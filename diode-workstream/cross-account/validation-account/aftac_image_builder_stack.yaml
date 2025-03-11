@@ -853,7 +853,7 @@ Resources:
                   image
                   for page in page_iterator
                   for image in page["Images"]
-                  if IMAGE_NAME_PATTERN.lower() in image["Name"].lower() and
+                  if image["Name"].lower().startswith(IMAGE_NAME_PATTERN.lower()) and
                   all(item.lower() in image.get("Description", "").lower()
                       for item in REQUIRED_DESCRIPTION_ITEMS)
               ]
