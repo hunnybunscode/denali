@@ -375,6 +375,7 @@ Resources:
                       "mappingId": {"S": data["mappingId"]},
                       "status": {"S": data["status"]},
                       "transferId": {"S": data["transferId"]},
+                      "error": {"S": data["error"]},
                       "dataOwner": {"S": data_owner},
                       "dataSteward": {"S": data_steward},
                       "govPoc": {"S": gov_poc},
@@ -619,7 +620,10 @@ Resources:
             Action:
               - s3:GetObject
               - s3:GetObjectTagging
-            Resource: !Sub ${DataTransferBucket.Arn}/*
+              - s3:ListBucket
+            Resource:
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
             Condition:
               ArnEquals:
                 aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
@@ -632,7 +636,10 @@ Resources:
               Action:
                 - s3:GetObject
                 - s3:GetObjectTagging
-              Resource: !Sub ${DataTransferBucket.Arn}/*
+                - s3:ListBucket
+              Resource:
+                - !Sub ${DataTransferBucket.Arn}
+                - !Sub ${DataTransferBucket.Arn}/*
             - !Ref AWS::NoValue
 
   LambdaFunctionsSecurityGroup:
@@ -962,6 +969,8 @@ Resources:
   TransferResultEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
+      BatchSize: 1
+      Enabled: true
       EventSourceArn: !GetAtt TransferResultQueue.Arn
       FunctionName: !Ref TransferResultLambda
 
@@ -975,7 +984,7 @@ Resources:
       # KmsMasterKeyId: alias/aws/sqs
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt TransferDlq.Arn
-        maxReceiveCount: 1
+        maxReceiveCount: 5 # This should match the number defined in data transfer Lambda function in the Diode account
 
   TransferQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -1007,6 +1016,7 @@ Resources:
               - sqs:ReceiveMessage
               - sqs:DeleteMessage
               - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
             Resource: !GetAtt TransferQueue.Arn
             Condition:
               ArnEquals:

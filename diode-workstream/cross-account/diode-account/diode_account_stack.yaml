@@ -160,7 +160,10 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:GetObjectTagging
-                Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
               - Effect: Allow
                 Action:
                   - diode:CreateTransfer
@@ -174,6 +177,7 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
                 Resource:
                   - !Ref DataTransferSqsQueueArn
                   - !GetAtt TransferStatusQueue.Arn
@@ -204,12 +208,18 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
+          TRANSFER_BUCKET_OWNER:
+            !Select [4, !Split [":", !Ref TranferResultSqsQueueArn]]
           TRANSFER_RESULT_QUEUE_URL: !Sub
             - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
             - AccountId:
                 !Select [4, !Split [":", !Ref TranferResultSqsQueueArn]]
               QueueName:
                 !Select [5, !Split [":", !Ref TranferResultSqsQueueArn]]
+          DATA_TRANSFER_QUEUE_URL: !Sub
+            - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
+            - AccountId: !Select [4, !Split [":", !Ref DataTransferSqsQueueArn]]
+              QueueName: !Select [5, !Split [":", !Ref DataTransferSqsQueueArn]]
           USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
           DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
       # VpcConfig:
@@ -293,5 +303,7 @@ Resources:
   TransferStatusEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
+      BatchSize: 1
+      Enabled: true
       EventSourceArn: !GetAtt TransferStatusQueue.Arn
       FunctionName: !Ref DataTransferLambdaFunction
