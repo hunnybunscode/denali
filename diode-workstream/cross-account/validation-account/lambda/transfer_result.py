@@ -105,6 +105,7 @@ def put_item_in_ddb(
             "mappingId": {"S": data["mappingId"]},
             "status": {"S": data["status"]},
             "transferId": {"S": data["transferId"]},
+            "error": {"S": data["error"]},
             "dataOwner": {"S": data_owner},
             "dataSteward": {"S": data_steward},
             "govPoc": {"S": gov_poc},
