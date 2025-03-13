@@ -91,6 +91,61 @@ Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
 
 Resources:
+  PipelineKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for pipeline
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow EC2 scanner role to encrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt Ec2ScannerRole.Arn
+            Action: kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: Allow Transfer Result Lambda execution role to encrypt and decrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TransferResultLambdaRole.Arn
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: Allow Data Transfer Lambda execution role to decrypt
+            Effect: Allow
+            Principal:
+              AWS: !Ref DiodeAccountId
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
+
   Ec2ScannerRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -428,6 +483,12 @@ Resources:
       LoggingConfiguration:
         DestinationBucketName:
           Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -465,6 +526,12 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
         DestinationBucketName:
           Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
@@ -515,6 +582,12 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
         DestinationBucketName:
           Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
@@ -566,6 +639,12 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
         DestinationBucketName:
           Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
@@ -1160,6 +1239,10 @@ Outputs:
   DataTransferResultSqsQueueArn:
     Description: Data Transfer Result SQS Queue ARN
     Value: !GetAtt TransferResultQueue.Arn
+
+  PipelineKmsKeyArn:
+    Description: Pipeline KMS Key ARN
+    Value: !GetAtt PipelineKmsKey.Arn
 
   PipelineAutoScalingGroupName:
     Description: Pipeline AutoScaling Group Name

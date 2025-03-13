@@ -335,3 +335,24 @@ Resources:
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpServerIngressRuleCIDR: !Ref SftpServerIngressRuleCIDR
+
+Outputs:
+  # Value required in the Diode account
+  DataTransferBucketName:
+    Description: Data Transfer Bucket Name
+    Value: !GetAtt PipelineStack.Outputs.DataTransferBucketName
+
+  # Value required in the Diode account
+  DataTransferSqsQueueArn:
+    Description: Data Transfer SQS Queue ARN
+    Value: !GetAtt PipelineStack.Outputs.DataTransferSqsQueueArn
+
+  # Value required in the Diode account
+  DataTransferResultSqsQueueArn:
+    Description: Data Transfer Result SQS Queue ARN
+    Value: !GetAtt PipelineStack.Outputs.DataTransferResultSqsQueueArn
+
+  # Value required in the Diode account
+  PipelineKmsKeyArn:
+    Description: Pipeline KMS Key ARN
+    Value: !GetAtt PipelineStack.Outputs.PipelineKmsKeyArn
