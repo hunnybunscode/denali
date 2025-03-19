@@ -180,6 +180,12 @@ Resources:
                   StringEquals:
                     kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
               - Effect: Allow
+                Action: kms:GenerateDataKey
+                Resource: !Ref PipelineKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
+              - Effect: Allow
                 Action:
                   - diode:CreateTransfer
                   - diode:DescribeTransfer
@@ -297,6 +303,9 @@ Resources:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
       # KmsMasterKeyId: alias/aws/sqs
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TransferStatusDlq.Arn
+        maxReceiveCount: 5
 
   TransferStatusQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -314,6 +323,15 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !GetAtt DiodeEventBridgeEventsRule.Arn
+
+  TransferStatusDlq:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
 
   TransferStatusEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
