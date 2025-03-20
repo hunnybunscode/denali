@@ -1,0 +1,19 @@
+# Source: nifikop/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    component: app
+    app: nifikop-webhook
+    chart: nifikop-1.13.0
+    heritage: Helm
+    release: nifikops
+  name: nifikop-webhook
+  namespace: nifikops
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app: nifikop

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nifi
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nifikops

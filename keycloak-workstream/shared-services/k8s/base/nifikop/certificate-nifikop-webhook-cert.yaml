@@ -1,0 +1,15 @@
+# Source: nifikop/templates/webhook/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nifikop-webhook-cert  # this name should match the one appeared in kustomizeconfig.yaml
+  namespace: nifikops
+spec:
+  # $(SERVICE_NAME) and $(SERVICE_NAMESPACE) will be substituted by kustomize
+  dnsNames:
+    - nifikop-webhook.nifikops.svc
+    - nifikop-webhook.nifikops.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: nifikop-webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
