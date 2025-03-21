@@ -1,7 +1,6 @@
 import os
 
 
-simulate_av_scan = True if os.getenv("av_scan_mode") == "Test" else False
 resource_suffix = os.getenv("resource_suffix") or ""
 
 file_handler_config = {

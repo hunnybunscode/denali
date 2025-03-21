@@ -253,7 +253,7 @@ def create_tags_for_file_validation(error_status: str, file_type: str, mime_type
 
 def create_tags_for_av_scan(file_status: str, exit_status: int):
     """
-    Returns: {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
+    Returns: {"AvScanStatus / ClamAvExitCode": file_status / exit_status"}
     """
     return {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
 

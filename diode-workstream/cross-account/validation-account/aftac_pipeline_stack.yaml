@@ -45,6 +45,10 @@ Parameters:
     Type: String
     Description: The list of approved file types for DFDL
 
+  EmailEndPoint:
+    Type: String
+    Description: The email address to use for SNS notifications
+
   DiodeAccountId:
     Type: String
     Description: AWS Account ID of the Diode Account
@@ -89,6 +93,7 @@ Parameters:
 
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
+  SendEmailNotifications: !Not [!Equals [!Ref EmailEndPoint, ""]]
 
 Resources:
   PipelineKmsKey:
@@ -114,6 +119,17 @@ Resources:
               - kms:GenerateDataKey*
               - kms:CreateGrant
             Resource: "*"
+          - Sid: Allow cryptographic operations via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Decrypt
+              # - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
           - Sid: Allow EC2 scanner role to encrypt
             Effect: Allow
             Principal:
@@ -786,11 +802,27 @@ Resources:
       DisplayName: Infected File SNS Topic
       KmsMasterKeyId: alias/aws/sns
 
+  InfectedFileTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref InfectedFileTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
   InvalidFilesTopic:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Invalid File SNS Topic
       KmsMasterKeyId: alias/aws/sns
+
+  InvalidFilesTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref InvalidFilesTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
 
   AutoScalingGroupLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -1064,6 +1096,14 @@ Resources:
     Properties:
       DisplayName: FailedTransferTopic
       KmsMasterKeyId: alias/aws/sns
+
+  FailedTransferTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref FailedTransferTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
 
   TransferResultEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping

@@ -30,6 +30,7 @@ Metadata:
           - PipelineStackPipelineAmiId
           - PipelineStackApprovedFileTypes
           - PipelineStackDfdlApprovedFileTypes
+          - EmailEndPoint
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
@@ -86,6 +87,8 @@ Metadata:
         default: DFDL Approved File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
+      EmailEndPoint:
+        default: Email End Point
       SsmAgentUpdateInterval:
         default: SSM Agent Update Interval
       MaxConcurrency:
@@ -191,6 +194,12 @@ Parameters:
     Type: CommaDelimitedList
     Description: A comma-separated list of file types allowed through the DFDL validation pipeline
     Default: infoset, xml
+
+  EmailEndPoint:
+    Type: String
+    Description: (Optional) Email address to receive SNS notifications for infected, invalid, and failed transfer files
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    ConstraintDescription: Must be a valid email end point
 
   SsmAgentUpdateInterval:
     Type: String
@@ -308,6 +317,7 @@ Resources:
         ApprovedFileTypes: !Join [",", !Ref PipelineStackApprovedFileTypes]
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
+        EmailEndPoint: !Ref EmailEndPoint
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole

@@ -11,7 +11,6 @@ Metadata:
           - IamPrefix
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
-          - AvScanMode
           - ProxyServerAddress
           - EmailEndPoint
 
@@ -42,8 +41,6 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
-      AvScanMode:
-        default: Anti-Virus Scan Mode
       ProxyServerAddress:
         default: Proxy Server Address
       EmailEndPoint:
@@ -94,13 +91,6 @@ Parameters:
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
-
-  AvScanMode:
-    Type: String
-    Description: Select "Test" to simulate anti-virus scanning; otherwise, select "Live"
-    Default: Live
-    AllowedValues: [Test, Live]
-    ConstraintDescription: Must be either "Test" or "Live"
 
   ProxyServerAddress:
     Type: String
@@ -269,7 +259,7 @@ Resources:
 
                     # Enable SQS Poller Service
                     # Replaces the placeholder ("") with actual environment variables
-                    - sed -i 's/""/av_scan_mode=${AvScanMode} resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
+                    - sed -i 's/""/resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
                     - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
                     - systemctl enable sqs_poller.service
                     - systemctl start sqs_poller.service
@@ -343,7 +333,6 @@ Resources:
 
             cat << EOF > /etc/profile.d/set_env.sh
             #!/bin/bash
-            export av_scan_mode=${AvScanMode}
             export resource_suffix=${ResourceSuffix}
             export region=${AWS::Region}
             EOF
@@ -468,7 +457,7 @@ Resources:
       SecurityGroupIds:
         - !Ref ImageBuilderInfraSecurityGroup
       TerminateInstanceOnFailure: true # For troubleshooting, set it to false
-      InstanceTypes: [t3.small]
+      InstanceTypes: [m5.large]
       SnsTopicArn: !Ref ImageBuilderNotificationTopic
       # KeyPair: String
       # Logging:
