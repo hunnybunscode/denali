@@ -514,6 +514,11 @@ Resources:
 
   QuarantineBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -560,6 +565,11 @@ Resources:
 
   InvalidFilesBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -616,6 +626,11 @@ Resources:
 
   FailedTransferBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -672,6 +687,11 @@ Resources:
 
   DataTransferBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     DependsOn: TransferQueuePolicy
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete

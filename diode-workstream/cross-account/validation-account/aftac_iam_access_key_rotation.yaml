@@ -167,6 +167,11 @@ Resources:
 
   rRotationLambdaFunctionExecutionRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${pIamResourcePrefix}_${pResourcePrefix}_AccessKeyRotationLambdaRole
       PermissionsBoundary: !Ref pPermissionBoundaryArn

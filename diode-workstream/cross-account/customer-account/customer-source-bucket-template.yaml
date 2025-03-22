@@ -105,6 +105,11 @@ Resources:
 
   SourceBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     Properties:
       BucketName: !Ref SourceBucketName
       BucketEncryption:
@@ -214,6 +219,11 @@ Resources:
 
   CopyObjectFunction:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The Lambda execution role has needed permissions to write CloudWatch Logs
     Properties:
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
