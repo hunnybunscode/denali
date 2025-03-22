@@ -493,6 +493,11 @@ Resources:
 
   ImageBuilderInfraInstanceRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${IamPrefix}-image-builder-infra-instance-role-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
@@ -739,6 +744,11 @@ Resources:
 
   NewAmiImageBuilderTriggerLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The Lambda execution role has needed permissions to write CloudWatch Logs
     Properties:
       FunctionName: !Sub trigger-image-pipeline-with-new-ami-${ResourceSuffix}
       Handler: index.handler
@@ -916,6 +926,11 @@ Resources:
 
   NewAmiImageBuilderTriggerLambdaRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${IamPrefix}-trigger-image-pipeline-with-new-ami-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
@@ -1057,6 +1072,11 @@ Resources:
 
   CopyEC2RequiredFilesRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${IamPrefix}-copy-ec2-required-files-role-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
@@ -1117,6 +1137,11 @@ Resources:
 
   CopyEC2RequiredFilesFunction:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The Lambda execution role has needed permissions to write CloudWatch Logs
     Properties:
       FunctionName: !Sub copy-ec2-required-files-${ResourceSuffix}
       Handler: index.handler
@@ -1215,6 +1240,11 @@ Resources:
 
   AsgInstanceRefreshLambdaRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
     Properties:
       RoleName: !Sub ${IamPrefix}-refresh-asg-on-image-completion-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
@@ -1265,6 +1295,11 @@ Resources:
 
   AsgInstanceRefreshLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The Lambda execution role has needed permissions to write CloudWatch Logs
     Properties:
       FunctionName: !Sub refresh-asg-on-image-completion-${ResourceSuffix}
       Handler: index.handler

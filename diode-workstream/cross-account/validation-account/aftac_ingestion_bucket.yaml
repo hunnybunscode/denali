@@ -161,6 +161,11 @@ Conditions:
 Resources:
   IngestBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     Properties:
       LoggingConfiguration:
         DestinationBucketName:
