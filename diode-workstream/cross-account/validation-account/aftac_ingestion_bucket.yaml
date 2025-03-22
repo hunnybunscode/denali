@@ -19,6 +19,11 @@ Metadata:
           - IngestBucketKeyOwner
 
       - Label:
+          default: (OPTIONAL) Encryption Key Alias
+        Parameters:
+          - IngestBucketKeyAlias
+
+      - Label:
           default: (OPTIONAL) Bucket Policy Configuration
         Parameters:
           - AllowedExternalRoleArn
@@ -51,6 +56,8 @@ Metadata:
         default: GOV POC
       IngestBucketKeyOwner:
         default: Key Owner
+      IngestBucketKeyAlias:
+        default: Key Alias
       AllowedExternalRoleArn:
         default: Allowed Role ARN from Customer Account
       SftpUserName:
@@ -113,6 +120,14 @@ Parameters:
     AllowedPattern: (?!.*/).+
     ConstraintDescription: Must have at least one valid character and not contain a slash (/)
 
+  IngestBucketKeyAlias:
+    Type: String
+    Description: (Optional) Friendly name for KMS key encrypting the ingestion bucket
+    AllowedPattern: ^$|^(?!alias/)(?!aws/)[a-zA-Z0-9/_-]+$
+    ConstraintDescription: >
+      Must be left blank or be composed of alphanumeric characters, forward slashes (/), underscores (_), and dashes (-).
+      Cannot start with "alias/" or "aws/", and cannot exceed 256 characters.
+
   AllowedExternalRoleArn:
     Type: String
     Description: (Optional) ARN of the role that is allowed to put objects into the ingestion bucket
@@ -157,6 +172,7 @@ Conditions:
   UseMappingId: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
   UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
   UseAllowedExternalRoleArn: !Not [!Equals [!Ref AllowedExternalRoleArn, ""]]
+  UseIngestBucketKeyAlias: !Not [!Equals [!Ref IngestBucketKeyAlias, ""]]
 
 Resources:
   IngestBucket:
@@ -312,6 +328,13 @@ Resources:
       Tags:
         - Key: CreatedByCloudFormationStack
           Value: !Ref AWS::StackName
+
+  SSES3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: UseIngestBucketKeyAlias
+    Properties:
+      AliasName: !Sub alias/${IngestBucketKeyAlias}-${ResourceSuffix}
+      TargetKeyId: !Ref SSES3KmsKey
 
   TransferUser:
     Type: AWS::Transfer::User
