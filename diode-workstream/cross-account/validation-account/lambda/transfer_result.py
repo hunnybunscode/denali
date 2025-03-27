@@ -8,6 +8,8 @@ import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 
+QUEUE_URL = os.environ["QUEUE_URL"]
+
 DATA_TRANSFER_BUCKET = os.environ["DATA_TRANSFER_BUCKET"]
 FAILED_TRANSFER_BUCKET = os.environ["FAILED_TRANSFER_BUCKET"]
 
@@ -23,6 +25,7 @@ config = Config(retries={"max_attempts": 5, "mode": "standard"})
 DDB_CLIENT = boto3.client("dynamodb", config=config)
 S3_CLIENT = boto3.client("s3", config=config)
 SNS_CLIENT = boto3.client("sns", config=config)
+SQS_CLIENT = boto3.client("sqs", config=config)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -34,13 +37,26 @@ def lambda_handler(event, context):
     message = event["Records"][0]
     # SentTimestamp is in the epoch time in milliseconds
     timestamp = int(message["attributes"]["SentTimestamp"]) / 1000
+    receipt_handle = message["receiptHandle"]
     data = json.loads(message["body"])
     # bucket = data["bucket"]
     key = data["key"]
     status = data["status"]
 
-    # TODO: Get the tags passed from the message
-    data_tag_values = get_data_tag_values(key)
+    try:
+        # TODO: Get the tags passed from the message
+        data_tag_values = get_data_tag_values(key)
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        # MethodNotAllowed error can be raised against a delete marker
+        if error_code in ("404", "NoSuchKey") or (
+            error_code == "MethodNotAllowed" and not object_exists(key)
+        ):
+            logger.warning(f"{key} not found")
+            delete_sqs_message(receipt_handle)
+            return
+        raise
+
     put_item_in_ddb(timestamp, data, *data_tag_values)
 
     if status != SUCCEEDED:
@@ -51,12 +67,15 @@ def lambda_handler(event, context):
     # Delete it from the transfer bucket whether the transfer was successful or not
     delete_object_from_transfer_bucket(key)
 
+    delete_sqs_message(receipt_handle)
+
 
 def copy_object_to_failed_transfer_bucket(key: str):
     logger.info(
         f"Copying {key} from {DATA_TRANSFER_BUCKET} to {FAILED_TRANSFER_BUCKET}",
     )
     try:
+        # amazonq-ignore-next-line
         S3_CLIENT.copy_object(
             # Source bucket/key/owner
             CopySource={"Bucket": DATA_TRANSFER_BUCKET, "Key": key},
@@ -129,6 +148,30 @@ def get_object_tags(key: str) -> dict[str, str]:
     tags = {tag["Key"]: tag["Value"] for tag in tag_set}
     logger.info(f"Tags for {key}: {tags}")
     return tags
+
+
+def object_exists(key: str) -> bool:
+    # When an object does not exist:
+    # With ListBucket permission on the bucket, Amazon S3 returns 404 Not Found error.
+    # Without ListBucket permission, Amazon S3 returns 403 Forbidden error.
+
+    try:
+        S3_CLIENT.head_object(
+            Bucket=DATA_TRANSFER_BUCKET,
+            Key=key,
+            ExpectedBucketOwner=ACCOUNT_ID,
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            logger.warning(f"{key} not found")
+            return False
+        raise
+
+
+def delete_sqs_message(receipt_handle: str):
+    logger.info("Deleting message from the queue")
+    SQS_CLIENT.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=receipt_handle)
 
 
 def put_item_in_ddb(
