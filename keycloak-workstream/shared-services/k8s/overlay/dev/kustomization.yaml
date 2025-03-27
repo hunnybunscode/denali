@@ -5,4 +5,4 @@ resources:
   - ../../base/certificate
   - ../../base/keycloak-operator
   - ../../base/squid
-  - ../../base/nifikops
+  - ../../base/nifikop
