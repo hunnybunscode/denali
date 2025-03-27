@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  namespace: nifi
+
+resources:
+  - registry
+  - service-account-cluster.yaml
+  - role-state-management.yaml
+  - ingress.yaml
+
+  - cluster
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: configuration
+    namespace: nifi
+    files:
+      - configs/nifi.properties
+
+secretGenerator:
+  - name: secret-configuration
+    namespace: nifi
+    files:
+      - nifi.properties=configs/secret.nifi.properties

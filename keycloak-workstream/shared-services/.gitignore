@@ -16,3 +16,4 @@ local-*
 cdk-bootstrap.template.yml
 lib/k8s/base/keycloak/plugins/spi/keycloak-spi-awsalb-mtls.jar
 *.crt
+*.log

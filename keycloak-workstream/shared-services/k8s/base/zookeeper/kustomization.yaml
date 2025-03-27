@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap-zookeeper-scripts.yaml
+  - networkpolicy-zookeeper.yaml
+  - poddisruptionbudget-zookeeper.yaml
+  - service-zookeeper-headless.yaml
+  - service-zookeeper.yaml
+  - serviceaccount-zookeeper.yaml
+  - statefulset-zookeeper.yaml
