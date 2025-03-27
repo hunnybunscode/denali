@@ -123,7 +123,7 @@ Parameters:
       The base image name pattern for image builder output images.
       This pattern is used to identify the correct source AMI.
       The pattern must exactly match part of the AMI name.
-    Default: "V12E_RHEL8_Agents_Gold"
+    Default: "VI2E_RHEL8_Agents_Gold"
     AllowedPattern: "^[a-zA-Z0-9_-]+$"
     ConstraintDescription: "Pattern must contain only alphanumeric characters, underscores, and hyphens"
 
