@@ -141,7 +141,9 @@ def add_tags(
 ):
     logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
     existing_tags = get_object_tagging(bucket, key, bucket_owner)
+    logger.info(f"Existing tags: {existing_tags}")
     combined_tags = existing_tags | tags_to_add
+    logger.info(f"Combined tags: {combined_tags}")
     put_object_tagging(bucket, key, combined_tags, bucket_owner)
     logger.info("Successfully added the new tags")
 
