@@ -31,4 +31,4 @@ clusters:
           - id: subnet-0d2bfe25aa0f19aed
           - id: subnet-07f068c8e23af23e2
         desiredCapacity: 4
-        maxSize: 10
+        maxSize: 50
