@@ -19,6 +19,7 @@ configMapGenerator:
     namespace: nifi
     files:
       - configs/nifi.properties
+      - configs/logback.xml
 
 secretGenerator:
   - name: secret-configuration

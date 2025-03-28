@@ -9,9 +9,10 @@ metadata:
     alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
     alb.ingress.kubernetes.io/group.name: ingress-nifi-cluster-web-ui
     alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    alb.ingress.kubernetes.io/backend-protocol-version: HTTP1
     alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
     alb.ingress.kubernetes.io/healthcheck-path: /nifi-api/flow/cluster/summary
-    alb.ingress.kubernetes.io/success-codes: 200-299,300-399
+    alb.ingress.kubernetes.io/success-codes: 200-299,300-399,400 # Not sure why ELB get HTTP 400 from the NIFI Web Service, might be strict domain source
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=300
 spec:
@@ -25,5 +26,35 @@ spec:
             backend:
               service:
                 name: cluster-access-cluster-a
+                port:
+                  number: 8443
+    - host: nifi-cluster-b.denali.jktruong.people.aws.dev
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: cluster-access-cluster-b
+                port:
+                  number: 8443
+    - host: nifi-cluster-c.denali.jktruong.people.aws.dev
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: cluster-access-cluster-c
+                port:
+                  number: 8443
+    - host: nifi-cluster-d.denali.jktruong.people.aws.dev
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: cluster-access-cluster-d
                 port:
                   number: 8443

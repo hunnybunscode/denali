@@ -1,0 +1,11 @@
+apiVersion: nifi.konpyutaika.com/v1alpha1
+kind: NifiRegistryClient
+metadata:
+  name: cluster-d.registry-client
+  namespace: nifi
+spec:
+  clusterRef:
+    name: cluster-d
+    namespace: nifi
+  description: "Simple NiFi Registry demo"
+  uri: "http://registry.nifi.svc.cluster.local:18080"
