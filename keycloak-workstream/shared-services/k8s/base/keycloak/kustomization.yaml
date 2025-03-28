@@ -29,9 +29,11 @@ configMapGenerator:
       disableNameSuffixHash: true
     files:
       - plugins/spi/keycloak-spi-awsalb-mtls.jar
-  - name: dod-ca-rhel
+  - name: keycloak-init-scripts
     namespace: keycloak
     options:
       disableNameSuffixHash: true
     files:
+      - config/script/create_fips.sh
+      - config/script/convert_fips_jks.sh
       - config/script/create_keystore_container.sh
