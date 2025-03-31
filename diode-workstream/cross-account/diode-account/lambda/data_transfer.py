@@ -109,46 +109,43 @@ def handle_create_transfer(message: dict, s3: dict):
         create_transfer(mapping_id, bucket, key)
         delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
 
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        http_status_code = e.response["ResponseMetadata"]["HTTPStatusCode"]
-        if (
-            error_code in RETRYABLE_ERROR_CODES
-            or http_status_code in RETRYABLE_STATUS_CODES
-        ) and approx_rec_count < MAX_RECEIVE_COUNT:
-            logger.warning(f"Retryable error: {e}")
-            # Increase the visibility timeout based on the receive count
-            change_message_visibility(
-                DATA_TRANSFER_QUEUE_URL,
-                message["receiptHandle"],
-                approx_rec_count * 30,
+    except (ClientError, NoMappingIdTagError) as e:
+        params = dict(
+            bucket=bucket,
+            key=key,
+            mapping_id=mapping_id,
+            status=CREATE_TRANSFER_FAILED,
+            transfer_id="",
+        )
+
+        if isinstance(e, ClientError):
+            error_code = e.response["Error"]["Code"]
+            http_status_code = e.response["ResponseMetadata"]["HTTPStatusCode"]
+
+            if (
+                error_code in RETRYABLE_ERROR_CODES
+                or http_status_code in RETRYABLE_STATUS_CODES
+            ) and approx_rec_count < MAX_RECEIVE_COUNT:
+                logger.warning(f"Retryable error: {e}")
+                # Increase the visibility timeout based on the receive count
+                change_message_visibility(
+                    DATA_TRANSFER_QUEUE_URL,
+                    message["receiptHandle"],
+                    approx_rec_count * 30,
+                )
+                # Signal to Lambda not to delete the message by raising an error
+                raise
+
+            logger.error(f"Failed to create the transfer request for {key}: {e}")
+            params.update({"error": error_code})
+
+        elif isinstance(e, NoMappingIdTagError):
+            logger.error(
+                f"Failed to create the transfer request for {key}: NoMappingIdTagError",
             )
-            # Signal to Lambda not to delete the message by raising an error
-            raise
+            params.update({"error": "NO_MAPPING_ID_TAG"})
 
-        logger.error(f"Failed to create the transfer request for {key}: {e}")
-        send_msg_to_transfer_result_queue(
-            bucket,
-            key,
-            mapping_id,
-            CREATE_TRANSFER_FAILED,
-            "",
-            error_code,
-        )
-        delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
-
-    except NoMappingIdTagError:
-        logger.error(
-            f"Failed to create the transfer request for {key}: NoMappingIdTagError",
-        )
-        send_msg_to_transfer_result_queue(
-            bucket,
-            key,
-            mapping_id,
-            CREATE_TRANSFER_FAILED,
-            "",
-            "NO_MAPPING_ID_TAG",
-        )
+        send_msg_to_transfer_result_queue(**params)
         delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
 
 
