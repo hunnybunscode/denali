@@ -15,6 +15,7 @@ os.environ["AWS_DATA_PATH"] = "./models"
 TRANSFER_BUCKET_OWNER = os.environ["TRANSFER_BUCKET_OWNER"]
 TRANSFER_RESULT_QUEUE_URL = os.environ["TRANSFER_RESULT_QUEUE_URL"]
 DATA_TRANSFER_QUEUE_URL = os.environ["DATA_TRANSFER_QUEUE_URL"]
+TRANSFER_STATUS_QUEUE_URL = os.environ["TRANSFER_STATUS_QUEUE_URL"]
 USE_DIODE_SIMULATOR = os.environ["USE_DIODE_SIMULATOR"]
 DIODE_SIMULATOR_ENDPOINT = os.environ["DIODE_SIMULATOR_ENDPOINT"]
 AWS_REGION = os.environ["AWS_REGION"]
@@ -65,6 +66,8 @@ RETRYABLE_ERROR_CODES = [
 
 RETRYABLE_STATUS_CODES = [500, 502, 503, 504]
 
+NO_MAPPING_ID = "None"
+
 
 # NOTE: Lambda deletes the message from SQS queue if no error is raised
 def lambda_handler(event, context):
@@ -76,12 +79,16 @@ def lambda_handler(event, context):
     if records:  # event_source == "aws:s3"
         handle_create_transfer(event["Records"][0], records[0]["s3"])
     else:  # event_source == "aws:sqs"
-        handle_transfer_status_event(message_body["detail"])
+        handle_transfer_status_event(
+            message_body["detail"],
+            event["Records"][0]["receiptHandle"],
+        )
 
 
 def handle_create_transfer(message: dict, s3: dict):
     logger.info("Processing a CreateTransfer request")
 
+    receipt_handle = message["receiptHandle"]
     approx_rec_count = int(message["attributes"]["ApproximateReceiveCount"])
     logger.info(f"Approximate Receive Count: {approx_rec_count}")
 
@@ -90,16 +97,18 @@ def handle_create_transfer(message: dict, s3: dict):
     key = unquote_plus(s3["object"]["key"])
     logger.info(f"Bucket: {bucket}, Key: {key}")
 
-    # Cannot be an empty string, as it can cause an error in DDB
-    mapping_id = "None"
+    # Mapping ID cannot be an empty string, as it can cause an error in DDB
+    mapping_id = NO_MAPPING_ID
     try:
         mapping_id = get_mapping_id(bucket, key)
-        if mapping_id is None:
+        if mapping_id == NO_MAPPING_ID:
             raise NoMappingIdTagError
 
         logger.info(f"Mapping ID: {mapping_id}")
 
         create_transfer(mapping_id, bucket, key)
+        delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
+
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         http_status_code = e.response["ResponseMetadata"]["HTTPStatusCode"]
@@ -114,10 +123,9 @@ def handle_create_transfer(message: dict, s3: dict):
                 message["receiptHandle"],
                 approx_rec_count * 30,
             )
-            # This signals to Lambda not to delete the message
+            # Signal to Lambda not to delete the message by raising an error
             raise
 
-        # Lambda deletes the message
         logger.error(f"Failed to create the transfer request for {key}: {e}")
         send_msg_to_transfer_result_queue(
             bucket,
@@ -127,8 +135,9 @@ def handle_create_transfer(message: dict, s3: dict):
             "",
             error_code,
         )
+        delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
+
     except NoMappingIdTagError:
-        # Lambda deletes the message
         logger.error(
             f"Failed to create the transfer request for {key}: NoMappingIdTagError",
         )
@@ -140,35 +149,33 @@ def handle_create_transfer(message: dict, s3: dict):
             "",
             "NO_MAPPING_ID_TAG",
         )
+        delete_sqs_message(DATA_TRANSFER_QUEUE_URL, receipt_handle)
 
 
-def handle_transfer_status_event(event_detail: dict):
+def handle_transfer_status_event(event_detail: dict, receipt_handle: str):
     logger.info("Processing a transfer status event")
 
-    bucket = event_detail["s3Bucket"]
-    key = event_detail["s3Key"]
-    mapping_id = event_detail["mappingId"]
     status = event_detail["status"]
-    transfer_id = event_detail["transferId"]
-
-    logger.info(f"Bucket: {bucket}, Key: {key}")
-    logger.info(f"Mapping ID: {mapping_id}")
     logger.info(f"Transfer Status: {status}")
 
+    params = dict(
+        bucket=event_detail["s3Bucket"],
+        key=event_detail["s3Key"],
+        mapping_id=event_detail["mappingId"],
+        status=status,
+        transfer_id=event_detail["transferId"],
+    )
+    logger.info(f"Transfer Detail: {params}")
+
     if status == "SUCCEEDED":
-        send_msg_to_transfer_result_queue(bucket, key, mapping_id, status, transfer_id)
+        send_msg_to_transfer_result_queue(**params)
+        delete_sqs_message(TRANSFER_STATUS_QUEUE_URL, receipt_handle)
         return
 
-    transfer = describe_transfer(transfer_id)
-    error = transfer.get("errorMessage", "Unknown")
-    send_msg_to_transfer_result_queue(
-        bucket,
-        key,
-        mapping_id,
-        status,
-        transfer_id,
-        error,
-    )
+    transfer = describe_transfer(params["transfer_id"])
+    params.update({"error": transfer.get("errorMessage", "Unknown")})
+    send_msg_to_transfer_result_queue(**params)
+    delete_sqs_message(TRANSFER_STATUS_QUEUE_URL, receipt_handle)
 
 
 def send_msg_to_transfer_result_queue(
@@ -217,9 +224,10 @@ def change_message_visibility(queue_url: str, receipt_handle: str, timeout: int)
         logger.warning(f"Could not update the visibility timeout: {e}")
 
 
-def get_mapping_id(bucket, key) -> str | None:
+def get_mapping_id(bucket, key):
     tags = get_object_tagging(bucket, key)
-    return tags.get("MappingId")
+    # amazonq-ignore-next-line
+    return tags.get("MappingId", NO_MAPPING_ID)
 
 
 def get_object_tagging(bucket: str, key: str) -> dict[str, str]:
@@ -262,6 +270,12 @@ def describe_transfer(transfer_id: str) -> dict:
     except ClientError as e:
         logger.warning(f"Failed to get transfer details: {e}")
         return {}
+
+
+def delete_sqs_message(queue_url: str, receipt_handle: str):
+    queue_name = queue_url.split("/")[-1]
+    logger.info(f"Deleting message from {queue_name} queue")
+    SQS_CLIENT.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
 
 
 class NoMappingIdTagError(Exception):
