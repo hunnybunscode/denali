@@ -241,6 +241,7 @@ Resources:
             - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
             - AccountId: !Select [4, !Split [":", !Ref DataTransferSqsQueueArn]]
               QueueName: !Select [5, !Split [":", !Ref DataTransferSqsQueueArn]]
+          TRANSFER_STATUS_QUEUE_URL: !Ref TransferStatusQueue
           USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
           DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
       # VpcConfig:
@@ -258,12 +259,12 @@ Resources:
       BatchSize: 1
       Enabled: true
       EventSourceArn: !Ref DataTransferSqsQueueArn
-      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+      FunctionName: !Ref DataTransferLambdaFunction
 
   DataTransferLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+      FunctionName: !Ref DataTransferLambdaFunction
       Action: lambda:InvokeFunction
       Principal: sqs.amazonaws.com
       SourceArn: !Ref DataTransferSqsQueueArn
