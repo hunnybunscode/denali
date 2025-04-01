@@ -80,6 +80,12 @@ Resources:
               - kms:Decrypt
             Resource: "*"
 
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/logging-stack-${ResourceSuffix}
+      TargetKeyId: !Ref KmsKey
+
   AccessLogBucket:
     Type: AWS::S3::Bucket
     Metadata:

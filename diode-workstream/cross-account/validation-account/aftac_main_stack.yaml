@@ -300,7 +300,7 @@ Resources:
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: IngestStack
+    # DependsOn: IngestStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -318,6 +318,7 @@ Resources:
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
         EmailEndPoint: !Ref EmailEndPoint
+        IngestKmsKeyArn: !GetAtt IngestStack.Outputs.IngestKmsKeyArn
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole

@@ -28,6 +28,63 @@ Parameters:
     Description: The S3 prefix list ID to use for the pipeline
 
 Resources:
+  IngestKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for ingest stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow cryptographic operations via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
+          - Sid: Allow logs service principal to use the key
+            # https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+
+  IngestKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/ingest-stack-${ResourceSuffix}
+      TargetKeyId: !Ref IngestKmsKey
+
   ObjectTaggerRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -74,7 +131,11 @@ Resources:
                 Resource: !GetAtt AvScanQueue.Arn
               - Effect: Allow
                 Action:
-                  - s3:GetObjectTagging
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt IngestKmsKey.Arn
+              - Effect: Allow
+                Action:
                   - s3:PutObjectTagging
                   - s3:GetBucketTagging
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
@@ -99,6 +160,10 @@ Resources:
             Principal:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
+            # This condition does NOT allow apigateway to assume the role
+            # Condition:
+            #   StringEquals:
+            #     aws:SourceAccount: !Ref AWS::AccountId
       Policies:
         - PolicyName: APILambdaInvokeRolePolicy
           PolicyDocument:
@@ -113,7 +178,8 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
     Properties:
-      RetentionInDays: 731
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt IngestKmsKey.Arn
 
   AvScanDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -122,7 +188,10 @@ Resources:
     Properties:
       MessageRetentionPeriod: 1209600 # 14 days
       ReceiveMessageWaitTimeSeconds: 20
-      KmsMasterKeyId: alias/aws/sqs
+      # Encryption here may not be necessary; moving a message to a DLQ doesn't affect its encryption
+      # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-server-side-encryption.html#sqs-encryption-what-does-sse-encrypt
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
 
   AvScanQueue:
     Type: AWS::SQS::Queue
@@ -131,7 +200,8 @@ Resources:
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
-      KmsMasterKeyId: alias/aws/sqs
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt AvScanDeadLetterQueue.Arn
         maxReceiveCount: 5
@@ -277,6 +347,7 @@ Resources:
               logger.info(f"Sending a message to the SQS queue for {bucket}/{key}")
               SQS_CLIENT.send_message(
                   QueueUrl=AV_SCAN_QUEUE_URL,
+                  # TODO: Simplify the message body and include the object tags
                   MessageBody=json.dumps(
                       {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
                   ),
@@ -1420,6 +1491,10 @@ Resources:
         }
 
 Outputs:
+  IngestKmsKeyArn:
+    Description: KMS Key Arn for the Ingest Stack
+    Value: !GetAtt IngestKmsKey.Arn
+
   AvScanQueueUrl:
     Description: Queue URL of the SQS AV Scan Queue
     Value: !Ref AvScanQueue

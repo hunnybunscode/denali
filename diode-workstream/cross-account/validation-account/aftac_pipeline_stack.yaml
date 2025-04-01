@@ -49,6 +49,10 @@ Parameters:
     Type: String
     Description: The email address to use for SNS notifications
 
+  IngestKmsKeyArn:
+    Type: String
+    Description: The ARN of the KMS key encrypting the resources in Ingest Stack
+
   DiodeAccountId:
     Type: String
     Description: AWS Account ID of the Diode Account
@@ -125,7 +129,7 @@ Resources:
               AWS: !Ref AWS::AccountId
             Action:
               - kms:Decrypt
-              # - kms:GenerateDataKey
+              - kms:GenerateDataKey
             Resource: "*"
             Condition:
               StringEquals:
@@ -167,6 +171,12 @@ Resources:
                   - !Sub sqs.${AWS::Region}.amazonaws.com
               ArnEquals:
                 aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
+
+  PipelineKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/pipeline-stack-${ResourceSuffix}
+      TargetKeyId: !Ref PipelineKmsKey
 
   Ec2ScannerRole:
     Type: AWS::IAM::Role
@@ -245,6 +255,13 @@ Resources:
               - Effect: Allow
                 Action: ec2:DescribeTags
                 Resource: "*"
+        - PolicyName: Ec2ScannerKmsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref IngestKmsKeyArn
 
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile

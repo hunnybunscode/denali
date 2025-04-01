@@ -80,6 +80,7 @@ def send_to_sqs(bucket, key):
     logger.info(f"Sending a message to the SQS queue for {bucket}/{key}")
     SQS_CLIENT.send_message(
         QueueUrl=AV_SCAN_QUEUE_URL,
+        # TODO: Simplify the message body and include the object tags
         MessageBody=json.dumps(
             {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
         ),
