@@ -6,6 +6,7 @@ from urllib.parse import unquote_plus
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -52,7 +53,10 @@ def lambda_handler(event, context):
         ],
     )
 
-    add_tags_to_object(bucket, key, tagset)
+    tags_added = add_tags_to_object(bucket, key, tagset)
+    if not tags_added:
+        return
+
     send_to_sqs(bucket, key)
     logger.info("SUCCESS")
 
@@ -68,12 +72,19 @@ def get_bucket_tags(bucket: str):
 
 def add_tags_to_object(bucket: str, key: str, tagset: list[dict[str, str]]):
     logger.info(f"Adding tags to {bucket}/{key}")
-    S3_CLIENT.put_object_tagging(
-        Bucket=bucket,
-        Key=key,
-        Tagging={"TagSet": tagset},
-        ExpectedBucketOwner=ACCOUNT_ID,
-    )
+    try:
+        S3_CLIENT.put_object_tagging(
+            Bucket=bucket,
+            Key=key,
+            Tagging={"TagSet": tagset},
+            ExpectedBucketOwner=ACCOUNT_ID,
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            logger.warning(f"{key} not found")
+            return False
+        raise
 
 
 def send_to_sqs(bucket, key):
