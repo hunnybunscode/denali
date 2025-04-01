@@ -12,9 +12,14 @@ metadata:
     alb.ingress.kubernetes.io/backend-protocol-version: HTTP1
     alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
     alb.ingress.kubernetes.io/healthcheck-path: /nifi-api/flow/cluster/summary
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "5"
     alb.ingress.kubernetes.io/success-codes: 200-299,300-399,400 # Not sure why ELB get HTTP 400 from the NIFI Web Service, might be strict domain source
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=300
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=300,slow_start.duration_seconds=480
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300   
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-FIPS-2023-04
 spec:
   ingressClassName: alb
   rules:

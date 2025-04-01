@@ -4,5 +4,6 @@ kind: Kustomization
 resources:
   - cluster-a.yaml
   - cluster-a.group.admin.yaml
+  - cluster-a.registry-client.yaml
 
   - cluster-a.user.jktruong.yaml

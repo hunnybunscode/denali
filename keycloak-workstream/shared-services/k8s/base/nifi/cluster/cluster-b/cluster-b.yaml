@@ -11,7 +11,8 @@ spec:
   # zkAddress: zookeeper.zookeeper:2181
   # zkPath: /nifi/cluster-b
   clusterManager: kubernetes
-  clusterImage: apache/nifi:2.3.0
+  clusterImage: apache/nifi:2.2.0
+  # clusterImage: apache/nifi:2.3.0
   initContainerImage: bash:5.2.2
   oneNifiNodePerNode: true
   readOnlyConfig:
@@ -106,6 +107,12 @@ spec:
         nifiProperties:
           overrideConfigs: |
             nifi.ui.banner.text=NiFiKop - Node 3 // UNCLASSIFIED
+    # - id: 4
+    #   nodeConfigGroup: default_group
+    #   readOnlyConfig:
+    #     nifiProperties:
+    #       overrideConfigs: |
+    #         nifi.ui.banner.text=NiFiKop - Node 4 // UNCLASSIFIED
   propagateLabels: true
   nifiClusterTaskSpec:
     retryDurationMinutes: 10
