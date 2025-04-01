@@ -82,11 +82,15 @@ def main():
             logger.info("-" * 100)
 
         except Exception as e:
-            logger.exception(e)
-            logger.info(
-                "Sleeping for 3 seconds, before proceeding to receive the next message",
-            )
-            time.sleep(3)  # nosemgrep arbitrary-sleep
+            if isinstance(e, ValueError) and "No existing tags" in str(e):
+                # Check for the next message immediately
+                pass
+            else:
+                logger.exception(e)
+                logger.info(
+                    "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
+                )
+                time.sleep(3)  # nosemgrep arbitrary-sleep
 
 
 if __name__ == "__main__":
