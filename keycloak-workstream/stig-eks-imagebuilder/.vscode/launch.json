@@ -1,0 +1,23 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "CDK Debugger - Nodejs",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "runtimeArgs": ["-r", "./node_modules/ts-node/register/transpile-only"],
+      "args": ["./bin/stig-eks-imagebuilder.ts"],
+      "env": {
+        "AWS_DEFAULT_REGION": "us-west-1",
+        "CDK_DEFAULT_REGION": "us-west-1",
+        "DEBUG": "true"
+      },
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
