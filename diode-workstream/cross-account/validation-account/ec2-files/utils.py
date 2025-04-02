@@ -142,8 +142,8 @@ def add_tags(
     logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
     existing_tags = get_object_tagging(bucket, key, bucket_owner)
     if not existing_tags:
-        # TODO: Temporary, until we can find the root cause for getting
-        # empty tags at times
+        # Empty tags can be returned if an object with the same name gets
+        # dropped into the ingestion bucket
         raise ValueError(f"No existing tags found for {bucket}/{key}")
     combined_tags = existing_tags | tags_to_add
     logger.info(f"Combined tags: {combined_tags}")
