@@ -1519,6 +1519,22 @@ Outputs:
     Export:
       Name: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
 
+  AvScanQueueArn:
+    Description: ARN of the SQS AV Scan Queue
+    Value: !GetAtt AvScanQueue.Arn
+
+  AvScanDeadLetterQueueUrl:
+    Description: Queue URL of the SQS AV Scan Dead Letter Queue
+    Value: !Ref AvScanDeadLetterQueue
+
+  AvScanDeadLetterQueueName:
+    Description: Name of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.QueueName
+
+  AvScanDeadLetterQueueArn:
+    Description: ARN of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.Arn
+
   BucketObjectTaggerArn:
     Description: ARN of the Object Tagger Lambda Function
     Value: !GetAtt BucketObjectTagger.Arn

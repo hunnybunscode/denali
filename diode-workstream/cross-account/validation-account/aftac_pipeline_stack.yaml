@@ -95,6 +95,50 @@ Parameters:
     Type: Number
     Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
 
+  AccessLogBucketName:
+    Type: String
+    Description: The name of the access log bucket.
+
+  AvScanQueueName:
+    Type: String
+    Description: The name of the AV Scan Queue.
+
+  AvScanQueueUrl:
+    Type: String
+    Description: The URL of the AV Scan Queue.
+
+  AvScanQueueArn:
+    Type: String
+    Description: The ARN of the AV Scan Queue.
+
+  AvScanDeadLetterQueueName:
+    Type: String
+    Description: The name of the AV Scan Dead Letter Queue.
+
+  AvScanDeadLetterQueueUrl:
+    Type: String
+    Description: The URL of the AV Scan Dead Letter Queue.
+
+  AvScanDeadLetterQueueArn:
+    Type: String
+    Description: The ARN of the AV Scan Dead Letter Queue.
+
+  TransferQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Transfer Queue
+
+  ResultQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Result Queue
+
+  AvScanQueueThreshold:
+    Type: Number
+    Description: Alert threshold for AV Scan Queue
+
+  QueueMonitoringInterval:
+    Type: String
+    Description: How frequently to check SQS Queue metrics (in minutes)
+
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
   SendEmailNotifications: !Not [!Equals [!Ref EmailEndPoint, ""]]
@@ -440,7 +484,6 @@ Resources:
                   f"Copying {key} from {DATA_TRANSFER_BUCKET} to {FAILED_TRANSFER_BUCKET}",
               )
               try:
-                  # amazonq-ignore-next-line
                   S3_CLIENT.copy_object(
                       # Source bucket/key/owner
                       CopySource={"Bucket": DATA_TRANSFER_BUCKET, "Key": key},
@@ -584,8 +627,7 @@ Resources:
     DeletionPolicy: Delete
     Properties:
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -641,8 +683,7 @@ Resources:
               KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
             BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -702,8 +743,7 @@ Resources:
               KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
             BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -764,8 +804,7 @@ Resources:
               KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
             BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -939,7 +978,6 @@ Resources:
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
-        # TODO: Determine if we need to set this to Default using an API
         Version: !GetAtt AutoScalingGroupLaunchTemplate.DefaultVersionNumber
       MaxSize: "12"
       MinSize: "2"
@@ -1153,8 +1191,7 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: QueueName
-          Value:
-            Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
+          Value: !Ref AvScanQueueName
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
@@ -1387,6 +1424,246 @@ Resources:
       Description: ARN of the SNS Topic where files which are deemed to potentially contain malware are published to.
       Type: String
       Value: !GetAtt InfectedFileTopic.TopicArn
+
+  QueueMonitorTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Queue Monitor Alert Topic
+      KmsMasterKeyId: alias/aws/sns
+
+  QueueMonitorTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref QueueMonitorTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
+  QueueMonitorDLQTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Queue Monitor DLQ Topic
+      KmsMasterKeyId: alias/aws/sns
+
+  QueueMonitorDLQTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref QueueMonitorDLQTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
+  QueueMonitorLogGroup:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/queue-monitor-${ResourceSuffix}
+      RetentionInDays: 90
+
+  QueueMonitorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-QueueMonitor-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt QueueMonitorLogGroup.Arn
+        - PolicyName: AllowSQSAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt TransferQueue.Arn
+                  - !GetAtt TransferDlq.Arn
+                  - !GetAtt TransferResultQueue.Arn
+                  - !GetAtt TransferResultDlq.Arn
+                  - !Ref AvScanQueueArn
+                  - !Ref AvScanDeadLetterQueueArn
+
+        - PolicyName: AllowSNSPublish
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource:
+                  - !Ref QueueMonitorTopic
+                  - !Ref QueueMonitorDLQTopic
+
+  QueueMonitorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub queue-monitor-${ResourceSuffix}
+      Handler: index.lambda_handler
+      Role: !GetAtt QueueMonitorRole.Arn
+      Runtime: python3.11
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      DeadLetterConfig:
+        TargetArn: !Ref QueueMonitorDLQTopic
+      LoggingConfig:
+        LogGroup: !Ref QueueMonitorLogGroup
+      Environment:
+        Variables:
+          TOPIC_ARN: !Ref QueueMonitorTopic
+          TRANSFER_QUEUE_NAME: !GetAtt TransferQueue.QueueName
+          TRANSFER_DLQ_NAME: !GetAtt TransferDlq.QueueName
+          TRANSFER_RESULT_QUEUE_NAME: !GetAtt TransferResultQueue.QueueName
+          TRANSFER_RESULT_DLQ_NAME: !GetAtt TransferResultDlq.QueueName
+          AV_SCAN_QUEUE_NAME: !Ref AvScanQueueName
+          AV_SCAN_DLQ_NAME: !Ref AvScanDeadLetterQueueName
+          AV_SCAN_QUEUE_URL: !Ref AvScanQueueUrl
+          AV_SCAN_DLQ_URL: !Ref AvScanDeadLetterQueueUrl
+          TRANSFER_QUEUE_URL: !Ref TransferQueue
+          TRANSFER_DLQ_URL: !Ref TransferDlq
+          RESULT_QUEUE_URL: !Ref TransferResultQueue
+          RESULT_DLQ_URL: !Ref TransferResultDlq
+          TRANSFER_QUEUE_THRESHOLD: !Ref TransferQueueThreshold
+          RESULT_QUEUE_THRESHOLD: !Ref ResultQueueThreshold
+          AV_SCAN_QUEUE_THRESHOLD: !Ref AvScanQueueThreshold
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          from datetime import datetime, timezone
+
+          import boto3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          SQS = boto3.client('sqs')
+          SNS = boto3.client('sns')
+
+          QUEUE_CONFIGS = [
+              {
+                  "name": os.environ['TRANSFER_QUEUE_NAME'],
+                  "url": os.environ['TRANSFER_QUEUE_URL'],
+                  "threshold": int(os.environ['TRANSFER_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['TRANSFER_DLQ_NAME'],
+                  "url": os.environ['TRANSFER_DLQ_URL'],
+                  "threshold": 1
+              },
+              {
+                  "name": os.environ['TRANSFER_RESULT_QUEUE_NAME'],
+                  "url": os.environ['RESULT_QUEUE_URL'],
+                  "threshold": int(os.environ['RESULT_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['TRANSFER_RESULT_DLQ_NAME'],
+                  "url": os.environ['RESULT_DLQ_URL'],
+                  "threshold": 1
+              },
+              {
+                  "name": os.environ['AV_SCAN_QUEUE_NAME'],
+                  "url": os.environ['AV_SCAN_QUEUE_URL'],
+                  "threshold": int(os.environ['AV_SCAN_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['AV_SCAN_DLQ_NAME'],
+                  "url": os.environ['AV_SCAN_DLQ_URL'],
+                  "threshold": 1
+              }
+          ]
+
+          def check_queue(queue_config):
+              try:
+                  response = SQS.get_queue_attributes(
+                      QueueUrl=queue_config['url'],
+                      AttributeNames=['ApproximateNumberOfMessages']
+                  )
+                  messages = int(response['Attributes']['ApproximateNumberOfMessages'])
+                  return {
+                      'name': queue_config['name'],
+                      'messages': messages,
+                      'threshold': queue_config['threshold'],
+                      'exceeds_threshold': messages > queue_config['threshold']
+                  }
+              except Exception as e:
+                  logger.error(f"Error checking queue {queue_config['name']}: {str(e)}")
+                  return None
+
+          def lambda_handler(event, context):
+              alerts = []
+              error_queues = []
+
+              for queue_config in QUEUE_CONFIGS:
+                  status = check_queue(queue_config)
+                  if status is None:
+                      error_queues.append(queue_config['name'])
+                  elif status['exceeds_threshold']:
+                      alerts.append(status)
+
+              logger.info(f"Error queues: {error_queues}")
+              if error_queues:
+                  message = f"Queue Error - {datetime.now(timezone.utc).isoformat()}\n\n"
+                  message += "The following queue(s) could not be checked:\n\n"
+
+                  for error_queue in error_queues:
+                      message += f"Queue: {error_queue}\n\n"
+
+                  SNS.publish(
+                      TopicArn=os.environ['TOPIC_ARN'],
+                      Subject="Queue Monitor Errors",
+                      Message=message
+                  )
+
+              logger.info(f"Alerts: {alerts}")
+              if alerts:
+                  message = f"Queue Alert - {datetime.now(timezone.utc).isoformat()}\n\n"
+                  message += "The following queue(s) have exceeded their thresholds:\n\n"
+
+                  for alert in alerts:
+                      message += f"Queue: {alert['name']}\n"
+                      message += f"Current Messages: {alert['messages']}\n"
+                      message += f"Threshold: {alert['threshold']}\n\n"
+
+                  SNS.publish(
+                      TopicArn=os.environ['TOPIC_ARN'],
+                      Subject="Queue Monitor Alert",
+                      Message=message
+                  )
+
+              logger.info("Lambda execution completed")
+
+  QueueMonitorScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Trigger queue monitoring Lambda function
+      ScheduleExpression: !Ref QueueMonitoringInterval
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt QueueMonitorFunction.Arn
+          Id: QueueMonitorFunction
+
+  QueueMonitorLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref QueueMonitorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt QueueMonitorScheduleRule.Arn
 
 Outputs:
   DataTransferBucketName:
