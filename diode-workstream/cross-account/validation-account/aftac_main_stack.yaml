@@ -34,6 +34,14 @@ Metadata:
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
+          default: Queue Monitoring Configuration
+        Parameters:
+          - AvScanQueueThreshold
+          - TransferQueueThreshold
+          - ResultQueueThreshold
+          - QueueMonitoringInterval
+
+      - Label:
           default: SSM Agent Update Configuration
         Parameters:
           - SsmAgentUpdateInterval
@@ -89,6 +97,14 @@ Metadata:
         default: Pipeline Stack Diode Account ID
       EmailEndPoint:
         default: Email End Point
+      AvScanQueueThreshold:
+        default: AV Scan Queue Threshold
+      TransferQueueThreshold:
+        default: Transfer Queue Threshold
+      ResultQueueThreshold:
+        default: Result Queue Threshold
+      QueueMonitoringInterval:
+        default: Queue Monitoring Interval
       SsmAgentUpdateInterval:
         default: SSM Agent Update Interval
       MaxConcurrency:
@@ -200,6 +216,33 @@ Parameters:
     Description: (Optional) Email address to receive SNS notifications for infected, invalid, and failed transfer files
     AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
     ConstraintDescription: Must be a valid email end point
+
+  AvScanQueueThreshold:
+    Type: Number
+    Description: Alert threshold for AV Scan Queue
+    Default: 50
+    MinValue: 1
+
+  TransferQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Transfer Queue
+    Default: 50
+    MinValue: 1
+
+  ResultQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Result Queue
+    Default: 50
+    MinValue: 1
+
+  QueueMonitoringInterval:
+    Type: String
+    Description: How frequently to check SQS Queue metrics
+    Default: rate(30 minutes)
+    AllowedPattern: ^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: >-
+      Must be a valid rate.
+      https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html
 
   SsmAgentUpdateInterval:
     Type: String
@@ -318,7 +361,18 @@ Resources:
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
         EmailEndPoint: !Ref EmailEndPoint
+        AccessLogBucketName: !GetAtt LoggingStack.Outputs.AccessLogBucketName
         IngestKmsKeyArn: !GetAtt IngestStack.Outputs.IngestKmsKeyArn
+        AvScanQueueName: !GetAtt IngestStack.Outputs.AvScanQueueName
+        AvScanQueueUrl: !GetAtt IngestStack.Outputs.AvScanQueueUrl
+        AvScanQueueArn: !GetAtt IngestStack.Outputs.AvScanQueueArn
+        AvScanDeadLetterQueueName: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueName
+        AvScanDeadLetterQueueArn: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueArn
+        AvScanDeadLetterQueueUrl: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueUrl
+        TransferQueueThreshold: !Ref TransferQueueThreshold
+        ResultQueueThreshold: !Ref ResultQueueThreshold
+        AvScanQueueThreshold: !Ref AvScanQueueThreshold
+        QueueMonitoringInterval: !Ref QueueMonitoringInterval
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
