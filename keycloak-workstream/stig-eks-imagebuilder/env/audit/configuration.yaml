@@ -1,0 +1,49 @@
+environment:
+  name: dev
+  region: us-west-1
+  account: "654654446198"
+
+.ami: &ami
+  name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+
+.storage: &storage
+  type: gp3
+  deviceName: /dev/xvda
+  sizeInGB: 20
+
+.vpc: &vpc
+  id: vpc-073d399ea5a92d3e0
+  subnet:
+    id: subnet-0b9e668b1b9ecff66
+
+pipelines:
+  - name: amazon-2023-eks-node-1-30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: 1.0.1
+    # vpc: *vpc
+    instanceTypes:
+      - m5.large
+      - m5.xlarge
+      - m6a.xlarge
+    ami:
+      name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+    storages:
+      - *storage
+    tags:
+      OS: Amazon Linux 2023
+      ARCH: x86_64
+      STIG: High
+      EKS: 1.30
+    components:
+      - name: stig-build-linux-high
+        version: 2024.4.0
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value:
+              - "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/SecurityUpdate.yml
+      - lib/component/AllowEKSOperationalStatus.yml
