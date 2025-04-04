@@ -1,0 +1,45 @@
+# Source: nifikop/templates/role_binding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    app: nifikop
+    chart: nifikop-1.13.0
+    heritage: Helm
+    release: nifikops
+
+  annotations:
+
+  name: nifikop
+  namespace: nifi
+subjects:
+- kind: ServiceAccount
+  name: nifikop
+  namespace: nifikops
+roleRef:
+  kind: Role
+  name: nifikop
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: nifikop/templates/role_binding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    app: nifikop
+    chart: nifikop-1.13.0
+    heritage: Helm
+    release: nifikops
+
+  annotations:
+
+  name: nifikop
+  namespace: nifikops
+subjects:
+- kind: ServiceAccount
+  name: nifikop
+  namespace: nifikops
+roleRef:
+  kind: Role
+  name: nifikop
+  apiGroup: rbac.authorization.k8s.io

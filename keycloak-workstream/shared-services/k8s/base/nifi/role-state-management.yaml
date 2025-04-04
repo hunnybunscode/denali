@@ -1,0 +1,26 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: role-state-management
+  namespace: nifi
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["*"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: role-state-management
+  namespace: nifi
+subjects:
+  - kind: ServiceAccount
+    name: service-account-cluster
+    namespace: nifi
+roleRef:
+  kind: Role
+  name: role-state-management
+  apiGroup: rbac.authorization.k8s.io

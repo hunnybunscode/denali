@@ -3,3 +3,5 @@ kind: Kustomization
 
 resources:
   - ../../../base/keycloak
+  - ../../../base/zookeeper
+  - ../../../base/nifi

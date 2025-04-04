@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  namespace: nifikop
+
+resources:
+  - namespace.yaml
+  
+  - certificate-nifikop-webhook-cert.yaml
+  - customresourcedefinition-nificlusters.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nificonnections.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifidataflows.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifinodegroupautoscalers.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifiparametercontexts.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifiregistryclients.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifiusergroups.nifi.konpyutaika.com.yaml
+  - customresourcedefinition-nifiusers.nifi.konpyutaika.com.yaml
+  - deployment-nifikops.yaml
+  - issuer-selfsigned-issuer.yaml
+  - role-nifikop.yaml
+  - rolebinding-nifikop.yaml
+  - service-nifikop-webhook.yaml
+  - serviceaccount-nifikop.yaml
+

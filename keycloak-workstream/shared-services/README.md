@@ -78,3 +78,24 @@ In order use alternative `configuration.yaml` files, create a subfolder inside `
    ```bash
    kubectl apply --kustomize k8s/overlay/dev/post
    ```
+
+
+## Services
+### NiFiKop
+
+#### Upgrade helm templates
+1. Navigate to `k8s/base/nifikop`
+2. Run the following helm template
+   ```bash
+   helm template nifikops \
+    oci://ghcr.io/konpyutaika/helm-charts/nifikop \
+    --namespace=nifikop \
+    --include-crds \
+    --set image.tag=v1.13.0-release \
+    --set resources.requests.memory=256Mi \
+    --set resources.requests.cpu=250m \
+    --set resources.limits.memory=256Mi \
+    --set resources.limits.cpu=250m \
+    --set logLevel=Debug \
+    --set namespaces={"nifi,nifikop"} | kubectl slice --output-dir .
+   ```

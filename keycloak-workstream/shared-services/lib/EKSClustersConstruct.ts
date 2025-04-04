@@ -202,6 +202,7 @@ export class EKSClustersConstruct extends Construct {
         eniConfigLabelDef: "topology.kubernetes.io/zone",
         serviceAccountPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKS_CNI_Policy")],
         enablePodEni: true,
+        disableTcpEarlyDemux: true,
         enableNetworkPolicy: true,
         warmIpTarget: 2,
         minimumIpTarget: 20,

@@ -19,8 +19,8 @@ clusters:
         - id: subnet-07f068c8e23af23e2
     hostedZones: *hostedZones
     nodeGroups:
-      - name: general
-        instanceType: t3a.xlarge
+      - name: compute-xlarge
+        instanceType: m5a.xlarge
         ami: &ami
           name: amazon-eks-node-1.30-*
         storage: &storage
@@ -30,5 +30,6 @@ clusters:
         subnets:
           - id: subnet-0d2bfe25aa0f19aed
           - id: subnet-07f068c8e23af23e2
-        desiredCapacity: 2
-        maxSize: 10
+        minSize: 4
+        desiredCapacity: 8
+        maxSize: 50
