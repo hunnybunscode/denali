@@ -9,27 +9,35 @@ hostedZones: &hostedZones
     vpc:
       id: &vpcId vpc-0a1b3d9e9e45c96ab
 
+.workerNodeAmi: &ami
+  name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+
+.controlNodeGroupSubnets: &controlNodeGroupSubnets
+  - id: subnet-0d2bfe25aa0f19aed
+  - id: subnet-07f068c8e23af23e2
+
+.workerNodeGroupSubnets: &workerNodeGroupSubnets
+  - id: subnet-0d2bfe25aa0f19aed
+  - id: subnet-07f068c8e23af23e2
+
+.workerNodeRootstorage: &storage
+  rootDeviceName: /dev/xvda
+  sizeInGB: 20
+  type: gp3
+
 clusters:
   - name: SharedServices
     version: "1.30"
     vpc:
       id: *vpcId
-      subnets:
-        - id: subnet-0d2bfe25aa0f19aed
-        - id: subnet-07f068c8e23af23e2
+      subnets: *controlNodeGroupSubnets
     hostedZones: *hostedZones
     nodeGroups:
       - name: compute-xlarge
         instanceType: m5a.xlarge
-        ami: &ami
-          name: amazon-eks-node-1.30-*
-        storage: &storage
-          rootDeviceName: /dev/xvda
-          sizeInGB: 20
-          type: gp3
-        subnets:
-          - id: subnet-0d2bfe25aa0f19aed
-          - id: subnet-07f068c8e23af23e2
+        ami: *ami
+        storage: *storage
+        subnets: *workerNodeGroupSubnets
         minSize: 4
         desiredCapacity: 8
         maxSize: 50

@@ -43,7 +43,7 @@ try {
   const environmentName = env.ENVIRONMENT ?? "dev";
   console.info(`Loading environment variables for environment: ${environmentName}`);
   doc = yaml.load(
-    fs.readFileSync(path.join(__dirname, `../env/${environmentName}/configuration.yaml`), "utf8")
+    fs.readFileSync(path.normalize(path.join(__dirname, `../env/${environmentName}/configuration.yaml`)), "utf8")
   ) as Configuration;
 } catch (e) {
   console.error(e);
