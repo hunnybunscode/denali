@@ -1,0 +1,4 @@
+environment:
+  name: denali-project-consultants
+  region: us-gov-west-1
+  account: "303344244756"

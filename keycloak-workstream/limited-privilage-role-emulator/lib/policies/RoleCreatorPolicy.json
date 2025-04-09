@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "iam:CreatePolicy*",
+        "iam:DeletePolicy*",
+        "iam:SetDefaultPolicyVersion",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion"
+      ],
+      "Resource": "arn:{{partition}}:iam::{{account}}:policy/AFC2S*",
+      "Effect": "Allow",
+      "Sid": "RoleCreatorCustomPolicies"
+    },
+    {
+      "Condition": {
+        "StringLike": {
+          "iam:PermissionsBoundary": "arn:{{partition}}:iam::{{account}}:policy/ProjAdminPolicy"
+        }
+      },
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:CreateRole",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:PutRolePolicy"
+      ],
+      "Resource": ["arn:{{partition}}:iam::{{account}}:role/AFC2S*"],
+      "Effect": "Allow",
+      "Sid": "RoleCreatorCreateCustomRolesEnforceBoundary"
+    },
+    {
+      "Action": [
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:TagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:UntagRole"
+      ],
+      "Resource": ["arn:{{partition}}:iam::{{account}}:role/AFC2S*"],
+      "Effect": "Allow",
+      "Sid": "RoleCreatorEditCustomRoles"
+    },
+    {
+      "Action": [
+        "iam:AddRoleToInstanceProfile",
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile"
+      ],
+      "Resource": ["arn:{{partition}}:iam::{{account}}:instance-profile/AFC2S*"],
+      "Effect": "Allow",
+      "Sid": "RoleCreatorCustomInstanceProfiles"
+    },
+    {
+      "Action": ["sts:*"],
+      "Resource": ["arn:{{partition}}:iam::{{account}}:role/AFC2S*"],
+      "Effect": "Allow",
+      "Sid": "RoleCreatorAssumeCustomRoles"
+    }
+  ]
+}
