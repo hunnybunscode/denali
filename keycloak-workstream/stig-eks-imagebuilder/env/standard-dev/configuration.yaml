@@ -1,10 +1,7 @@
 environment:
   name: dev
   region: us-west-1
-  account: "654654446198"
-
-.ami: &ami
-  name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+  account: "908027385618"
 
 .storage: &storage
   type: gp3
@@ -12,14 +9,15 @@ environment:
   sizeInGB: 20
 
 .vpc: &vpc
-  id: vpc-073d399ea5a92d3e0
+  id: vpc-040175d809b8f8b32
   subnet:
-    id: subnet-0b9e668b1b9ecff66
+    id: subnet-086ac47d6754023ce
 
 pipelines:
-  - name: amazon-2023-eks-node-1-30-stig-high
+  - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
-    version: 1.0.1
+    version: 1.0.0
+    scan: false
     # vpc: *vpc
     instanceTypes:
       - m5.large
@@ -33,7 +31,8 @@ pipelines:
       OS: Amazon Linux 2023
       ARCH: x86_64
       STIG: High
-      EKS: 1.30
+      FIPS: Enabled
+      K8S VERSION: "1.30"
     components:
       - name: stig-build-linux-high
         version: 2024.4.0

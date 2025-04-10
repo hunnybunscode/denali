@@ -8,6 +8,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as yaml from "js-yaml";
 import { SharedServicesStack } from "../lib/shared-services-stack";
+import IamRoleAspect from "../lib/IamRoleAspect";
 
 const { env } = process;
 const app = new App();
@@ -27,14 +28,14 @@ for (const [key, value] of Object.entries(tags)) {
   });
 }
 
-let doc: Document;
+let doc: ConfigurationDocument;
 
 try {
   const environmentName = env.ENVIRONMENT ?? "dev";
   console.info(`Loading environment variables for environment: ${environmentName}`);
   doc = yaml.load(
     fs.readFileSync(path.join(__dirname, `../env/${environmentName}/configuration.yaml`), "utf8")
-  ) as Document;
+  ) as ConfigurationDocument;
 } catch (e) {
   console.error(e);
   throw e;
@@ -57,6 +58,14 @@ new SharedServicesStack(app, "SharedServicesStack", environment);
 
 Aspects.of(app).add(new NIST80053R4Checks({ verbose: true }));
 Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+
+Aspects.of(app).add(
+  new IamRoleAspect({
+    namePrefix: doc.environment?.iam?.prefix,
+    permissionBoundaryArn: doc.environment?.iam?.permissionBoundaryArn,
+    verbose: true,
+  })
+);
 
 // Generalized Suppression
 NagSuppressions.addResourceSuppressions(

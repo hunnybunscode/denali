@@ -7,7 +7,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Launch Program",
+      "name": "CDK Debugging",
       "skipFiles": ["<node_internals>/**"],
       "runtimeArgs": ["-r", "./node_modules/ts-node/register/transpile-only"],
       "args": ["./bin/shared-services.ts"],

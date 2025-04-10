@@ -12,7 +12,7 @@ import { EksBlueprint } from "@aws-quickstart/eks-blueprints";
 import { EKSClustersConstruct } from "./EKSClustersConstruct";
 import EKSUpdateNodeGroupVersion from "./EKSUpdateNodeGroupVersion";
 
-export interface SharedServicesStackProps extends StackProps, Document {}
+export interface SharedServicesStackProps extends StackProps, ConfigurationDocument {}
 
 export class SharedServicesStack extends Stack {
   constructor(scope: Construct, id: string, props: SharedServicesStackProps) {
@@ -20,12 +20,9 @@ export class SharedServicesStack extends Stack {
 
     const zones = this.createDomains(props);
 
-    const keyPair = this.createCommonKeyPair();
-
     const clustersBuilderConstruct = new EKSClustersConstruct(this, "CreateEKSClusters", {
       ...props,
       ...{
-        keyPair,
         extended: {
           parentStack: this,
           hostedZones: zones,
@@ -36,21 +33,6 @@ export class SharedServicesStack extends Stack {
     // new EKSUpdateNodeGroupVersion(this, {
     //   stacks: Object.values(clustersBuilderConstruct.ClusterStacks) as EksBlueprint[],
     // });
-  }
-  private createCommonKeyPair() {
-    // Create a common ec2 key pair for SSH access for SSM
-    const keyPair = new ec2.KeyPair(this, `${this.node.id}-ec2-KeyPair`, {
-      keyPairName: "common-ec2-key-pair",
-      format: ec2.KeyPairFormat.PEM,
-      type: ec2.KeyPairType.RSA,
-    });
-
-    // Output of the common ec2 key pair parameter name in Parameter Store
-    new CfnOutput(this, "common-ec2-key-pair-parameter-name", {
-      value: keyPair.privateKey.parameterName,
-    });
-
-    return keyPair;
   }
 
   private createCertificate(zone: { zoneName: string; zone: route53.IHostedZone; private: boolean }) {

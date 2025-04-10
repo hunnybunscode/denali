@@ -14,6 +14,7 @@ import {
   Duration,
   Stack,
   Tags,
+  CfnOutput,
 } from "aws-cdk-lib";
 
 import { globSync } from "glob";
@@ -22,8 +23,7 @@ import { StorageClassDefaultAddon } from "./eks-blueprints/addons/storage-class-
 
 import { NagSuppressions } from "cdk-nag";
 
-export interface EksClustersConstructProps extends StackProps, Document {
-  keyPair: ec2.IKeyPair;
+export interface EksClustersConstructProps extends StackProps, ConfigurationDocument {
   extended: {
     parentStack: Stack;
     hostedZones: {
@@ -62,8 +62,10 @@ export class EKSClustersConstruct extends Construct {
       return;
     }
 
+    const commonKeyPair = this.createCommonKeyPair();
+
     for (const clusterMetadata of clusters) {
-      const clusterStack = this.createCluster(clusterMetadata, env);
+      const clusterStack = this.createCluster(clusterMetadata, commonKeyPair, env);
       this._clusters[clusterMetadata.name] = clusterStack.getClusterInfo().cluster;
       this._clusterStacks[clusterMetadata.name] = clusterStack;
 
@@ -105,6 +107,8 @@ export class EKSClustersConstruct extends Construct {
               "Policy::arn:<AWS::Partition>:iam::aws:policy/AWSXrayWriteOnlyAccess",
               "Policy::arn:<AWS::Partition>:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
               "Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonElasticContainerRegistryPublicReadOnly",
+              "Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonEKSVPCResourceController",
+              "Policy::arn:<AWS::Partition>:iam::aws:policy/AmazonEKSClusterPolicy",
             ],
           },
           {
@@ -136,7 +140,23 @@ export class EKSClustersConstruct extends Construct {
     }
   }
 
-  private createCluster(clusterMetadata: Cluster, environment?: Omit<Environment, "name">) {
+  private createCommonKeyPair() {
+    // Create a common ec2 key pair for SSH access for SSM
+    const keyPair = new ec2.KeyPair(this, `${this.node.id}-cluster-ec2-KeyPair`, {
+      keyPairName: "common-cluster-ec2-key-pair",
+      format: ec2.KeyPairFormat.PEM,
+      type: ec2.KeyPairType.RSA,
+    });
+
+    // Output of the common ec2 key pair parameter name in Parameter Store
+    new CfnOutput(this, "common-ec2-key-pair-parameter-name", {
+      value: keyPair.privateKey.parameterName,
+    });
+
+    return keyPair;
+  }
+
+  private createCluster(clusterMetadata: Cluster, commonKeyPair: ec2.KeyPair, environment?: Omit<Environment, "name">) {
     const {
       name: clusterName,
       vpc: vpcData,
@@ -170,11 +190,6 @@ export class EKSClustersConstruct extends Construct {
       subnetFilters: [ec2.SubnetFilter.byIds((vpcData.subnets ?? []).map(subnet => subnet.id))],
     };
 
-    const fargateProfiles = [
-      { fargateProfileName: "serverless-defaults", selectors: [{ namespace: "default" }] },
-      { fargateProfileName: "serverless-apps", selectors: [{ namespace: "serverless-apps" }] },
-    ];
-
     const clusterKey = blueprints.getResource(({ scope }) => {
       const key = new kms.Key(scope, `${scope.node.id}-key-cluster`, {
         alias: `eks/${clusterName}/default`,
@@ -202,12 +217,12 @@ export class EKSClustersConstruct extends Construct {
         eniConfigLabelDef: "topology.kubernetes.io/zone",
         serviceAccountPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKS_CNI_Policy")],
         enablePodEni: true,
-        disableTcpEarlyDemux: true,
         enableNetworkPolicy: true,
         warmIpTarget: 2,
         minimumIpTarget: 20,
         awsVpcK8sCniLogFile: "stderr",
         awsVpcK8sPluginLogFile: "stderr",
+        podSecurityGroupEnforcingMode: "standard",
       }),
       new blueprints.addons.CoreDnsAddOn(),
       new blueprints.addons.KubeProxyAddOn(),
@@ -288,11 +303,6 @@ export class EKSClustersConstruct extends Construct {
 
           userData.addCommands(...rawUserData.split("\n").filter(line => line.length != 0));
 
-          const keyPairName = (this.node.scope?.node.tryFindChild(this.props.keyPair.node.id) as ec2.IKeyPair)
-            .keyPairName;
-
-          const keyPair = ec2.KeyPair.fromKeyPairName(scope, `${scope.node.id}-${nodeGroupName}-keypair`, keyPairName);
-
           const template = new ec2.LaunchTemplate(scope, `${clusterName}-lt-${nodeGroupName}`, {
             machineImage: nodeWorkerImage,
             userData: nodeWorkerImage ? userData : undefined,
@@ -301,7 +311,7 @@ export class EKSClustersConstruct extends Construct {
             httpPutResponseHopLimit: 2,
             ebsOptimized: true,
             blockDevices,
-            keyPair,
+            keyPair: commonKeyPair,
           });
 
           return template;
@@ -361,12 +371,29 @@ export class EKSClustersConstruct extends Construct {
       return role;
     });
 
+    const clusterRole = blueprints.getResource(({ scope }) => {
+      const role = new iam.Role(scope, `${clusterName}-cluster-role`, {
+        roleName: `${clusterName}-cluster-role`,
+        description: `Cluster IAM Role for EKS Cluster: ${clusterName}`,
+        assumedBy: new iam.ServicePrincipal("eks.amazonaws.com"),
+        managedPolicies: [
+          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKSClusterPolicy"),
+          iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonEKSVPCResourceController"),
+        ],
+      });
+
+      Tags.of(role).add("eks:cluster-name", clusterName);
+
+      return role;
+    });
+
     const clusterProvider = new blueprints.GenericClusterProvider({
       version: clusterVersion ? eks.KubernetesVersion.of(clusterVersion) : eks.KubernetesVersion.V1_30,
       endpointAccess: isPrivateCluster ? eks.EndpointAccess.PRIVATE : eks.EndpointAccess.PUBLIC_AND_PRIVATE,
       clusterName,
       vpcSubnets: [clusterSubnetFilter],
       mastersRole: clusterMasterRole,
+      role: clusterRole,
       secretsEncryptionKey: clusterKey,
       managedNodeGroups,
       clusterLogging: [
@@ -378,10 +405,6 @@ export class EKSClustersConstruct extends Construct {
       ],
       placeClusterHandlerInVpc: false,
       tags,
-      // fargateProfiles: fargateProfiles.reduce((accumulator, fargateProfile) => {
-      //   accumulator[fargateProfile.fargateProfileName] = fargateProfile;
-      //   return accumulator;
-      // }, {} as { [key: string]: eks.FargateProfileOptions }),
     });
 
     const eksBuilder = blueprints.EksBlueprint.builder();

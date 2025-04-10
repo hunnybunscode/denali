@@ -2,6 +2,10 @@ interface Environment {
   name: string;
   region?: string;
   account?: string;
+  iam?: {
+    prefix?: string
+    permissionBoundaryArn?: string
+  }
 }
 
 interface HostedZone {
@@ -31,7 +35,7 @@ interface Cluster {
   hostedZones?: ExtendedHostedZone[];
 }
 
-interface Document {
+interface ConfigurationDocument {
   environment: Environment;
   hostedZones?: HostedZone[];
   clusters?: Cluster[];

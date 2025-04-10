@@ -1,0 +1,46 @@
+environment:
+  name: standard-dev
+  region: us-west-1
+  account: "908027385618"
+  iam:
+    prefix: AFC2S
+    permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+
+hostedZones: &hostedZones
+  - zoneName: denali.jktruong.people.aws.dev
+    private: true
+    vpc:
+      id: &vpcId vpc-03341f2c7303b3635
+
+.workerNodeAmi: &ami
+  name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+
+.controlNodeGroupSubnets: &controlNodeGroupSubnets
+  - id: subnet-0b0dad38a1d76b4b0
+  - id: subnet-040bc3f3394155f31
+
+.workerNodeGroupSubnets: &workerNodeGroupSubnets
+  - id: subnet-0995934b1e5de960d
+  - id: subnet-0cad71af0b2618a11
+
+.workerNodeRootstorage: &storage
+  rootDeviceName: /dev/xvda
+  sizeInGB: 20
+  type: gp3
+
+clusters:
+  - name: StandardSharedServices
+    version: "1.30"
+    vpc:
+      id: *vpcId
+      subnets: *controlNodeGroupSubnets
+    hostedZones: *hostedZones
+    nodeGroups:
+      - name: compute-xlarge
+        instanceType: m5a.xlarge
+        ami: *ami
+        storage: *storage
+        subnets: *workerNodeGroupSubnets
+        minSize: 1
+        desiredCapacity: 2
+        maxSize: 50

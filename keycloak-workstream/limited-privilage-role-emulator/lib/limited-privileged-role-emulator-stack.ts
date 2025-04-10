@@ -48,6 +48,19 @@ export class LimitedPrivilegedRoleEmulatorStack extends Stack {
       managedPolicies,
     });
 
+    // allow role to pass iam role to itself
+    role.attachInlinePolicy(
+      new iam.Policy(this, "AllowPassRole", {
+        statements: [
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["iam:PassRole"],
+            resources: [role.roleArn],
+          }),
+        ],
+      })
+    );
+
     new CfnOutput(this, "LimitedAccessRoleArn", {
       value: role.roleArn,
     });
