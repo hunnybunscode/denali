@@ -1,0 +1,8 @@
+environment:
+  name: standard-dev
+  region: us-west-1
+  account: "908027385618"
+  execute: false
+  iam:
+    prefix: AFC2S
+    permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy

@@ -14,8 +14,7 @@
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "AWS_PROFILE": "denali-project-consultants-Admin",
-        "AWS_DEFAULT_REGION": "us-gov-west-1",
-        // "ENVIRONMENT": "local-jktruong"
+        "AWS_DEFAULT_REGION": "us-gov-west-1"
       }
     }
   ]
