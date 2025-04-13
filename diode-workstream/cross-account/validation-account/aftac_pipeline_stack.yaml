@@ -177,7 +177,9 @@ Resources:
             Resource: "*"
             Condition:
               StringEquals:
-                kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
+                kms:ViaService:
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sqs.${AWS::Region}.amazonaws.com
           - Sid: Allow EC2 scanner role to encrypt
             Effect: Allow
             Principal:
@@ -284,7 +286,11 @@ Resources:
                   - s3:ListBucket
                   - s3:PutObject
                   - s3:PutObjectTagging
+                  - s3:GetBucketTagging
                 Resource: "*"
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
         - PolicyName: Ec2ScannerSnsPolicy
           PolicyDocument:
             Version: 2012-10-17

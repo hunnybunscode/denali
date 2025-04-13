@@ -170,9 +170,3 @@ Outputs:
     Value: !Ref AccessLogBucket
     Export:
       Name: !Sub access-logs-bucket-${ResourceSuffix}
-
-  KMSArn:
-    Description: KMS Key ARN for the S3 Logging Bucket
-    Value: !GetAtt KmsKey.Arn
-    Export:
-      Name: !Sub kms-key-${ResourceSuffix}

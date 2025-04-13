@@ -198,10 +198,10 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
       NotificationConfiguration:
-        LambdaConfigurations:
+        QueueConfigurations:
           - Event: s3:ObjectCreated:*
-            Function:
-              Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
+            Queue:
+              Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-arn-${ResourceSuffix}
       LifecycleConfiguration:
         Rules:
           - Id: ExpireObjectsLifecycleRule

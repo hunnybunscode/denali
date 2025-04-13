@@ -75,9 +75,8 @@ def main():
                 logger.warning(f"This message has been received {receive_count} times")
                 change_message_visibility(queue_url, receipt_handle, receive_count * 30)
             message_body = json.loads(message["Body"])
-            bucket = message_body["detail"]["requestParameters"]["bucketName"]
-            key = message_body["detail"]["requestParameters"]["key"]
-            validate_file(bucket, key, receipt_handle)
+            s3_event: dict = message_body["Records"][0]
+            validate_file(s3_event, receipt_handle)
 
             logger.info("-" * 100)
 
