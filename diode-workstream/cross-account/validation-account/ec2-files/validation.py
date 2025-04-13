@@ -16,6 +16,7 @@ from utils import get_file_ext
 from utils import get_origin_tags
 from utils import get_ttl
 from utils import get_user_tags_from_bucket
+from utils import head_object
 from utils import publish_sns_message
 from utils import upload_file
 from utils import validate_file_type
@@ -119,6 +120,7 @@ def _process_invalid_file(
 
     bucket = s3_event["s3"]["bucket"]["name"]
     key = s3_event["s3"]["object"]["key"]
+    etag = s3_event["s3"]["object"]["eTag"]
 
     user_tags = get_user_tags_from_bucket(bucket, get_ttl())
     origin_tags = get_origin_tags(s3_event)
@@ -127,8 +129,10 @@ def _process_invalid_file(
     invalid_files_bucket = ssm_params[
         f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
     ]
+    logger.info(f"Uploading {key} file to Invalid Files bucket")
     upload_file(invalid_files_bucket, key, file_path, url_encoded_tags)
-    delete_object(bucket, key)  # Delete it from the ingestion bucket
+    if head_object(bucket, key, etag):
+        delete_object(bucket, key)  # Delete it from the ingestion bucket
     delete_av_scan_message(receipt_handle)
     _send_file_rejected_sns_msg(invalid_files_bucket, key)
 

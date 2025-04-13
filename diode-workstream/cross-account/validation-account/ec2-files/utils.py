@@ -28,6 +28,25 @@ SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
 
 
+def head_object(bucket: str, key: str, etag: str, bucket_owner: str | None = None):
+    try:
+        params = dict(Bucket=bucket, Key=key, IfMatch=etag)
+        if bucket_owner:
+            params["ExpectedBucketOwner"] = bucket_owner
+        S3_CLIENT.head_object(**params)
+        return True
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code in ("404", "NoSuchKey"):
+            logger.warning(f"Object not found: {bucket}/{key}")
+            return False
+        elif error_code == "412":
+            logger.warning(f"ETag mismatch: {bucket}/{key} (ETag: {etag})")
+            return False
+        else:
+            raise e
+
+
 def delete_object(
     bucket: str,
     key: str,

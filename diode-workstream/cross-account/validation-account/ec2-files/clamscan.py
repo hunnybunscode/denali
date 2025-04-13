@@ -10,6 +10,7 @@ from utils import delete_object
 from utils import get_origin_tags
 from utils import get_ttl
 from utils import get_user_tags_from_bucket
+from utils import head_object
 from utils import publish_sns_message
 from utils import upload_file
 
@@ -57,6 +58,7 @@ def _process_file(
 ):
     bucket = s3_event["s3"]["bucket"]["name"]
     key = s3_event["s3"]["object"]["key"]
+    etag = s3_event["s3"]["object"]["eTag"]
 
     if exit_status == 0:
         file_status = "CLEAN"
@@ -77,28 +79,23 @@ def _process_file(
         data_transfer_bucket = ssm_params[
             f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"
         ]
-        logger.info(
-            f"Uploading {key} file to Data Transfer bucket: {data_transfer_bucket}",
-        )
+        logger.info(f"Uploading {key} file to Data Transfer bucket")
         upload_file(data_transfer_bucket, key, file_path, url_encoded_tags)
     elif exit_status == 1:
         quarantine_bucket = ssm_params[
             f"/pipeline/QuarantineBucketName-{resource_suffix}"
         ]
-        logger.info(
-            f"Uploading {key} file to Quarantine bucket: {quarantine_bucket}",
-        )
+        logger.info(f"Uploading {key} file to Quarantine bucket")
         upload_file(quarantine_bucket, key, file_path, url_encoded_tags)
     else:
         invalid_files_bucket = ssm_params[
             f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
         ]
-        logger.info(
-            f"Uploading {key} file to Invalid Files bucket: {invalid_files_bucket}",
-        )
+        logger.info(f"Uploading {key} file to Invalid Files bucket")
         upload_file(invalid_files_bucket, key, file_path, url_encoded_tags)
 
-    delete_object(bucket, key)  # Delete it from the ingestion bucket
+    if head_object(bucket, key, etag):
+        delete_object(bucket, key)  # Delete it from the ingestion bucket
     delete_av_scan_message(receipt_handle)
 
     if exit_status == 0:
