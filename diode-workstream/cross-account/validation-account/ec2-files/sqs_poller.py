@@ -8,6 +8,7 @@ from config import file_handler_config
 from config import resource_suffix
 from config import ssm_params
 from utils import change_message_visibility
+from utils import delete_sqs_message
 from utils import get_params_values
 from utils import receive_sqs_message
 from validation import validate_file
@@ -74,7 +75,13 @@ def main():
             if receive_count > 1:
                 logger.warning(f"This message has been received {receive_count} times")
                 change_message_visibility(queue_url, receipt_handle, receive_count * 30)
-            message_body = json.loads(message["Body"])
+
+            message_body: dict = json.loads(message["Body"])
+            if message_body.get("Event") == "s3:TestEvent":
+                logger.info("Ignoring the S3 test message")
+                delete_sqs_message(queue_url, receipt_handle)
+                continue
+
             s3_event: dict = message_body["Records"][0]
             validate_file(s3_event, receipt_handle)
 
