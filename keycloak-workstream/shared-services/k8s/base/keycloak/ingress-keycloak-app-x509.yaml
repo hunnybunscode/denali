@@ -26,6 +26,6 @@ spec:
             path: /
             backend:
               service:
-                name: service-keycloak-sentinel
+                name: service-keycloak-instance
                 port:
                   name: ui

@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-keycloak-sentinel
+  name: service-keycloak-instance
   namespace: keycloak
 spec:
   type: LoadBalancer
   selector:
-    keycloak: keycloak-sentinel
+    keycloak: keycloak-instance
   ports:
     - name: ui
       port: 8443

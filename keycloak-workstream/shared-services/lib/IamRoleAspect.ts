@@ -1,4 +1,4 @@
-import { IAspect, AspectOptions, Stack } from "aws-cdk-lib";
+import { IAspect, AspectOptions, Stack, CfnResource } from "aws-cdk-lib";
 import { IConstruct } from "constructs";
 import { CfnRole } from "aws-cdk-lib/aws-iam";
 // import * as util from "util";
@@ -23,25 +23,30 @@ export default class IamRoleAspect implements IAspect {
   }
 
   public visit(node: IConstruct): void {
-    if (node instanceof CfnRole) {
-      const cfnRole = node as CfnRole;
-      const resolvedLogicalId = Stack.of(node).resolve(cfnRole.logicalId);
+    if (node instanceof CfnResource) {
+      const cfnResourceNode: CfnResource = node;
 
-      const { options, maxLength, suffixLength, pattern } = this;
+      if (cfnResourceNode.cfnResourceType == "AWS::IAM::Role") {
+        const cfnRole = node as CfnRole;
+        const resolvedLogicalId = Stack.of(node).resolve(cfnRole.logicalId);
 
-      if (options.verbose) {
-        console.debug("****************");
-        // console.debug(util.inspect(node, { depth: 2 }));
-        console.debug(resolvedLogicalId);
-      }
+        const { options, maxLength, suffixLength, pattern } = this;
 
-      // Skip if roleName is not defined (using CloudFormation generated name)
-      if (!cfnRole.roleName) {
-        console.debug(`Skipping role name update: roleName is not defined - Node ID: ${cfnRole.node.id}`);
-      } else {
+        if (options.verbose) {
+          console.debug("****************");
+          // console.debug(util.inspect(node, { depth: 2 }));
+          console.debug(resolvedLogicalId);
+        }
+
+        // Skip if roleName is not defined (using CloudFormation generated name)
+        if (!cfnRole.roleName) {
+          console.debug(`RoleName is not defined - Node ID: ${resolvedLogicalId}`);
+          cfnRole.roleName = resolvedLogicalId;
+        }
+
         // Check prefix is defined
         if (options.namePrefix !== undefined) {
-          let newRoleName = cfnRole.roleName;
+          let newRoleName = cfnRole.roleName!;
           const oldRoleName = newRoleName;
 
           if (this.options.verbose) console.debug(`Updating role name: ${oldRoleName}`);
@@ -101,12 +106,12 @@ export default class IamRoleAspect implements IAspect {
 
           this.roleNameCache.push(newRoleName);
         }
-      }
 
-      // Update the permission boundary to the role if not set
-      if (this.options.permissionBoundaryArn !== undefined && cfnRole.permissionsBoundary === undefined) {
-        cfnRole.addPropertyOverride("PermissionsBoundary", this.options.permissionBoundaryArn);
-        if (this.options.verbose) console.debug(`Updated permission boundary: ${this.options.permissionBoundaryArn}`);
+        // Update the permission boundary to the role if not set
+        if (this.options.permissionBoundaryArn !== undefined && cfnRole.permissionsBoundary === undefined) {
+          cfnRole.addPropertyOverride("PermissionsBoundary", this.options.permissionBoundaryArn);
+          if (this.options.verbose) console.debug(`Updated permission boundary: ${this.options.permissionBoundaryArn}`);
+        }
       }
     }
   }

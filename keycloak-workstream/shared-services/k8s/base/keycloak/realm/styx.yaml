@@ -4,7 +4,7 @@ metadata:
   name: styx
   namespace: keycloak
 spec:
-  keycloakCRName: keycloak-sentinel
+  keycloakCRName: keycloak-instance
   realm:
     id: 1bd6e510-f442-4699-abf8-1d871e37b308
     realm: styx
