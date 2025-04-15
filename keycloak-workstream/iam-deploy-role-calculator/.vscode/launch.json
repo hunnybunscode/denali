@@ -1,0 +1,34 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PowerShell: Launch Current File",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${file}",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-Enhance",
+        "-TemplateFile",
+        // "/Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json"
+        // "/Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json"
+        // "/Users/jktruong/workspace/engagements/c3e/project/jktruong+team-c3e-sandbox-00-Admin.us-west-1.cdk.out/SapDomainServicesStack.template.json"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CDK",
+      "skipFiles": ["<node_internals>/**"],
+      "runtimeArgs": ["-r", "./node_modules/ts-node/register/transpile-only"],
+      "args": ["./bin/main.ts"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {      
+        "AWS_DEFAULT_REGION": "us-west-1"
+      }
+    }
+  ]
+}
