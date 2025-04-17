@@ -13,11 +13,12 @@
 
 ///<reference path="../lib/interfaces.d.ts" />
 
-import { App, Tags } from "aws-cdk-lib";
+import { App, Aspects, Tags } from "aws-cdk-lib";
 import { StigEksImageBuilderStack } from "../lib/stig-eks-imagebuilder-stack";
 import * as path from "path";
 import * as fs from "fs";
 import * as yaml from "js-yaml";
+import IamRoleAspect from "../lib/IamRoleAspect";
 
 const { env } = process;
 const app = new App();
@@ -64,3 +65,11 @@ const environment = {
 };
 
 new StigEksImageBuilderStack(app, "StigEksImagebuilderStack", environment);
+
+Aspects.of(app).add(
+  new IamRoleAspect({
+    namePrefix: doc.environment?.iam?.prefix,
+    permissionBoundaryArn: doc.environment?.iam?.permissionBoundaryArn,
+    verbose: true,
+  })
+);

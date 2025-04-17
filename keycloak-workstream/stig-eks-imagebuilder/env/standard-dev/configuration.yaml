@@ -2,6 +2,9 @@ environment:
   name: dev
   region: us-west-1
   account: "908027385618"
+  iam:
+    prefix: AFC2S
+    # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
 
 .storage: &storage
   type: gp3
@@ -45,4 +48,40 @@ pipelines:
               - "Yes"
       - lib/component/DODSTIGHardening.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/AllowEKSOperationalStatus.yml
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: 1.0.7
+    scan: false
+    # vpc: *vpc
+    instanceTypes:
+      - m5.large
+      - m5.xlarge
+      - m6a.xlarge
+    ami:
+      name: RHEL-9.5.*_HVM-*-x86_64-0-Hourly2-GP3
+    storages:
+      - *storage
+    tags:
+      OS: Red Hat Enterprise Linux 9
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: "1.30"
+    components:
+      - name: aws-cli-version-2-linux
+        version: 1.0.4
+        platform: linux
+      - lib/component/EKS-RHEL.yml
+      - name: stig-build-linux-high
+        version: 2024.4.0
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value:
+              - "Yes"
+      # - lib/component/DODSTIGHardening.yml
+      # - lib/component/SecurityUpdate.yml
       - lib/component/AllowEKSOperationalStatus.yml

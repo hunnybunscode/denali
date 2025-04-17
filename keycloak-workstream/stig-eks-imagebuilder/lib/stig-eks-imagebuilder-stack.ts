@@ -38,12 +38,39 @@ export class StigEksImageBuilderStack extends Stack {
 
     // Create an EC2 instance role for image builder
     const imageBuilderRole = new iam.Role(this, "ImageBuilderRole", {
+      roleName: "ImageBuilderRole",
       description: "EC2 Image Builder Role",
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName("EC2InstanceProfileForImageBuilder"),
+        iam.ManagedPolicy.fromAwsManagedPolicyName("EC2InstanceProfileForImageBuilderECRContainerBuilds"),
         iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
       ],
+      inlinePolicies: {
+        "EKS-S3-Access": new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["s3:Get*", "s3:List*"],
+              resources: [`arn:${this.partition}:s3:::amazon-eks/*`, `arn:${this.partition}:s3:::amazon-eks`],
+            }),
+          ],
+        }),
+        "ECR-Access": new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability"],
+              resources: ["*"],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["ecr:GetAuthorizationToken"],
+              resources: ["*"],
+            }),
+          ],
+        }),
+      },
     });
 
     const imageBuilderInstanceProfile = new iam.InstanceProfile(this, "ImageBuilderInstanceProfile", {
@@ -149,22 +176,30 @@ export class StigEksImageBuilderStack extends Stack {
             description,
           });
 
-          imageComponents.push({
+          const targetComponent = {
             componentArn: componentResource.attrArn,
-          });
+          };
+
+          imageComponents.push(targetComponent);
         } else {
           const { name, version, parameters } = component;
           const componentArn = `arn:${this.partition}:imagebuilder:${this.region}:aws:component/${name}/${version}/1`;
           const targetComponent = {
             componentArn,
-            parameters: parameters.map(parameter => {
-              const { name, value } = parameter;
-              return {
-                name,
-                value: Array.isArray(value) ? value : [value],
-              };
-            }),
           };
+
+          if (parameters && parameters.length > 0) {
+            Object.assign(targetComponent, {
+              parameters: parameters.map(parameter => {
+                const { name, value } = parameter;
+                return {
+                  name,
+                  value: Array.isArray(value) ? value : [value],
+                };
+              }),
+            });
+          }
+
           imageComponents.push(targetComponent);
         }
       }
@@ -176,6 +211,11 @@ export class StigEksImageBuilderStack extends Stack {
         version,
         components: imageComponents,
         parentImage: amiImage.imageId,
+        // additionalInstanceConfiguration: {
+        //   systemsManagerAgent: {
+        //     uninstallAfterBuild: false,
+        //   },
+        // },
         blockDeviceMappings,
         description,
         tags,

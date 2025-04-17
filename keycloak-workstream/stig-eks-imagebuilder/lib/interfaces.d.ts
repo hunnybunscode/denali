@@ -13,12 +13,16 @@ interface Environment {
   name: string;
   region?: string;
   account?: string;
+  iam?: {
+    prefix?: string;
+    permissionBoundaryArn?: string;
+  };
 }
 
 interface Component {
   name: string;
   version: string;
-  parameters: {
+  parameters?: {
     name: string;
     value: string | string[];
   }[];
