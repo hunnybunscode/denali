@@ -16,7 +16,7 @@ export interface SharedServicesStackProps extends StackProps, ConfigurationDocum
 
 export class SharedServicesStack extends Stack {
   constructor(scope: Construct, id: string, props: SharedServicesStackProps) {
-    super(scope, id, props);
+    super(scope, id, { description: `Shared Services for Environment: ${props.environment.name}`, ...props });
 
     const zones = this.createDomains(props);
 

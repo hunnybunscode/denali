@@ -148,9 +148,12 @@ export class EKSClustersConstruct extends Construct {
       type: ec2.KeyPairType.RSA,
     });
 
+    Tags.of(keyPair).add("Description", "Common EC2 key pair for SSH access for SSM");
+
     // Output of the common ec2 key pair parameter name in Parameter Store
     new CfnOutput(this, "common-ec2-key-pair-parameter-name", {
       value: keyPair.privateKey.parameterName,
+      description: "Common EC2 key pair for SSH access for SSM",
     });
 
     return keyPair;
@@ -303,6 +306,14 @@ export class EKSClustersConstruct extends Construct {
 
           userData.addCommands(...rawUserData.split("\n").filter(line => line.length != 0));
 
+          const keyPair = ec2.KeyPair.fromKeyPairAttributes(
+            scope,
+            `${scope.node.id}-cluster-ec2-KeyPair-${nodeGroupName}`,
+            {
+              keyPairName: (commonKeyPair.node.defaultChild as ec2.IKeyPair).keyPairName,
+            }
+          );
+
           const template = new ec2.LaunchTemplate(scope, `${clusterName}-lt-${nodeGroupName}`, {
             machineImage: nodeWorkerImage,
             userData: nodeWorkerImage ? userData : undefined,
@@ -311,7 +322,7 @@ export class EKSClustersConstruct extends Construct {
             httpPutResponseHopLimit: 2,
             ebsOptimized: true,
             blockDevices,
-            keyPair: commonKeyPair,
+            keyPair: keyPair,
           });
 
           return template;
@@ -460,20 +471,13 @@ export class EKSClustersConstruct extends Construct {
 
         if (results.length > 0) {
           console.info(`Found hosted zone ${zoneName} in extended data`);
-          const resourceZone = results[0].zone;
 
-          eksBuilder.resourceProvider(
-            hostedZones.zoneName,
-            new blueprints.ImportHostedZoneProvider(resourceZone.hostedZoneId)
-          );
+          eksBuilder.resourceProvider(zoneName, new blueprints.ImportHostedZoneProvider(zoneName));
 
           return;
         }
 
-        eksBuilder.resourceProvider(
-          hostedZones.zoneName,
-          new blueprints.LookupHostedZoneProvider(hostedZones.zoneName)
-        );
+        eksBuilder.resourceProvider(zoneName, new blueprints.LookupHostedZoneProvider(zoneName));
       });
     }
 
@@ -502,7 +506,7 @@ export class EKSClustersConstruct extends Construct {
         })
       )
       .useDefaultSecretEncryption(false)
-      .build(this, `cluster-${clusterName}-stack`);
+      .build(this, `cluster-${clusterName}-stack`, { description: `Stack to create EKS Cluster: ${clusterName}` });
 
     return clusterStack;
   }
