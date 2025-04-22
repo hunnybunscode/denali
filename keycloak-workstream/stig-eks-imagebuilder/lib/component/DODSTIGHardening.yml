@@ -1,28 +1,50 @@
-name: DODSTIGHardening
+name: DOD STIG Hardening
 description: Add additional hardening to image based on scanning results.
 schemaVersion: 1.0
 
 phases:
   - name: build
     steps:
-      - name: InstallDracutFips
+      - name: EnableFIPS
         action: ExecuteBash
         inputs:
           commands:
             - |
-              if uname --kernel-release | grep --quiet 'amzn2023'; then
-                echo "The kernel version contains 'amzn2023'."
-                sudo dnf --assumeyes install crypto-policies crypto-policies-scripts
-                sudo fips-mode-setup --enable
-              else
-                echo "The kernel version does not contain 'amzn2023'."
-                echo "Falling back to legacy ..."
+              echo "Enable FIPS ..."
 
-                sudo yum install --assumeyes dracut-fips
-                sudo dracut -f
-                sudo /sbin/grubby --update-kernel=ALL --args="fips=1"
-                sudo sed -i '$ a\GRUB_CMDLINE_LINUX="fips=1"' /etc/default/grub
-                sudo bash -c 'grub2-mkconfig -o /boot/grub2/grub.cfg'                            
+              # Get the current version
+              current_version=$(cat /etc/system-release)
+              echo "Current version: $current_version"
+
+              # Check if running AL2023
+              if [ -f /etc/os-release ]; then
+                  cat /etc/os-release
+                  source /etc/os-release
+
+                  if [[ $ID == "amzn" && $VERSION_ID == "2023" ]]; then
+                      echo "Running Amazon Linux 2023"
+                      
+                      sudo dnf --assumeyes install crypto-policies crypto-policies-scripts
+                      sudo fips-mode-setup --enable
+                  # Check if RHEL and running at least 8 or greater
+                  elif [[ $ID == "rhel" && $(echo "$VERSION_ID" | awk '{print ($0 >= 8)}') -eq 1 ]]; then
+                      echo "Running RHEL 8 or greater"
+                      
+                      sudo dnf --assumeyes install crypto-policies crypto-policies-scripts
+                      sudo fips-mode-setup --enable                  
+                  # Check if running Amazon 2 Linux
+                  elif [[ $ID == "amzn" && $VERSION_ID == "2" ]]; then
+                      echo "Running Amazon Linux 2"
+                      sudo yum install --assumeyes dracut-fips
+                      sudo dracut -f
+                      sudo /sbin/grubby --update-kernel=ALL --args="fips=1"
+                  else
+                      echo "Unsupported OS ..."
+                      exit 1
+                  fi
+              else
+                  echo "Cannot determine OS version"
+                  exit 1
               fi
 
       - name: X11Forwarding

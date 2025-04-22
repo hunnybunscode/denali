@@ -1,67 +1,68 @@
 name: Amazon EKS Optimized RHEL AMI
 description: Installs Amazon EKS-optimized RHEL artifacts for Amazon EKS.
 schemaVersion: 1.0
-constants:
+
+parameters:
   - AWSRegion:
       type: string
-      value: "us-west-2"
+      default: "us-west-2"
   - KubernetesVersion:
       type: string
-      value: "1.30"
+      default: "1.30"
   - GithubRepoUrl:
       type: string
-      value: "https://github.com/aws-samples/amazon-eks-ami-rhel.git"
+      default: "https://github.com/aws-samples/amazon-eks-ami-rhel.git"
   - GithubDir:
       type: string
-      value: "amazon-eks-ami-rhel"
+      default: "amazon-eks-ami-rhel"
   - BinaryBucketName:
       type: string
-      value: "amazon-eks"
+      default: "amazon-eks"
   - BinaryBucketRegion:
       type: string
-      value: "us-west-2"
+      default: "us-west-2"
   - ContainerSELinuxVersion:
       type: string
-      value: "*"
+      default: "*"
   - ContainerdUrl:
       type: string
-      value: "https://api.github.com/repos/containerd/containerd/releases"
+      default: "https://api.github.com/repos/containerd/containerd/releases"
   - ContainerdVersion:
       type: string
-      value: "1.7.23"
+      default: "1.7.26"
   - NerdctlUrl:
       type: string
-      value: "https://api.github.com/repos/containerd/nerdctl/releases"
+      default: "https://api.github.com/repos/containerd/nerdctl/releases"
   - NerdctlVersion:
       type: string
-      value: "*"
+      default: "*"
   - NodeAdmBuildImage:
       type: string
-      value: "public.ecr.aws/eks-distro-build-tooling/golang:1.23"
+      default: "public.ecr.aws/eks-distro-build-tooling/golang:1.24"
   - PauseContainerImage:
       type: string
-      value: "602401143452.dkr.ecr.us-west-2.amazonaws.com/eks/pause:3.5"
+      default: "public.ecr.aws/eks-distro/kubernetes/pause:3.10"
   - RuncVersion:
       type: string
-      value: "*"
+      default: "*"
   - TempPath:
       type: string
-      value: "/tmp"
+      default: "/tmp"
   - WorkerDir:
       type: string
-      value: "worker"
+      default: "worker"
   - HomePath:
       type: string
-      value: "/home/ec2-user"
+      default: "/home/ec2-user"
   - EnableEfa:
       type: string
-      value: "false"
+      default: "false"
   - EnableFips:
       type: string
-      value: "false"
+      default: "false"
   - SSMAgentVersion:
       type: string
-      value: "latest"
+      default: "latest"
 phases:
   - name: build
     steps:
@@ -72,7 +73,8 @@ phases:
         maxAttempts: 1
         inputs:
           commands:
-            - yum install -y git
+            - sudo yum install -y git
+            - mkdir -p {{ HomePath }}
             - cd {{ HomePath }}
             - git clone {{ GithubRepoUrl }}
             - sudo mkdir -p {{ TempPath }}/{{ WorkerDir}}/rootfs
@@ -117,12 +119,15 @@ phases:
             - KUBERNETES_VERSION=$KUBERNETES_VERSION KUBERNETES_BUILD_DATE=$KUBERNETES_BUILD_DATE AWS_REGION={{ AWSRegion }} BINARY_BUCKET_NAME={{ BinaryBucketName }} BINARY_BUCKET_REGION={{ BinaryBucketRegion }} CONTAINER_SELINUX_VERSION={{ ContainerSELinuxVersion }} CONTAINERD_URL={{ ContainerdUrl }} CONTAINERD_VERSION={{ ContainerdVersion }} NERDCTL_URL={{ NerdctlUrl }} NERDCTL_VERSION={{ NerdctlVersion }} RUNC_VERSION={{ RuncVersion }} SSM_AGENT_VERSION={{ SSMAgentVersion }} WORKING_DIR={{ TempPath }}/{{ WorkerDir}} bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-worker.sh
       - name: InstallNodeAdm
         action: ExecuteBash
-        timeoutSeconds: 1200
+        timeoutSeconds: 6000
         onFailure: Abort
-        maxAttempts: 1
+        maxAttempts: 3
         inputs:
           commands:
+            - echo "Building NodeAdm into the system"
             - BUILD_IMAGE={{ NodeAdmBuildImage }} AWS_REGION={{ AWSRegion }} PROJECT_DIR={{ TempPath }}/{{ WorkerDir}}/nodeadm bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-nodeadm.sh
+            - 'echo "NodeAdm installed - Exit Code: $?"'
+
       - name: CachePauseContainer
         action: ExecuteBash
         timeoutSeconds: 1200
@@ -139,16 +144,16 @@ phases:
         inputs:
           commands:
             - if [ "{{ EnableEfa }}" = "true" ]; then AWS_REGION={{ AWSRegion }} ENABLE_EFA={{ EnableEfa }} bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-efa.sh; fi
-      - name: Cleanup
-        action: ExecuteBash
-        timeoutSeconds: 1200
-        onFailure: Abort
-        maxAttempts: 1
-        inputs:
-          commands:
-            - bash {{ HomePath }}/{{ GithubDir }}/templates/shared/provisioners/cleanup.sh
-            - bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/validate.sh
-            - sudo rm -rf {{ HomePath }}/*
-            - sudo rm -rf {{ TempPath }}/provisioners
-            - sudo rm -rf {{ TempPath }}/hack
-            - sudo rm -rf {{ TempPath }}/{{ WorkerDir}}
+      # - name: Cleanup
+      #   action: ExecuteBash
+      #   timeoutSeconds: 1200
+      #   onFailure: Abort
+      #   maxAttempts: 1
+      #   inputs:
+      #     commands:
+      #       - bash {{ HomePath }}/{{ GithubDir }}/templates/shared/provisioners/cleanup.sh
+      #       - bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/validate.sh
+      #       - sudo rm -rf {{ HomePath }}/*
+      #       - sudo rm -rf {{ TempPath }}/provisioners
+      #       - sudo rm -rf {{ TempPath }}/hack
+      #       - sudo rm -rf {{ TempPath }}/{{ WorkerDir}}

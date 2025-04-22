@@ -89,6 +89,8 @@ export class StigEksImageBuilderStack extends Stack {
         vpc,
         version,
         scan: enableScan = true,
+        test: enableTest = true,
+        enhancedImageMetadata: enableEnhancedImageMetadataEnabled = true,
         distributions = [],
       } = pipeline;
       const amiLookup = new ec2.LookupMachineImage({
@@ -164,17 +166,7 @@ export class StigEksImageBuilderStack extends Stack {
         if (typeof component === "string") {
           const componentPath = path.resolve(projectRootDir, component);
 
-          const componentDefinition = yaml.load(fs.readFileSync(componentPath, "utf8"));
-          const componentName = path.basename(componentPath).split(".")[0];
-          const componentPlatform = "Linux";
-
-          const componentResource = new imageBuilder.CfnComponent(this, `${pipelineName}--${componentName}-component`, {
-            name: `${pipelineName}--${componentName}`,
-            version,
-            platform: componentPlatform,
-            data: yaml.dump(componentDefinition),
-            description,
-          });
+          const componentResource = this.createComponent(componentPath, pipelineName, version, description);
 
           const targetComponent = {
             componentArn: componentResource.attrArn,
@@ -182,8 +174,25 @@ export class StigEksImageBuilderStack extends Stack {
 
           imageComponents.push(targetComponent);
         } else {
-          const { name, version, parameters } = component;
-          const componentArn = `arn:${this.partition}:imagebuilder:${this.region}:aws:component/${name}/${version}/1`;
+          let { name, version, parameters } = component;
+
+          // Check name is a file that exist
+          const componentPath = path.resolve(projectRootDir, name);
+          const componentValidFile = fs.existsSync(componentPath);
+          let componentArn: string = "";
+
+          if (componentValidFile) {
+            const componentResource = this.createComponent(componentPath, pipelineName, version, description);
+            version = `${version}/1`;
+            componentArn = componentResource.attrArn;
+          } else {
+            if (!version.includes("/") && !version.includes("x")) {
+              version = `${version}/1`;
+            }
+
+            componentArn = `arn:${this.partition}:imagebuilder:${this.region}:aws:component/${name}/${version}`;
+          }
+
           const targetComponent = {
             componentArn,
           };
@@ -211,11 +220,11 @@ export class StigEksImageBuilderStack extends Stack {
         version,
         components: imageComponents,
         parentImage: amiImage.imageId,
-        // additionalInstanceConfiguration: {
-        //   systemsManagerAgent: {
-        //     uninstallAfterBuild: false,
-        //   },
-        // },
+        additionalInstanceConfiguration: {
+          systemsManagerAgent: {
+            uninstallAfterBuild: false,
+          },
+        },
         blockDeviceMappings,
         description,
         tags,
@@ -271,18 +280,38 @@ export class StigEksImageBuilderStack extends Stack {
         imageRecipeArn: imageRecipe.attrArn,
         infrastructureConfigurationArn: imageBuilderInfrastructureConfiguration.attrArn,
         description,
-        enhancedImageMetadataEnabled: true,
+        enhancedImageMetadataEnabled: enableEnhancedImageMetadataEnabled,
         status: "ENABLED",
         imageScanningConfiguration: {
           imageScanningEnabled: enableScan,
         },
         distributionConfigurationArn: distributionConfig.attrArn,
         imageTestsConfiguration: {
-          imageTestsEnabled: true,
-          timeoutMinutes: 90,
+          imageTestsEnabled: enableTest,
+          timeoutMinutes: 60,
         },
         tags,
       });
     }
+  }
+
+  private createComponent(
+    componentPath: string,
+    pipelineName: string,
+    version: string,
+    description: string | undefined
+  ) {
+    const componentDefinition = yaml.load(fs.readFileSync(componentPath, "utf8"));
+    const componentName = path.basename(componentPath).split(".")[0];
+    const componentPlatform = "Linux";
+
+    const componentResource = new imageBuilder.CfnComponent(this, `${pipelineName}--${componentName}-component`, {
+      name: `${pipelineName}--${componentName}`,
+      version,
+      platform: componentPlatform,
+      data: yaml.dump(componentDefinition),
+      description,
+    });
+    return componentResource;
   }
 }

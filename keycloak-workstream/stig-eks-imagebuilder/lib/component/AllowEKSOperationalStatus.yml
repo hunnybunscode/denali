@@ -1,5 +1,5 @@
-name: AllowOperationalStatus
-description: Some hardening causes operational status to fail, this reverses some of the hardening.
+name: Allow EKS Operational Status
+description: Some hardening causes operational status to fail, this reverses some of the hardening for EKS
 schemaVersion: 1.0
 
 phases:
@@ -10,7 +10,7 @@ phases:
         inputs:
           commands:
             - |
-              # install jq and container-selinux for EKS amis
+              # install jq and container-selinux for EKS AMIs
               if command -v dnf &> /dev/null && command -v kubelet &> /dev/null; then
                 sudo dnf install jq container-selinux -y
                 sudo semanage permissive --add kubelet_t
@@ -33,3 +33,53 @@ phases:
               net.ipv4.conf.all.forwarding = 1
               EOF'
               sudo sysctl --system
+
+      - name: RHEL-fapolicyd-rule-config
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              RULES=/etc/fapolicyd/rules.d/70-allow_op_status.rules
+
+              if [[ -f $RULES ]]; then
+                sudo rm $RULES
+              fi
+
+              # Create the rules file with proper permissions
+              sudo tee "$RULES" << 'EOF' > /dev/null
+              allow perm=execute exe=/usr/bin/containerd-shim-runc-v2 : all
+              allow perm=execute exe=/usr/bin/containerd : all
+              allow perm=execute exe=/usr/bin/kubelet : all
+              allow perm=open exe=/usr/bin/containerd-shim-runc-v2 : all 
+              allow perm=open exe=/usr/bin/containerd : all
+              allow perm=open exe=/usr/bin/kubelet : all
+              EOF
+
+              echo "Load fapolicyd rules..."
+              sudo fagenrules --load
+
+              echo "Restarting fapolicyd after adding rules..."
+              sudo systemctl restart fapolicyd
+
+              # Allow some time for the service to restart if needed
+              sleep 2
+
+              # Verify the rules are loaded
+              sudo fapolicyd-cli --list
+      - name: Check-Journal-Folder
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              if [[ ! -d /var/log/journal ]]; then
+                sudo ln -s /run/log/journal /var/log/journal
+              fi
+
+  - name: validate
+    steps:
+      - name: Validate-EKS-Software
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              nodeadm --version

@@ -47,6 +47,8 @@ interface Pipeline {
   tags?: { [key: string]: string };
   description?: string;
   scan?: boolean;
+  test?: boolean;
+  enhancedImageMetadata?: boolean;
   distributions?: {
     amiDistributionConfiguration: {
       launchPermissionConfiguration?: {

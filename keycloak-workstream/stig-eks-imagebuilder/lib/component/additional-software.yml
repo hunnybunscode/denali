@@ -1,0 +1,45 @@
+name: Additional Software
+description: Installs additional software
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: whoami
+        action: ExecuteBash
+        onFailure: Ignore
+        maxAttempts: 1
+        inputs:
+          commands:
+            - |
+              echo "Current User: $(whoami)"
+
+              # Get the current version
+              current_version=$(cat /etc/system-release)
+              echo "Current version: $current_version"
+
+              # Check if running AL2023
+              if [ -f /etc/os-release ]; then
+                  cat /etc/os-release
+                  source /etc/os-release
+
+                  MAJOR_VERSION=$(echo "$VERSION_ID" | cut -d'.' -f1)
+
+                  if [[ $ID == "amzn" && $VERSION_ID == "2023" ]]; then
+                      echo "Running Amazon Linux 2023"
+                  # Check if RHEL and running at least 8 or greater
+                  elif [[ $ID == "rhel" && $(echo "$VERSION_ID" | awk '{print ($0 >= 8)}') -eq 1 ]]; then
+                      echo "Running RHEL 8 or greater"
+
+                      sudo yum install --assumeyes "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${MAJOR_VERSION}.noarch.rpm"
+                      sudo yum install --assumeyes htop
+                          
+                  # Check if running Amazon 2 Linux
+                  elif [[ $ID == "amzn" && $VERSION_ID == "2" ]]; then
+                      echo "Running Amazon Linux 2"
+                      
+                  else
+                      echo "Unsupported OS ..."
+                      exit 1
+                  fi
+              fi
