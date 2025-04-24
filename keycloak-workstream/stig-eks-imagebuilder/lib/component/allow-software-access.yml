@@ -32,20 +32,20 @@ phases:
                 echo "Warning: AWS CLI dist path or fapolicyd-cli not found. Skipping library trust update."
               fi
 
-      - name: DNSNameServerFix
-        action: ExecuteBash
-        inputs:
-          commands:
-            - |
-              sudo sed -i '/^[[:space:]]*dns[[:space:]]*=[[:space:]]*none/d' /etc/NetworkManager/NetworkManager.conf
-              CONF_CONTENT="[main]\ndns=default"
+      # - name: DNSNameServerFix
+      #   action: ExecuteBash
+      #   inputs:
+      #     commands:
+      #       - |
+      #         sudo sed -i '/^[[:space:]]*dns[[:space:]]*=[[:space:]]*none/d' /etc/NetworkManager/NetworkManager.conf
+      #         CONF_CONTENT="[main]\ndns=default"
 
-              # Use echo and tee to create the file as root
-              echo -e "$CONF_CONTENT" | sudo tee /etc/NetworkManager/conf.d/99-enable-dns.conf > /dev/null
+      #         # Use echo and tee to create the file as root
+      #         echo -e "$CONF_CONTENT" | sudo tee /etc/NetworkManager/conf.d/99-enable-dns.conf > /dev/null
 
-              # Ensure correct permissions (optional, tee usually sets reasonable ones)
-              sudo chmod 644 /etc/NetworkManager/conf.d/99-enable-dns.conf
-              sudo systemctl restart NetworkManager
+      #         # Ensure correct permissions (optional, tee usually sets reasonable ones)
+      #         sudo chmod 644 /etc/NetworkManager/conf.d/99-enable-dns.conf
+      #         sudo systemctl restart NetworkManager
 
   - name: validate
     steps:

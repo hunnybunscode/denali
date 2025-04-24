@@ -1,0 +1,33 @@
+name: Allow EKS Operational Status - RHEL
+description: Some hardening causes operational status to fail, this reverses some of the hardening for EKS
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      # - name: DisableNMCloudSetup
+      #   action: ExecuteBash
+      #   onFailure: Ignore
+      #   inputs:
+      #     commands:
+      #       - |
+      #         sudo systemctl disable --now nm-cloud-setup.service nm-cloud-setup.timer
+      
+      - name: DisableFirewall
+        action: ExecuteBash
+        onFailure: Ignore
+        inputs:
+          commands:
+            - |
+              sudo systemctl disable --now firewalld
+
+      - name: Check-Journal-Folder
+        action: ExecuteBash
+        onFailure: Ignore
+        maxAttempts: 1
+        inputs:
+          commands:
+            - |
+              if [[ ! -d /var/log/journal ]]; then
+                sudo ln -s /run/log/journal /var/log/journal
+              fi

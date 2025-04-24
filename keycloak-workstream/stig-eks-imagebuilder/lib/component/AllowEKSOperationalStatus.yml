@@ -34,45 +34,48 @@ phases:
               EOF'
               sudo sysctl --system
 
-      - name: RHEL-fapolicyd-rule-config
+      - name: fapolicyd-rule-config
         action: ExecuteBash
+        onFailure: Ignore
+        maxAttempts: 1
         inputs:
           commands:
             - |
-              RULES=/etc/fapolicyd/rules.d/70-allow_op_status.rules
+              if command -v fapolicyd-cli > /dev/null; then
+                RULES=/etc/fapolicyd/rules.d/00-allow_op_status.rules
 
-              if [[ -f $RULES ]]; then
-                sudo rm $RULES
-              fi
+                if [[ -f $RULES ]]; then
+                  sudo rm $RULES
+                fi
 
-              # Create the rules file with proper permissions
-              sudo tee "$RULES" << 'EOF' > /dev/null
-              allow perm=execute exe=/usr/bin/containerd-shim-runc-v2 : all
+                # Create the rules file with proper permissions
+                sudo tee "$RULES" << 'EOF' > /dev/null
+              allow perm=execute exe=/usr/bin/ctr : all
               allow perm=execute exe=/usr/bin/containerd : all
+              allow perm=execute exe=/usr/bin/containerd-stress : all
+              allow perm=execute exe=/usr/bin/containerd-shim-runc-v2 : all
               allow perm=execute exe=/usr/bin/kubelet : all
-              allow perm=open exe=/usr/bin/containerd-shim-runc-v2 : all 
-              allow perm=open exe=/usr/bin/containerd : all
-              allow perm=open exe=/usr/bin/kubelet : all
+
+              allow perm=open all : dir=/usr/lib64/
+              allow perm=any all : dir=/opt/cni/
+              allow perm=any all : dir=/var/lib/kubelet/
               EOF
 
-              echo "Load fapolicyd rules..."
-              sudo fagenrules --load
+                echo "Load fapolicyd rules..."
+                sudo fagenrules --load
 
-              echo "Restarting fapolicyd after adding rules..."
-              sudo systemctl restart fapolicyd
+                # Update fapolicyd service file to include --debug-deny to execstart
+                sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/sbin/fapolicyd --debug-deny|' /usr/lib/systemd/system/fapolicyd.service
+                fapolicyd-cli --check-config
 
-              # Allow some time for the service to restart if needed
-              sleep 2
+                echo "Restarting fapolicyd after adding rules..."
+                sudo systemctl restart fapolicyd
 
-              # Verify the rules are loaded
-              sudo fapolicyd-cli --list
-      - name: Check-Journal-Folder
-        action: ExecuteBash
-        inputs:
-          commands:
-            - |
-              if [[ ! -d /var/log/journal ]]; then
-                sudo ln -s /run/log/journal /var/log/journal
+                # Allow some time for the service to restart if needed
+                sleep 2
+
+                # Verify the rules are loaded
+                sudo fapolicyd-cli --list
               fi
 
   - name: validate

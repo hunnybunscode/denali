@@ -29,7 +29,7 @@ parameters:
       default: "https://api.github.com/repos/containerd/containerd/releases"
   - ContainerdVersion:
       type: string
-      default: "1.7.26"
+      default: "1.7.27"
   - NerdctlUrl:
       type: string
       default: "https://api.github.com/repos/containerd/nerdctl/releases"
@@ -116,7 +116,23 @@ phases:
             - KUBERNETES_VERSION_AND_BUILD_DATE=$({{ HomePath }}/{{ GithubDir }}/hack/latest-binaries.sh {{ KubernetesVersion }} {{AWSRegion}} {{ BinaryBucketRegion }} {{ BinaryBucketName }})
             - KUBERNETES_VERSION=$(echo $KUBERNETES_VERSION_AND_BUILD_DATE | grep -oP 'kubernetes_version=\K[^\s]+')
             - KUBERNETES_BUILD_DATE=$(echo $KUBERNETES_VERSION_AND_BUILD_DATE | grep -oP 'kubernetes_build_date=\K[^\s]+')
-            - KUBERNETES_VERSION=$KUBERNETES_VERSION KUBERNETES_BUILD_DATE=$KUBERNETES_BUILD_DATE AWS_REGION={{ AWSRegion }} BINARY_BUCKET_NAME={{ BinaryBucketName }} BINARY_BUCKET_REGION={{ BinaryBucketRegion }} CONTAINER_SELINUX_VERSION={{ ContainerSELinuxVersion }} CONTAINERD_URL={{ ContainerdUrl }} CONTAINERD_VERSION={{ ContainerdVersion }} NERDCTL_URL={{ NerdctlUrl }} NERDCTL_VERSION={{ NerdctlVersion }} RUNC_VERSION={{ RuncVersion }} SSM_AGENT_VERSION={{ SSMAgentVersion }} WORKING_DIR={{ TempPath }}/{{ WorkerDir}} bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-worker.sh
+            - |
+              export KUBERNETES_VERSION=$KUBERNETES_VERSION
+              export KUBERNETES_BUILD_DATE=$KUBERNETES_BUILD_DATE
+              export AWS_REGION={{ AWSRegion }}
+              export BINARY_BUCKET_NAME={{ BinaryBucketName }}
+              export BINARY_BUCKET_REGION={{ BinaryBucketRegion }}
+              export CONTAINER_SELINUX_VERSION={{ ContainerSELinuxVersion }}
+              export CONTAINERD_URL={{ ContainerdUrl }}
+              export CONTAINERD_VERSION={{ ContainerdVersion }}
+              export NERDCTL_URL={{ NerdctlUrl }}
+              export NERDCTL_VERSION={{ NerdctlVersion }}
+              export RUNC_VERSION={{ RuncVersion }}
+              export SSM_AGENT_VERSION={{ SSMAgentVersion }}
+              export WORKING_DIR={{ TempPath }}/{{ WorkerDir}}
+              printenv
+              bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-worker.sh
+
       - name: InstallNodeAdm
         action: ExecuteBash
         timeoutSeconds: 6000
@@ -125,8 +141,14 @@ phases:
         inputs:
           commands:
             - echo "Building NodeAdm into the system"
-            - BUILD_IMAGE={{ NodeAdmBuildImage }} AWS_REGION={{ AWSRegion }} PROJECT_DIR={{ TempPath }}/{{ WorkerDir}}/nodeadm bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-nodeadm.sh
-            - 'echo "NodeAdm installed - Exit Code: $?"'
+            - |
+              printenv
+              export BUILD_IMAGE={{ NodeAdmBuildImage }}
+              export AWS_REGION={{ AWSRegion }}
+              export PROJECT_DIR={{ TempPath }}/{{ WorkerDir}}/nodeadm
+              printenv
+              bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-nodeadm.sh
+              echo "NodeAdm installed - Exit Code: $?"
 
       - name: CachePauseContainer
         action: ExecuteBash
@@ -136,6 +158,7 @@ phases:
         inputs:
           commands:
             - PAUSE_CONTAINER_IMAGE={{ PauseContainerImage }} AWS_REGION={{ AWSRegion }} bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/cache-pause-container.sh
+
       - name: InstallEFA
         action: ExecuteBash
         timeoutSeconds: 1200
@@ -144,16 +167,17 @@ phases:
         inputs:
           commands:
             - if [ "{{ EnableEfa }}" = "true" ]; then AWS_REGION={{ AWSRegion }} ENABLE_EFA={{ EnableEfa }} bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/install-efa.sh; fi
-      # - name: Cleanup
-      #   action: ExecuteBash
-      #   timeoutSeconds: 1200
-      #   onFailure: Abort
-      #   maxAttempts: 1
-      #   inputs:
-      #     commands:
-      #       - bash {{ HomePath }}/{{ GithubDir }}/templates/shared/provisioners/cleanup.sh
-      #       - bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/validate.sh
-      #       - sudo rm -rf {{ HomePath }}/*
-      #       - sudo rm -rf {{ TempPath }}/provisioners
-      #       - sudo rm -rf {{ TempPath }}/hack
-      #       - sudo rm -rf {{ TempPath }}/{{ WorkerDir}}
+
+      - name: Cleanup
+        action: ExecuteBash
+        timeoutSeconds: 1200
+        onFailure: Abort
+        maxAttempts: 1
+        inputs:
+          commands:
+            - bash {{ HomePath }}/{{ GithubDir }}/templates/shared/provisioners/cleanup.sh
+            - bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/validate.sh
+            - sudo rm -rf {{ HomePath }}/*
+            - sudo rm -rf {{ TempPath }}/provisioners
+            - sudo rm -rf {{ TempPath }}/hack
+            - sudo rm -rf {{ TempPath }}/{{ WorkerDir}}

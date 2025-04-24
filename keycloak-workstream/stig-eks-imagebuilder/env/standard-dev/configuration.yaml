@@ -24,13 +24,14 @@ environment:
 pipelines:
   - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
-    version: &pipeline-version 1.0.67
+    version: &pipeline-version 1.0.199
     scan: false
     vpc: *vpc
     instanceTypes:
-      - m5.large
-      - m5.xlarge
+      - m6i.8xlarge
       - m6a.xlarge
+      - m5.xlarge
+      - m5.large
     ami:
       name: amazon-eks-node-al2023-x86_64-standard-1.30-*
     storages:
@@ -52,52 +53,8 @@ pipelines:
             value:
               - "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/SecurityUpdate.yml
       - lib/component/AllowEKSOperationalStatus.yml
-
-  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
-    description: "EKS Optimized Image with STIG High"
-    version: *pipeline-version
-    scan: false
-    test: false
-    enhancedImageMetadata: false
-    vpc: *vpc
-    instanceTypes:
-      - m5.large
-      - m5.xlarge
-      - m6a.xlarge
-    ami:
-      name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
-    storages:
-      - *rhel-storage
-    tags:
-      OS: Red Hat Enterprise Linux 9
-      ARCH: x86_64
-      STIG: High
-      FIPS: Enabled
-      K8S VERSION: "1.30"
-    components:
-      - lib/component/additional-software.yml
-      - name: aws-cli-version-2-linux
-        version: x.x.x
-        platform: linux
-      - name: lib/component/install-eks-install.yml
-        version: *pipeline-version
-        platform: linux
-        parameters:
-          - name: HomePath
-            value: /tmp/workspace
-      - name: stig-build-linux-high
-        version: 2024.4.1
-        platform: linux
-        parameters:
-          - name: InstallPackages
-            value: "Yes"
-          - name: SetDoDConsentBanner
-            value: "Yes"
-      - lib/component/DODSTIGHardening.yml
-      - lib/component/allow-software-access.yml
-      - lib/component/AllowEKSOperationalStatus.yml
+      - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
 
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high
@@ -108,10 +65,10 @@ pipelines:
     enhancedImageMetadata: false
     vpc: *vpc
     instanceTypes:
-      - m5.large
-      - m5.xlarge
-      - m6a.xlarge
       - m6i.8xlarge
+      - m6a.xlarge
+      - m5.xlarge
+      - m5.large
     ami:
       name: RHEL-8.10.*_HVM-*-x86_64-*-Hourly2-GP3
     storages:
@@ -134,7 +91,7 @@ pipelines:
           - name: HomePath
             value: /tmp/workspace
       - name: stig-build-linux-high
-        version: 2024.4.0
+        version: x.x.x
         platform: linux
         parameters:
           - name: InstallPackages
@@ -145,6 +102,54 @@ pipelines:
       - lib/component/DODSTIGHardening.yml
       - lib/component/allow-software-access.yml
       - lib/component/AllowEKSOperationalStatus.yml
+      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/SecurityUpdate.yml
+
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: *pipeline-version
+    scan: false
+    test: false
+    enhancedImageMetadata: false
+    vpc: *vpc
+    instanceTypes:
+      - m6i.8xlarge
+      - m6a.xlarge
+      - m5.large
+      - m5.xlarge
+    ami:
+      name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
+    storages:
+      - *rhel-storage
+    tags:
+      OS: Red Hat Enterprise Linux 9
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: "1.30"
+    components:
+      - lib/component/additional-software.yml
+      - name: aws-cli-version-2-linux
+        version: x.x.x
+        platform: linux
+      - name: lib/component/install-eks-install.yml
+        version: *pipeline-version
+        platform: linux
+        parameters:
+          - name: HomePath
+            value: /tmp/workspace
+      - name: stig-build-linux-high
+        version: x.x.x
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value: "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/allow-software-access.yml
+      - lib/component/AllowEKSOperationalStatus.yml
+      - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
 
   - name: amazon-node-rhel9-x86_64-standard-stig-high
@@ -155,9 +160,10 @@ pipelines:
     enhancedImageMetadata: false
     vpc: *vpc
     instanceTypes:
-      - m5.large
-      - m5.xlarge
+      - m6i.8xlarge
       - m6a.xlarge
+      - m5.xlarge
+      - m5.large
     ami:
       name: RHEL-9.5.*_HVM-*-x86_64-0-Hourly2-GP3
     storages:
@@ -182,4 +188,76 @@ pipelines:
           - name: SetDoDConsentBanner
             value: "Yes"
       - lib/component/allow-software-access.yml
+      - lib/component/SecurityUpdate.yml
+
+  - name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal
+    description: "EKS Optimized Image"
+    version: *pipeline-version
+    scan: false
+    test: false
+    enhancedImageMetadata: false
+    vpc: *vpc
+    instanceTypes:
+      - m6i.8xlarge
+      - m6a.xlarge
+      - m5.large
+      - m5.xlarge
+    ami:
+      name: RHEL-8.10.*_HVM-*-x86_64-*-Hourly2-GP3
+    storages:
+      - *rhel-storage
+    tags:
+      OS: Red Hat Enterprise Linux 8
+      ARCH: x86_64
+      STIG: N/A
+      FIPS: N/A
+      K8S VERSION: "1.30"
+    components:
+      - lib/component/additional-software.yml
+      - name: aws-cli-version-2-linux
+        version: x.x.x
+        platform: linux
+      - name: lib/component/install-eks-install.yml
+        version: *pipeline-version
+        platform: linux
+        parameters:
+          - name: HomePath
+            value: /tmp/workspace
+      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/SecurityUpdate.yml
+
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal
+    description: "EKS Optimized Image"
+    version: *pipeline-version
+    scan: false
+    test: false
+    enhancedImageMetadata: false
+    vpc: *vpc
+    instanceTypes:
+      - m6i.8xlarge
+      - m6a.xlarge
+      - m5.large
+      - m5.xlarge
+    ami:
+      name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
+    storages:
+      - *rhel-storage
+    tags:
+      OS: Red Hat Enterprise Linux 9
+      ARCH: x86_64
+      STIG: N/A
+      FIPS: N/A
+      K8S VERSION: "1.30"
+    components:
+      - lib/component/additional-software.yml
+      - name: aws-cli-version-2-linux
+        version: x.x.x
+        platform: linux
+      - name: lib/component/install-eks-install.yml
+        version: *pipeline-version
+        platform: linux
+        parameters:
+          - name: HomePath
+            value: /tmp/workspace
+      - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml

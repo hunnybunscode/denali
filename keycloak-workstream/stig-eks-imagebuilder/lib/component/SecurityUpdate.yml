@@ -8,8 +8,8 @@ schemaVersion: 1.0
 phases:
   - name: build
     steps:
-      - name: InstallUpdates
-        action: UpdateOS
+      # - name: InstallUpdates
+      #   action: UpdateOS
 
       - name: UpdateSecurity
         action: ExecuteBash
