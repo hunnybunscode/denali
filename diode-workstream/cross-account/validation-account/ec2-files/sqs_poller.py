@@ -8,7 +8,6 @@ from config import file_handler_config
 from config import resource_suffix
 from config import ssm_params
 from utils import change_message_visibility
-from utils import delete_sqs_message
 from utils import get_params_values
 from utils import receive_sqs_message
 from validation import validate_file
@@ -77,26 +76,17 @@ def main():
                 change_message_visibility(queue_url, receipt_handle, receive_count * 30)
 
             message_body: dict = json.loads(message["Body"])
-            if message_body.get("Event") == "s3:TestEvent":
-                logger.info("Ignoring the S3 test message")
-                delete_sqs_message(queue_url, receipt_handle)
-                continue
-
             s3_event: dict = message_body["Records"][0]
             validate_file(s3_event, receipt_handle)
 
             logger.info("-" * 100)
 
         except Exception as e:
-            if isinstance(e, ValueError) and "No existing tags" in str(e):
-                # Check for the next message immediately
-                pass
-            else:
-                logger.exception(e)
-                logger.info(
-                    "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
-                )
-                time.sleep(3)  # nosemgrep arbitrary-sleep
+            logger.exception(e)
+            logger.info(
+                "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
+            )
+            time.sleep(3)  # nosemgrep arbitrary-sleep
 
 
 if __name__ == "__main__":
