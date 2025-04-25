@@ -1,20 +1,24 @@
 import logging
 import tempfile
 from pathlib import Path
+from urllib.parse import unquote_plus
+from urllib.parse import urlencode
 
 import clamscan
-from config import approved_filetypes
 from config import resource_suffix
 from config import ssm_params
-from utils import add_tags
-from utils import copy_object
 from utils import create_tags_for_file_validation
 from utils import delete_av_scan_message
 from utils import delete_object
 from utils import download_file
 from utils import extract_zipfile
 from utils import get_file_ext
+from utils import get_origin_tags
+from utils import get_ttl
+from utils import get_user_tags_from_bucket
+from utils import head_object
 from utils import publish_sns_message
+from utils import upload_file
 from utils import validate_file_type
 
 MAX_DEPTH = 0
@@ -22,23 +26,12 @@ MAX_DEPTH = 0
 logger = logging.getLogger()
 
 
-def validate_file(bucket: str, key: str, receipt_handle: str):
+def validate_file(s3_event: dict, receipt_handle: str):
+    s3_event["s3"]["object"]["key"] = unquote_plus(s3_event["s3"]["object"]["key"])
+    bucket = s3_event["s3"]["bucket"]["name"]
+    key: str = s3_event["s3"]["object"]["key"]
+
     logger.info(f'Validating "{key}" object uploaded to "{bucket}" bucket')
-
-    file_ext = get_file_ext(key)
-    logger.info(f"File extension: {file_ext}")
-
-    # Before downloading the file, check if the claimed file extension
-    # is of an approved file type
-    if file_ext not in approved_filetypes:
-        logger.warning(f'File extension "{file_ext}" is NOT approved')
-        tags = create_tags_for_file_validation(
-            "FileTypeNotApproved",
-            file_ext,
-        )
-        add_tags(bucket, key, tags)
-        _process_invalid_file(bucket, key, receipt_handle)
-        return
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # If key includes prefixes, split it and take the last element
@@ -49,36 +42,33 @@ def validate_file(bucket: str, key: str, receipt_handle: str):
             delete_av_scan_message(receipt_handle)
             return
 
-        valid = _validate_file(bucket, key, file_path, receipt_handle)
+        valid, tags = _validate_file(s3_event, file_path, receipt_handle)
         if valid:
-            clamscan.scan(bucket, key, file_path, receipt_handle)
+            clamscan.scan(s3_event, file_path, tags, receipt_handle)
 
 
-def _validate_file(bucket: str, key: str, file_path: str, receipt_handle: str):
+def _validate_file(s3_event: dict, file_path: str, receipt_handle: str):
     try:
         file_ext = get_file_ext(file_path)
         valid, tags = validate_file_type(file_path, file_ext)
 
         if not valid:
-            add_tags(bucket, key, tags)
-            _process_invalid_file(bucket, key, receipt_handle)
-            return False
+            _process_invalid_file(s3_event, file_path, tags, receipt_handle)
+            return False, {}
 
         if file_ext == "zip":
             _valid, _tags = _validate_zip_file(file_path)
             if not _valid:
-                add_tags(bucket, key, _tags)
-                _process_invalid_file(bucket, key, receipt_handle)
-                return False
+                _process_invalid_file(s3_event, file_path, _tags, receipt_handle)
+                return False, {}
 
-        add_tags(bucket, key, tags)
-        return True
+        return True, tags
 
-    except Exception as e:
+    except Exception:
         # TODO: What should happen in case of errors? Is logging it out enough?
         # That means the SQS message will be processed again
-        logger.error(f"Could not validate the file: {e}")
-        return False
+        logger.exception("Could not validate the file")
+        return False, {}
 
 
 def _validate_zip_file(file_path: str, depth=0):
@@ -117,20 +107,32 @@ def _validate_zip_file(file_path: str, depth=0):
     return True, None
 
 
-def _process_invalid_file(bucket: str, key: str, receipt_handle: str):
+def _process_invalid_file(
+    s3_event: dict,
+    file_path: str,
+    tags: dict[str, str],
+    receipt_handle: str,
+):
     """
-    Moves the invalid file from ingestion bucket to invalid files bucket,
-    deletes the SQS message, and sends a SNS notification
+    Uploads the invalid file to invalid files bucket, deletes it from ingestion bucket,
+    deletes the SQS message, and sends an SNS notification
     """
+
+    bucket = s3_event["s3"]["bucket"]["name"]
+    key = s3_event["s3"]["object"]["key"]
+    etag = s3_event["s3"]["object"]["eTag"]
+
+    user_tags = get_user_tags_from_bucket(bucket, get_ttl())
+    origin_tags = get_origin_tags(s3_event)
+    url_encoded_tags = urlencode(user_tags | origin_tags | tags)
+
     invalid_files_bucket = ssm_params[
         f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
     ]
-    logger.info(
-        f"Copying {key} file to Invalid Files bucket: {invalid_files_bucket}",
-    )
-    copy_object(bucket, invalid_files_bucket, key)
-    # Delete it from the ingestion bucket
-    delete_object(bucket, key)
+    logger.info(f"Uploading {key} file to Invalid Files bucket")
+    upload_file(invalid_files_bucket, key, file_path, url_encoded_tags)
+    if head_object(bucket, key, etag):
+        delete_object(bucket, key)  # Delete it from the ingestion bucket
     delete_av_scan_message(receipt_handle)
     _send_file_rejected_sns_msg(invalid_files_bucket, key)
 

@@ -74,23 +74,19 @@ def main():
             if receive_count > 1:
                 logger.warning(f"This message has been received {receive_count} times")
                 change_message_visibility(queue_url, receipt_handle, receive_count * 30)
-            message_body = json.loads(message["Body"])
-            bucket = message_body["detail"]["requestParameters"]["bucketName"]
-            key = message_body["detail"]["requestParameters"]["key"]
-            validate_file(bucket, key, receipt_handle)
+
+            message_body: dict = json.loads(message["Body"])
+            s3_event: dict = message_body["Records"][0]
+            validate_file(s3_event, receipt_handle)
 
             logger.info("-" * 100)
 
         except Exception as e:
-            if isinstance(e, ValueError) and "No existing tags" in str(e):
-                # Check for the next message immediately
-                pass
-            else:
-                logger.exception(e)
-                logger.info(
-                    "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
-                )
-                time.sleep(3)  # nosemgrep arbitrary-sleep
+            logger.exception(e)
+            logger.info(
+                "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
+            )
+            time.sleep(3)  # nosemgrep arbitrary-sleep
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
 import logging
 import os
 import zipfile
+from functools import lru_cache
+from functools import reduce
 from pathlib import Path
+from time import time
 
 import boto3  # type: ignore
 import puremagic  # type: ignore
@@ -22,36 +25,28 @@ SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
+KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
+UNKNOWN = "Unknown"
+ERROR = "Error"
 
-def copy_object(
-    src_bucket: str,
-    dest_bucket: str,
-    key: str,
-    src_bucket_owner: str | None = None,
-    dest_bucket_owner: str | None = None,
-    raise_error=True,
-):
+
+def head_object(bucket: str, key: str, etag: str, bucket_owner: str | None = None):
     try:
-        logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
-        params = dict(
-            CopySource={"Bucket": src_bucket, "Key": key},
-            Bucket=dest_bucket,
-            Key=key,
-        )
-        if src_bucket_owner:
-            params["ExpectedSourceBucketOwner"] = src_bucket_owner
-        if dest_bucket_owner:
-            params["ExpectedBucketOwner"] = dest_bucket_owner
-
-        S3_CLIENT.copy_object(**params)
-        logger.info("Successfully copied the object")
+        params = dict(Bucket=bucket, Key=key, IfMatch=etag)
+        if bucket_owner:
+            params["ExpectedBucketOwner"] = bucket_owner
+        S3_CLIENT.head_object(**params)
         return True
-    except Exception as e:
-        if raise_error:
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code in ("404", "NoSuchKey"):
+            logger.warning(f"Object not found: {bucket}/{key}")
+            return False
+        elif error_code == "412":
+            logger.warning(f"ETag mismatch: {bucket}/{key} (ETag: {etag})")
+            return False
+        else:
             raise e
-
-        logger.error(f"Failed to copy the object: {e}")
-        return False
 
 
 def delete_object(
@@ -77,35 +72,57 @@ def delete_object(
         return False
 
 
-def get_object_tagging(
-    bucket: str,
-    key: str,
-    bucket_owner: str | None = None,
-) -> dict[str, str]:
-    logger.info(f"Getting existing tags for {bucket}/{key}")
-    params = dict(Bucket=bucket, Key=key)
+@lru_cache(maxsize=100)
+def get_user_tags_from_bucket(bucket: str, ttl: int, bucket_owner: str | None = None):
+    logger.info(f"Getting user-defined tags from {bucket}")
+
+    params = dict(Bucket=bucket)
     if bucket_owner:
         params["ExpectedBucketOwner"] = bucket_owner
 
-    tag_set = S3_CLIENT.get_object_tagging(**params)["TagSet"]
-    logger.info(f"Successfully retrieved the existing tags: {tag_set}")
-    return {tag["Key"]: tag["Value"] for tag in tag_set}
+    tagset: list[dict[str, str]] = S3_CLIENT.get_bucket_tagging(**params)["TagSet"]
+    user_tagset = [tag for tag in tagset if not tag["Key"].startswith("aws:")]
+
+    logger.info(f"Retrieved the user-defined tags: {user_tagset}")
+
+    tag_indexes_to_remove = sorted(
+        [
+            index
+            for index, tag in enumerate(user_tagset)
+            if tag["Key"] in KEYS_TO_COMBINE
+        ],
+        reverse=True,
+    )
+
+    tags_to_combine = sorted(
+        [user_tagset.pop(index) for index in tag_indexes_to_remove],
+        key=lambda x: x["Key"],
+    )
+
+    user_tagset.append(
+        reduce(
+            lambda t1, t2: {
+                "Key": f'{t1["Key"]} / {t2["Key"]}',
+                "Value": f'{t1["Value"]} / {t2["Value"]}',
+            },
+            tags_to_combine,
+        ),
+    )
+
+    user_tags = {tag["Key"]: tag["Value"] for tag in user_tagset}
+    logger.info(f"Processed the user-defined tags: {user_tags}")
+    return user_tags
 
 
-def put_object_tagging(
-    bucket: str,
-    key: str,
-    tags: dict[str, str],
-    bucket_owner: str | None = None,
-):
-    logger.info(f"Putting tags for {bucket}/{key}")
-    tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
-    params = dict(Bucket=bucket, Key=key, Tagging={"TagSet": tag_set})
-    if bucket_owner:
-        params["ExpectedBucketOwner"] = bucket_owner
+def get_ttl(seconds=60):
+    """Returns a new value every `seconds`"""
+    return int(time() / seconds)
 
-    S3_CLIENT.put_object_tagging(**params)
-    logger.info("Successfully put the tags")
+
+def get_origin_tags(s3_event: dict):
+    principal_id = s3_event["userIdentity"]["principalId"]
+    source_ip = s3_event["requestParameters"]["sourceIPAddress"]
+    return {"PrincipalId / SourceIp": f"{principal_id} / {source_ip}"}
 
 
 def download_file(
@@ -133,22 +150,21 @@ def download_file(
         raise
 
 
-def add_tags(
+def upload_file(
     bucket: str,
     key: str,
-    tags_to_add: dict[str, str],
+    file_path: str,
+    tagging: str,
     bucket_owner: str | None = None,
 ):
-    logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
-    existing_tags = get_object_tagging(bucket, key, bucket_owner)
-    if not existing_tags:
-        # Empty tags can be returned if an object with the same name gets
-        # dropped into the ingestion bucket
-        raise ValueError(f"No existing tags found for {bucket}/{key}")
-    combined_tags = existing_tags | tags_to_add
-    logger.info(f"Combined tags: {combined_tags}")
-    put_object_tagging(bucket, key, combined_tags, bucket_owner)
-    logger.info("Successfully added the new tags")
+    logger.info(f"Uploading {file_path} to {bucket}/{key}")
+    params: dict[str, str | dict] = dict(Bucket=bucket, Key=key, Filename=file_path)
+    params["ExtraArgs"] = {"Tagging": tagging}
+    if bucket_owner:
+        params["ExtraArgs"].update({"ExpectedBucketOwner": bucket_owner})
+
+    S3_CLIENT.upload_file(**params)
+    logger.info("Successfully uploaded the object")
 
 
 def publish_sns_message(topic_arn: str, message: str, subject: str | None = None):
@@ -161,17 +177,6 @@ def publish_sns_message(topic_arn: str, message: str, subject: str | None = None
 
     SNS_CLIENT.publish(**params)
     logger.info("Successfully published the message")
-
-
-def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = None):
-    queue_name = queue_url.split("/")[-1]
-    logger.info(f"Sending a message to {queue_name} SQS queue")
-    params: dict[str, str | int] = dict(QueueUrl=queue_url, MessageBody=message)
-    if delay_seconds is not None:
-        params["DelaySeconds"] = delay_seconds
-
-    SQS_CLIENT.send_message(**params)
-    logger.info("Successfully sent the message")
 
 
 def receive_sqs_message(queue_url: str, max_num_of_messages=1) -> list:
@@ -211,15 +216,6 @@ def change_message_visibility(queue_url: str, receipt_handle: str, timeout: int)
     logger.info("Successfully updated the visibility timeout")
 
 
-def get_param_value(name: str, with_decryption=False) -> str:
-    logger.info(f"Getting the value for {name} parameter")
-    value = SSM_CLIENT.get_parameter(Name=name, WithDecryption=with_decryption)[
-        "Parameter"
-    ]["Value"]
-    logger.info("Successfully retrieved the value")
-    return value
-
-
 def get_params_values(
     ssm_params: dict[str, str],
     with_decryption=False,
@@ -242,17 +238,15 @@ def get_params_values(
 
 def create_tags_for_file_validation(error_status: str, file_type: str, mime_type=""):
     """
-    Returns: {
-        "ErrorStatus / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}"  # noqa: E501
-    }
+    Returns: {"ValidationError / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}"}  # noqa: E501
     """
     if mime_type:
         return {
-            "ErrorStatus / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}",  # noqa: E501
+            "ValidationError / FileType / MimeType": f"{error_status} / {file_type} / {mime_type}",  # noqa: E501
         }
 
     return {
-        "ErrorStatus / FileType": f"{error_status} / {file_type}",
+        "ValidationError / FileType": f"{error_status} / {file_type}",
     }
 
 
@@ -263,42 +257,15 @@ def create_tags_for_av_scan(file_status: str, exit_status: int):
     return {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
 
 
-def empty_dir(dir: str):
-    """
-    Deletes all files and subdirectories in the given directory.\n
-    Errors are logged, but ignored.
-    """
-    try:
-        dir_path = Path(dir)
-
-        if not dir_path.exists():
-            logger.warning(f"{dir} directory does NOT exist")
-            return
-        if not dir_path.is_dir():
-            logger.warning(f"{dir} is NOT a directory")
-            return
-
-        logger.info(f"Emptying directory: {dir}")
-        for path in dir_path.iterdir():
-            if path.is_file():
-                path.unlink(missing_ok=True)
-            if path.is_dir():
-                empty_dir(str(path))
-                path.rmdir()
-        logger.info("Successfully emptied the directory")
-    except Exception as e:
-        logger.error(f"Could not empty the directory: {e}")
-
-
 def get_file_identity(file_path: str) -> tuple[str, str]:
     """
     Uses the puremagic library to determine file type and mime type.\n
     Returns (file_type, mime_type)\n
 
     If puremagic can't determine the file type and mime type,
-    returns empty strings ("", "")\n
+    returns ("Unknown", "Unknown")\n
 
-    In case of any errors, returns ("Unknown", "Unknown")\n
+    In case of any errors, returns ("Error", "Error")\n
     Note: `file_type` is stripped of any dots.
     """
     logger.info(f"Getting file data for {file_path}")
@@ -309,7 +276,7 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
 
         if not file_data_list:
             logger.warning("Could not determine the file type")
-            return "", ""
+            return UNKNOWN, UNKNOWN
 
         # Get the first one, which has the highest confidence
         file_data = file_data_list[0]
@@ -319,9 +286,9 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
 
         logger.info(f"File Type: {file_type}; MIME Type: {mime_type}")
         return file_type, mime_type
-    except Exception as e:
-        logger.error(f"Could not get file data: {e}")
-        return "Unknown", "Unknown"
+    except Exception:
+        logger.exception("Could not get file data")
+        return ERROR, ERROR
 
 
 def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
@@ -332,7 +299,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
 
     file_type, mime_type = get_file_identity(file_path)
 
-    if (not file_type) and (file_ext in exempt_file_types):
+    if file_type == UNKNOWN and file_ext in exempt_file_types:
         logger.info(
             f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
         )
@@ -372,20 +339,24 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
         )
         return False, tags
 
+    logger.info(f"Mine type ({mime_type}) is an approved type")
     logger.info(f"Successfully validated file: {file_path}")
     tags = create_tags_for_file_validation("None", file_type, mime_type)
     return True, tags
 
 
-def get_file_ext(file_path: str):
+def get_file_ext(file_path: str) -> str:
     """
     Extracts and returns the file extension (in lowercase) without the leading dot.\n
     In case of any errors, returns "Unknown".
     """
     try:
-        return file_path.lower().split(".")[-1]
-    except Exception as e:
-        logger.error(f"Could not get file extension: {e}")
+        logger.info(f"Getting file extension for {file_path}")
+        file_ext = file_path.lower().split(".")[-1]
+        logger.info(f"File extension: {file_ext}")
+        return file_ext
+    except Exception:
+        logger.exception("Could not get file extension")
         return "Unknown"
 
 
@@ -407,3 +378,135 @@ def delete_av_scan_message(receipt_handle: str):
     """
     queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
     delete_sqs_message(queue_url, receipt_handle)
+
+
+#################################
+#   UNUSED/OBSOLETE FUNCTIONS   #
+#################################
+
+
+def copy_object(
+    src_bucket: str,
+    dest_bucket: str,
+    key: str,
+    src_bucket_owner: str | None = None,
+    dest_bucket_owner: str | None = None,
+    raise_error=True,
+):
+    try:
+        logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
+        params = dict(
+            CopySource={"Bucket": src_bucket, "Key": key},
+            Bucket=dest_bucket,
+            Key=key,
+        )
+        if src_bucket_owner:
+            params["ExpectedSourceBucketOwner"] = src_bucket_owner
+        if dest_bucket_owner:
+            params["ExpectedBucketOwner"] = dest_bucket_owner
+
+        S3_CLIENT.copy_object(**params)
+        logger.info("Successfully copied the object")
+        return True
+    except Exception as e:
+        if raise_error:
+            raise e
+
+        logger.error(f"Failed to copy the object: {e}")
+        return False
+
+
+def get_object_tagging(
+    bucket: str,
+    key: str,
+    bucket_owner: str | None = None,
+) -> dict[str, str]:
+    logger.info(f"Getting existing tags for {bucket}/{key}")
+    params = dict(Bucket=bucket, Key=key)
+    if bucket_owner:
+        params["ExpectedBucketOwner"] = bucket_owner
+
+    tag_set = S3_CLIENT.get_object_tagging(**params)["TagSet"]
+    logger.info(f"Successfully retrieved the existing tags: {tag_set}")
+    return {tag["Key"]: tag["Value"] for tag in tag_set}
+
+
+def put_object_tagging(
+    bucket: str,
+    key: str,
+    tags: dict[str, str],
+    bucket_owner: str | None = None,
+):
+    logger.info(f"Putting tags for {bucket}/{key}")
+    tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
+    params = dict(Bucket=bucket, Key=key, Tagging={"TagSet": tag_set})
+    if bucket_owner:
+        params["ExpectedBucketOwner"] = bucket_owner
+
+    S3_CLIENT.put_object_tagging(**params)
+    logger.info("Successfully put the tags")
+
+
+def add_tags(
+    bucket: str,
+    key: str,
+    tags_to_add: dict[str, str],
+    bucket_owner: str | None = None,
+):
+    logger.info(f"Adding new tags to {bucket}/{key}: {tags_to_add}")
+    existing_tags = get_object_tagging(bucket, key, bucket_owner)
+    if not existing_tags:
+        # Empty tags can be returned if an object with the same name gets
+        # dropped into the ingestion bucket
+        raise ValueError(f"No existing tags found for {bucket}/{key}")
+    combined_tags = existing_tags | tags_to_add
+    logger.info(f"Combined tags: {combined_tags}")
+    put_object_tagging(bucket, key, combined_tags, bucket_owner)
+    logger.info("Successfully added the new tags")
+
+
+def get_param_value(name: str, with_decryption=False) -> str:
+    logger.info(f"Getting the value for {name} parameter")
+    value = SSM_CLIENT.get_parameter(Name=name, WithDecryption=with_decryption)[
+        "Parameter"
+    ]["Value"]
+    logger.info("Successfully retrieved the value")
+    return value
+
+
+def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = None):
+    queue_name = queue_url.split("/")[-1]
+    logger.info(f"Sending a message to {queue_name} SQS queue")
+    params: dict[str, str | int] = dict(QueueUrl=queue_url, MessageBody=message)
+    if delay_seconds is not None:
+        params["DelaySeconds"] = delay_seconds
+
+    SQS_CLIENT.send_message(**params)
+    logger.info("Successfully sent the message")
+
+
+def empty_dir(dir: str):
+    """
+    Deletes all files and subdirectories in the given directory.\n
+    Errors are logged, but ignored.
+    """
+    try:
+        dir_path = Path(dir)
+
+        if not dir_path.exists():
+            logger.warning(f"{dir} directory does NOT exist")
+            return
+        if not dir_path.is_dir():
+            logger.warning(f"{dir} is NOT a directory")
+            return
+
+        logger.info(f"Emptying directory: {dir}")
+        for path in dir_path.iterdir():
+            if path.is_file():
+                path.unlink(missing_ok=True)
+            if path.is_dir():
+                empty_dir(str(path))
+                path.rmdir()
+        logger.info("Successfully emptied the directory")
+    except Exception as e:
+        logger.error(f"Could not empty the directory: {e}")

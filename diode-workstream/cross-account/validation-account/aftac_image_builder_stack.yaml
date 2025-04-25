@@ -1276,8 +1276,8 @@ Resources:
                 Resource:
                   Fn::Sub:
                     - arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AsgName}
-                    - AsgName: !ImportValue
-                        Fn::Sub: aftac-pipeline-asg-name-${ResourceSuffix}
+                    - AsgName:
+                        Fn::ImportValue: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
               - Effect: Allow
                 Action:
                   - autoscaling:DescribeInstanceRefreshes
