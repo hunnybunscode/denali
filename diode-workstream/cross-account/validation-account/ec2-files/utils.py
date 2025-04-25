@@ -26,6 +26,8 @@ SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
 
 KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
+UNKNOWN = "Unknown"
+ERROR = "Error"
 
 
 def head_object(bucket: str, key: str, etag: str, bucket_owner: str | None = None):
@@ -261,9 +263,9 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
     Returns (file_type, mime_type)\n
 
     If puremagic can't determine the file type and mime type,
-    returns empty strings ("", "")\n
+    returns ("Unknown", "Unknown")\n
 
-    In case of any errors, returns ("Unknown", "Unknown")\n
+    In case of any errors, returns ("Error", "Error")\n
     Note: `file_type` is stripped of any dots.
     """
     logger.info(f"Getting file data for {file_path}")
@@ -274,7 +276,7 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
 
         if not file_data_list:
             logger.warning("Could not determine the file type")
-            return "", ""
+            return UNKNOWN, UNKNOWN
 
         # Get the first one, which has the highest confidence
         file_data = file_data_list[0]
@@ -284,9 +286,9 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
 
         logger.info(f"File Type: {file_type}; MIME Type: {mime_type}")
         return file_type, mime_type
-    except Exception as e:
-        logger.error(f"Could not get file data: {e}")
-        return "Unknown", "Unknown"
+    except Exception:
+        logger.exception("Could not get file data")
+        return ERROR, ERROR
 
 
 def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
@@ -297,7 +299,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
 
     file_type, mime_type = get_file_identity(file_path)
 
-    if (not file_type) and (file_ext in exempt_file_types):
+    if file_type == UNKNOWN and file_ext in exempt_file_types:
         logger.info(
             f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
         )
@@ -337,6 +339,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
         )
         return False, tags
 
+    logger.info(f"Mine type ({mime_type}) is an approved type")
     logger.info(f"Successfully validated file: {file_path}")
     tags = create_tags_for_file_validation("None", file_type, mime_type)
     return True, tags
