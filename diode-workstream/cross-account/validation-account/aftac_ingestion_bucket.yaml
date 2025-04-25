@@ -330,6 +330,19 @@ Resources:
                 StringEquals:
                   kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
             - !Ref AWS::NoValue
+          - !If
+            - CreateSftpUser
+            - Sid: Allow SFTP user to encrypt
+              Effect: Allow
+              Principal:
+                AWS:
+                  Fn::ImportValue: !Sub TransferUserRoleArn-${ResourceSuffix}
+              Action: kms:GenerateDataKey
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+            - !Ref AWS::NoValue
       Tags:
         - Key: CreatedByCloudFormationStack
           Value: !Ref AWS::StackName
