@@ -258,11 +258,23 @@ def create_tags_for_file_validation(error_status: str, file_type: str, mime_type
     }
 
 
-def create_tags_for_av_scan(file_status: str, exit_status: int):
+@lru_cache(maxsize=3)
+def create_tags_for_av_scan(exit_status: int):
     """
-    Returns: {"AvScanStatus / ClamAvExitCode": file_status / exit_status"}
+    Returns: {"AvScanStatus / ClamAvExitCode": scan_status / exit_status"}
     """
-    return {"AvScanStatus / ClamAvExitCode": f"{file_status} / {str(exit_status)}"}
+    scan_status = get_scan_status(exit_status)
+    return {"AvScanStatus / ClamAvExitCode": f"{scan_status} / {str(exit_status)}"}
+
+
+@lru_cache(maxsize=3)
+def get_scan_status(exit_status: int):
+    if exit_status == 0:
+        return "CLEAN"
+    elif exit_status == 1:
+        return "INFECTED"
+    else:
+        return "AV_SCAN_ERROR"
 
 
 def get_file_identity(file_path: str) -> tuple[str, str]:
@@ -347,7 +359,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
         )
         return False, tags
 
-    logger.info(f"Mine type ({mime_type}) is an approved type")
+    logger.info(f"Mime type ({mime_type}) is an approved type")
     logger.info(f"Successfully validated file: {file_path}")
     tags = create_tags_for_file_validation("None", file_type, mime_type)
     return True, tags
