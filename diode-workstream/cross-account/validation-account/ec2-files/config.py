@@ -24,13 +24,14 @@ exempt_file_types = ["csv"]
 
 # Populated and updated in the main function
 ssm_params = {
-    f"/pipeline/AvScanQueueUrl-{resource_suffix}": "",
-    f"/pipeline/QuarantineBucketName-{resource_suffix}": "",
     f"/pipeline/DataTransferIngestBucketName-{resource_suffix}": "",
-    f"/pipeline/QuarantineTopicArn-{resource_suffix}": "",
+    f"/pipeline/QuarantineBucketName-{resource_suffix}": "",
+    f"/pipeline/InvalidFilesBucketName-{resource_suffix}": "",
+    f"/pipeline/DfdlInputBucketName-{resource_suffix}": "",
+    f"/pipeline/AvScanQueueUrl-{resource_suffix}": "",
     f"/pipeline/ApprovedFileTypes-{resource_suffix}": "",
     f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}": "",
-    f"/pipeline/InvalidFilesBucketName-{resource_suffix}": "",
+    f"/pipeline/QuarantineTopicArn-{resource_suffix}": "",
     f"/pipeline/InvalidFilesTopicArn-{resource_suffix}": "",
 }
 
