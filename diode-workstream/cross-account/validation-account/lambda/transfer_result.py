@@ -75,7 +75,6 @@ def copy_object_to_failed_transfer_bucket(key: str):
         f"Copying {key} from {DATA_TRANSFER_BUCKET} to {FAILED_TRANSFER_BUCKET}",
     )
     try:
-        # amazonq-ignore-next-line
         S3_CLIENT.copy_object(
             # Source bucket/key/owner
             CopySource={"Bucket": DATA_TRANSFER_BUCKET, "Key": key},
