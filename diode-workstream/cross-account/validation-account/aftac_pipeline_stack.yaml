@@ -95,6 +95,10 @@ Parameters:
     Type: Number
     Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
 
+  DfdlInputBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the Dfdl Input Bucket.
+
   AccessLogBucketName:
     Type: String
     Description: The name of the access log bucket.
@@ -883,6 +887,53 @@ Resources:
                 - !Sub ${DataTransferBucket.Arn}/*
             - !Ref AWS::NoValue
 
+  DfdlInputBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
+    DependsOn: TransferQueuePolicy
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogBucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt TransferQueue.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref DfdlInputBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+
   LambdaFunctionsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -1414,6 +1465,14 @@ Resources:
       Description: Name of the bucket where files are staged for diode processing
       Type: String
       Value: !Ref DataTransferBucket
+  
+  DfdlInputBucketNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/DfdlInputBucketName-${ResourceSuffix}
+      Description: Name of the bucket where files are staged for diode processing
+      Type: String
+      Value: !Ref DfdlInputBucket
 
   QuarantineBucketNameParameter:
     Type: AWS::SSM::Parameter
@@ -1683,6 +1742,10 @@ Outputs:
   DataTransferResultSqsQueueArn:
     Description: Data Transfer Result SQS Queue ARN
     Value: !GetAtt TransferResultQueue.Arn
+
+  DfdlInputBucketName:
+    Description: Dfdl Bucket Name
+    Value: !Ref DfdlInputBucket
 
   PipelineKmsKeyArn:
     Description: Pipeline KMS Key ARN
