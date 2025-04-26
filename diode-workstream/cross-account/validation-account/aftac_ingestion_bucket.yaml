@@ -220,7 +220,7 @@ Resources:
           - !Ref AWS::NoValue
         - !If
           - UseDestinationBucket
-          - Key: IngestBucketDestinationBucket
+          - Key: DestinationBucket
             Value: !Ref IngestBucketDestinationBucket
           - !Ref AWS::NoValue
         - Key: DataOwner
