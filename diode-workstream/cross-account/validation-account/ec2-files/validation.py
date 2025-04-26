@@ -37,7 +37,7 @@ def validate_file(s3_event: dict, receipt_handle: str):
         # If key includes prefixes, split it and take the last element
         file_path = f'{tmpdir}/{key.split("/")[-1]}'
         downloaded = download_file(bucket, key, file_path)
-        # If the object does not exist
+        # If the object does not exist or is not a valid file path
         if not downloaded:
             delete_av_scan_message(receipt_handle)
             return

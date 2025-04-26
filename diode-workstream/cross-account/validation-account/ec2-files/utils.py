@@ -156,6 +156,10 @@ def download_file(
             logger.error(f"Object not found: {bucket}/{key}")
             return False
         raise
+    except NotADirectoryError:
+        # This can be raised if a folder was created in the ingestion bucket
+        logger.exception(f"Object not a valid file: {bucket}/{key}")
+        return False
 
 
 def upload_file(
