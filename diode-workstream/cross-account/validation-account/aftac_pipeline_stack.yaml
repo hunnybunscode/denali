@@ -1465,7 +1465,7 @@ Resources:
       Description: Name of the bucket where files are staged for diode processing
       Type: String
       Value: !Ref DataTransferBucket
-  
+
   DfdlInputBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:

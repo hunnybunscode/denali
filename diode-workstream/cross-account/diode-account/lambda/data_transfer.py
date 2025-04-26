@@ -223,7 +223,6 @@ def change_message_visibility(queue_url: str, receipt_handle: str, timeout: int)
 
 def get_mapping_id(bucket, key):
     tags = get_object_tagging(bucket, key)
-    # amazonq-ignore-next-line
     return tags.get("MappingId", NO_MAPPING_ID)
 
 
