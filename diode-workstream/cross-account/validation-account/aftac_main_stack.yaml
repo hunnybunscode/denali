@@ -61,6 +61,7 @@ Metadata:
           - TransitionToDeepArchive
           - FailedTransferBucketExpirationInDays
           - DataTransferBucketExpirationInDays
+          - DfdlInputBucketExpirationInDays
           - InvalidFilesBucketExpirationInDays
           - AccessLogBucketExpirationInDays
 
@@ -123,6 +124,8 @@ Metadata:
         default: Object Expiration In Days For Failed Transfer Bucket
       DataTransferBucketExpirationInDays:
         default: Object Expiration In Days For Data Transfer Bucket
+      DfdlInputBucketExpirationInDays:
+         default: Object Expiration In Days For Dfdl Input Bucket
       InvalidFilesBucketExpirationInDays:
         default: Object Expiration In Days For Invalid Files Bucket
       AccessLogBucketExpirationInDays:
@@ -302,6 +305,11 @@ Parameters:
     Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
     Default: 365
 
+  DfdlInputBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the DFDL Bucket.
+    Default: 365
+
   InvalidFilesBucketExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the INVALID FILES Bucket.
@@ -384,6 +392,7 @@ Resources:
         InvalidFilesBucketExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
         FailedTransferBucketExpirationInDays: !Ref FailedTransferBucketExpirationInDays
         DataTransferBucketExpirationInDays: !Ref DataTransferBucketExpirationInDays
+        DfdlInputBucketExpirationInDays: !Ref DfdlInputBucketExpirationInDays
 
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
