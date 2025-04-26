@@ -1,6 +1,7 @@
 import logging
 import os
 import zipfile
+from datetime import datetime
 from functools import lru_cache
 from functools import reduce
 from pathlib import Path
@@ -122,7 +123,14 @@ def get_ttl(seconds=60):
 def get_origin_tags(s3_event: dict):
     principal_id = s3_event["userIdentity"]["principalId"]
     source_ip = s3_event["requestParameters"]["sourceIPAddress"]
-    return {"PrincipalId / SourceIp": f"{principal_id} / {source_ip}"}
+    event_time = datetime.fromisoformat(s3_event["eventTime"]).strftime(
+        "%Y-%m-%d %H%M UTC",
+    )
+
+    return {
+        "PrincipalId / SourceIp": f"{principal_id} / {source_ip}",
+        "DataItemCreateDateTime": event_time,
+    }
 
 
 def download_file(
