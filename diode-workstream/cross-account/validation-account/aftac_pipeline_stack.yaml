@@ -253,7 +253,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
-        - PolicyName: Ec2ScannerCwLogsPolicy
+        - PolicyName: CwLogsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -266,7 +266,7 @@ Resources:
                   - cloudwatch:PutMetricData
                 Effect: Allow
                 Resource: "*"
-        - PolicyName: Ec2ScannerSqsPolicy
+        - PolicyName: SqsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -277,7 +277,7 @@ Resources:
                   - sqs:SendMessage
                   - sqs:ChangeMessageVisibility
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-        - PolicyName: Ec2ScannerS3Policy
+        - PolicyName: S3Policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -295,21 +295,21 @@ Resources:
                 Condition:
                   StringEquals:
                     s3:ResourceAccount: !Ref AWS::AccountId
-        - PolicyName: Ec2ScannerSnsPolicy
+        - PolicyName: SnsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: sns:Publish
                 Resource: "*"
-        - PolicyName: Ec2ScannerEc2Policy
+        - PolicyName: Ec2Policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: ec2:DescribeTags
                 Resource: "*"
-        - PolicyName: Ec2ScannerKmsPolicy
+        - PolicyName: KmsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -1762,3 +1762,9 @@ Outputs:
     Value: !Ref AutoScalingGroupLaunchTemplate
     Export:
       Name: !Sub aftac-pipeline-launch-template-name-${ResourceSuffix}
+
+  Ec2ScannerRoleArn:
+    Description: ARN of the role used by the EC2 Scanner
+    Value: !GetAtt Ec2ScannerRole.Arn
+    Export:
+      Name: !Sub aftac-pipeline-ec2-scanner-role-arn-${ResourceSuffix}

@@ -79,8 +79,13 @@ def _process_file(
     ]
 
     if exit_status == 0:
-        logger.info(f"Uploading {key} file to Data Transfer bucket")
-        upload_file(data_transfer_bucket, key, file_path, url_encoded_tags)
+        destination_bucket = user_tags.get("DestinationBucket")
+        if destination_bucket:
+            logger.info(f"Uploading {key} file to {destination_bucket}")
+            upload_file(destination_bucket, key, file_path, url_encoded_tags)
+        else:
+            logger.info(f"Uploading {key} file to Data Transfer bucket")
+            upload_file(data_transfer_bucket, key, file_path, url_encoded_tags)
     elif exit_status == 1:
         logger.info(f"Uploading {key} file to Quarantine bucket")
         upload_file(quarantine_bucket, key, file_path, url_encoded_tags)
