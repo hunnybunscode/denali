@@ -1,0 +1,1387 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Security Hub Compliance Analyzer Application Stack
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - Prefix
+          - PermissionsBoundaryPolicyArn
+      - Label:
+          default: Create VPC or Use Existing
+        Parameters:
+          - CreateNewVPC
+      - Label:
+          default: Existing VPC Configuration [required only if Create New VPC is false]
+        Parameters:
+          - ExistingVPCId
+          - ExistingVPCCidr
+          - ExistingPrivateSubnet1Id
+          - ExistingPrivateSubnet2Id
+      - Label:
+          default: New VPC Configuration [required only if Create New VPC is true]
+        Parameters:
+          - VpcCidr
+          - PrivateSubnet1Cidr
+          - PrivateSubnet2Cidr
+      - Label:
+          default: VPC Endpoint Configuration
+        Parameters:
+          - CreateVPCEndpoints
+      - Label:
+          default: S3 Bucket Configuration
+        Parameters:
+          - CodeBucket
+      - Label:
+          default: SNS Notification Configuration
+        Parameters:
+          - NotificationEmail
+      - Label:
+          default: Frequency to run SHCA Evaluation
+        Parameters:
+          - SHCAEvaluationFrequency
+
+    ParameterLabels:
+      Prefix:
+        default: Application Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary ARN (Optional)
+      CreateNewVPC:
+        default: Create New VPC
+      ExistingVPCId:
+        default: Existing VPC ID
+      ExistingPrivateSubnet1Id:
+        default: Existing Private Subnet 1 ID
+      ExistingPrivateSubnet2Id:
+        default: Existing Private Subnet 2 ID
+      VpcCidr:
+        default: VPC CIDR
+      PrivateSubnet1Cidr:
+        default: Private Subnet 1 CIDR
+      PrivateSubnet2Cidr:
+        default: Private Subnet 2 CIDR
+      CreateVPCEndpoints:
+        default: Create VPC Endpoints
+      CodeBucket:
+        default: Code S3 Bucket
+      NotificationEmail:
+        default: Notification Email
+      SHCAEvaluationFrequency:
+        default: SHCA Evaluation Frequency
+
+Parameters:
+  Prefix:
+    Type: String
+    Description: Prefix for IAM Role used to create and access resources
+    Default: AFC2S_
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM roles
+    Default: ""
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be empty or a valid IAM policy ARN
+
+  CreateNewVPC:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Description: Choose whether to create a new VPC or use an existing one
+
+  VpcCidr:
+    Type: String
+    Description: CIDR block for the new VPC (required only if CreateNewVPC is true)
+    Default: ""
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Description: CIDR block for private subnet 1 (required only if CreateNewVPC is true)
+    Default: ""
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.1.0/24)
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Description: CIDR block for private subnet 2 (required only if CreateNewVPC is true)
+    Default: ""
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.2.0/24)
+
+  ExistingVPCId:
+    Type: String
+    Default: ""
+    Description: ID of existing VPC (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^vpc-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid VPC ID
+
+  ExistingVPCCidr:
+    Type: String
+    Description: CIDR block for the existing VPC (required only if CreateNewVPC is false)
+    Default: ""
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  ExistingPrivateSubnet1Id:
+    Type: String
+    Default: ""
+    Description: ID of existing private subnet 1 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  ExistingPrivateSubnet2Id:
+    Type: String
+    Default: ""
+    Description: ID of existing private subnet 2 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  CreateVPCEndpoints:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: Choose whether to create VPC Endpoints
+
+  CodeBucket:
+    Type: String
+    Description: S3 Bucket containing the code for the Lambda functions
+
+  NotificationEmail:
+    Type: String
+    Description: Email address to send notifications to
+
+  SHCAEvaluationFrequency:
+    Type: String
+    Description: >-
+      The frequency to run the Security Hub Compliance Analyzer in account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
+    Default: rate(1 day)
+    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
+
+Conditions:
+  CreateVPC: !Equals [!Ref CreateNewVPC, "true"]
+  CreateVPCEndpoints: !Equals [!Ref CreateVPCEndpoints, "true"]
+  UsePermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryPolicyArn, ""]]
+
+Rules:
+  NewVPCValidation:
+    RuleCondition: !Equals
+      - !Ref CreateNewVPC
+      - "true"
+    Assertions:
+      - Assert: !Not [!Equals [!Ref VpcCidr, ""]]
+        AssertDescription: VPC CIDR is required when creating a new VPC
+      - Assert: !Not [!Equals [!Ref PrivateSubnet1Cidr, ""]]
+        AssertDescription: Private Subnet 1 CIDR is required when creating a new VPC
+      - Assert: !Not [!Equals [!Ref PrivateSubnet2Cidr, ""]]
+        AssertDescription: Private Subnet 2 CIDR is required when creating a new VPC
+      - Assert: !Equals [!Ref ExistingVPCId, ""]
+        AssertDescription: ExistingVPCId must be empty when creating a new VPC
+      - Assert: !Equals [!Ref ExistingVPCCidr, ""]
+        AssertDescription: ExistingVPCCidr must be empty when creating a new VPC
+      - Assert: !Equals [!Ref ExistingPrivateSubnet1Id, ""]
+        AssertDescription: ExistingPrivateSubnet1Id must be empty when creating a new VPC
+      - Assert: !Equals [!Ref ExistingPrivateSubnet2Id, ""]
+        AssertDescription: ExistingPrivateSubnet2Id must be empty when creating a new VPC
+
+  ExistingVPCValidation:
+    RuleCondition: !Equals
+      - !Ref CreateNewVPC
+      - "false"
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingVPCId, ""]]
+        AssertDescription: ExistingVPCId is required when using an existing VPC
+      - Assert: !Not [!Equals [!Ref ExistingVPCCidr, ""]]
+        AssertDescription: ExistingVPCCidr is required when using an existing VPC
+      - Assert: !Not [!Equals [!Ref ExistingPrivateSubnet1Id, ""]]
+        AssertDescription: ExistingPrivateSubnet1Id is required when using an existing VPC
+      - Assert: !Not [!Equals [!Ref ExistingPrivateSubnet2Id, ""]]
+        AssertDescription: ExistingPrivateSubnet2Id is required when using an existing VPC
+      - Assert: !Equals [!Ref VpcCidr, ""]
+        AssertDescription: VPC CIDR must be empty when using an existing VPC
+      - Assert: !Equals [!Ref PrivateSubnet1Cidr, ""]
+        AssertDescription: Private Subnet 1 CIDR must be empty when using an existing VPC
+      - Assert: !Equals [!Ref PrivateSubnet2Cidr, ""]
+        AssertDescription: Private Subnet 2 CIDR must be empty when using an existing VPC
+
+Resources:
+  # KMS Key and Alias
+  shcakmskey42982659:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: shca-KMS-Key
+      EnableKeyRotation: true
+      KeyPolicy:
+        Statement:
+          - Action: kms:*
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Resource: "*"
+          - Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Effect: Allow
+            Principal:
+              Service: logs.amazonaws.com
+            Resource: "*"
+        Version: "2012-10-17"
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  shcakmsalias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/shca-kms-key
+      TargetKeyId: !GetAtt shcakmskey42982659.Arn
+
+  # VPC and Subnets
+  shcavpc1C7B9638:
+    Type: AWS::EC2::VPC
+    Condition: CreateVPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+
+  shcavpcPrivateIsolatedSubnet1Subnet5323FCA6:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref shcavpc1C7B9638
+
+  shcavpcPrivateIsolatedSubnet2Subnet96EFC26E:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref shcavpc1C7B9638
+
+  # Route Tables
+  shcavpcPrivateIsolatedSubnet1RouteTableB205F583:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref shcavpc1C7B9638
+
+  shcavpcPrivateIsolatedSubnet1RouteTableAssociation6065BDAC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref shcavpcPrivateIsolatedSubnet1RouteTableB205F583
+      SubnetId: !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6
+
+  shcavpcPrivateIsolatedSubnet2RouteTable6F504F32:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref shcavpc1C7B9638
+
+  shcavpcPrivateIsolatedSubnet2RouteTableAssociationC0238ED5:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref shcavpcPrivateIsolatedSubnet2RouteTable6F504F32
+      SubnetId: !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E
+
+  # VPC Flow Logs
+  shcavpcdefaultFlowLogBB6E0A3D:
+    Type: AWS::EC2::FlowLog
+    Condition: CreateVPC
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt shcavpcflowloggrouproleEC157133.Arn
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref shcavpcflowloggroup1CBD677B
+      ResourceId: !Ref shcavpc1C7B9638
+      ResourceType: VPC
+      TrafficType: ALL
+
+  shcavpcflowloggroup1CBD677B:
+    Type: AWS::Logs::LogGroup
+    Condition: CreateVPC
+    Properties:
+      KmsKeyId: !GetAtt shcakmskey42982659.Arn
+      LogGroupName: shca-Vpc-Flow-Logs
+      RetentionInDays: 365
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  shcavpcflowloggrouppolicy74FD82CA:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: CreateVPC
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Vpc-Flow-Log-Group-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: !GetAtt shcavpcflowloggroup1CBD677B.Arn
+            Sid: VpcFlowLogGroupPolicy
+        Version: "2012-10-17"
+
+  shcavpcflowloggrouproleEC157133:
+    Type: AWS::IAM::Role
+    Condition: CreateVPC
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Ref shcavpcflowloggrouppolicy74FD82CA
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Vpc-Flow-Log-Group-Role
+
+    # VPC Endpoints
+  shcavpcKMSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt shcavpcendpointsecuritygroup7E2BCBAB.GroupId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.kms-fips"
+      SubnetIds:
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+            !Ref ExistingPrivateSubnet1Id,
+          ]
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+            !Ref ExistingPrivateSubnet2Id,
+          ]
+      VpcEndpointType: Interface
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  shcavpcshcaS3GatewayEndpointF24ACB75:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      RouteTableIds:
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet1RouteTableB205F583,
+            !Ref "AWS::NoValue",
+          ]
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet2RouteTable6F504F32,
+            !Ref "AWS::NoValue",
+          ]
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  shcavpcshcaSecurityHubEndpoint4D9AD39A:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt shcavpcendpointsecuritygroup7E2BCBAB.GroupId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.securityhub"
+      SubnetIds:
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+            !Ref ExistingPrivateSubnet1Id,
+          ]
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+            !Ref ExistingPrivateSubnet2Id,
+          ]
+      VpcEndpointType: Interface
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  shcavpcshcaCloudWatchLogsEndpointBDDF0F60:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt shcavpcendpointsecuritygroup7E2BCBAB.GroupId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      SubnetIds:
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+            !Ref ExistingPrivateSubnet1Id,
+          ]
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+            !Ref ExistingPrivateSubnet2Id,
+          ]
+      VpcEndpointType: Interface
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  shcavpcshcaStepFunctionsEndpointA90A5A1B:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt shcavpcendpointsecuritygroup7E2BCBAB.GroupId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.states"
+      SubnetIds:
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+            !Ref ExistingPrivateSubnet1Id,
+          ]
+        - !If [
+            CreateVPC,
+            !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+            !Ref ExistingPrivateSubnet2Id,
+          ]
+      VpcEndpointType: Interface
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  # Security Groups
+  shcavpcendpointsecuritygroup7E2BCBAB:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateVPCEndpoints
+    Properties:
+      GroupDescription: Security Group for VPC Endpoint
+      SecurityGroupEgress:
+        - Description: Allow HTTPS from VPC CIDR Block
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+          CidrIp: !If [CreateVPC, !Ref VpcCidr, !Ref ExistingVPCCidr]
+      SecurityGroupIngress:
+        - Description: Allow HTTPS from VPC CIDR Block
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+          CidrIp: !If [CreateVPC, !Ref VpcCidr, !Ref ExistingVPCCidr]
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  shcalambdasecuritygroupCA026EB3:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: shca-Lambda-Security-Group
+      GroupName: shca-Lambda-Security-Group
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      VpcId: !If [CreateVPC, !Ref shcavpc1C7B9638, !Ref ExistingVPCId]
+
+  # S3 Bucket
+  shcaresources2B573286:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !GetAtt shcakmskey42982659.Arn
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-artifact-replicas
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 49
+            Status: Enabled
+      LoggingConfiguration:
+        LogFilePrefix: server_access_logs
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  shcaresourcesPolicyF55E4DE9:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref shcaresources2B573286
+      PolicyDocument:
+        Statement:
+          - Action: s3:*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Resource:
+              - !GetAtt shcaresources2B573286.Arn
+              - !Join
+                - ""
+                - - !GetAtt shcaresources2B573286.Arn
+                  - /*
+          - Action: s3:PutObject
+            Condition:
+              ArnLike:
+                aws:SourceArn: !GetAtt shcaresources2B573286.Arn
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Resource: !Join
+              - ""
+              - - !GetAtt shcaresources2B573286.Arn
+                - /server_access_logs*
+        Version: "2012-10-17"
+
+  # SNS Topic
+  shcasnstopic6E0C527F:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: shca
+      KmsMasterKeyId: !GetAtt shcakmskey42982659.Arn
+      TopicName: shca-SNS-Topic
+
+  shcasnstopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref shcasnstopic6E0C527F
+
+  # SQS Queue
+  shcadeadletterqueueCE99844D:
+    Type: AWS::SQS::Queue
+    Properties:
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 604800
+      QueueName: shca-Dead-Letter-Queue
+      VisibilityTimeout: 30
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+    # IAM Policies
+  shcasecurityhublambdapolicy81A8E91C:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Security-Hub-Lambda-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action:
+              - securityhub:BatchImportFindings
+              - securityhub:GetEnabledStandards
+              - securityhub:GetFindings
+            Effect: Allow
+            Resource:
+              - !Sub arn:${AWS::Partition}:securityhub:${AWS::Region}:${AWS::AccountId}:hub/default
+              - !Sub arn:${AWS::Partition}:securityhub:${AWS::Region}:${AWS::AccountId}:product/*
+            Sid: SecurityHubLambdaPolicy
+          - Action:
+              - s3:DeleteObject
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObject
+            Effect: Allow
+            Resource:
+              - !GetAtt shcaresources2B573286.Arn
+              - !Join
+                - ""
+                - - !GetAtt shcaresources2B573286.Arn
+                  - /*
+            Sid: S3AccessPolicy
+        Version: "2012-10-17"
+
+  shcas3lambdapolicy718122F6:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-S3-Lambda-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+              - s3:ListBucketVersions
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Effect: Allow
+            Resource: !Join
+              - ""
+              - - !GetAtt shcaresources2B573286.Arn
+                - /*
+            Sid: S3LambdaPolicy
+          - Action: s3:ListBucket
+            Effect: Allow
+            Resource: !GetAtt shcaresources2B573286.Arn
+            Sid: BucketPolicy
+        Version: "2012-10-17"
+
+  shcasqspolicy92ECFF9B:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-SQS-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action: sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt shcadeadletterqueueCE99844D.Arn
+            Sid: SQSPolicy
+        Version: "2012-10-17"
+
+  shcasnspolicy8B6C4854:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-SNS-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action: sns:Publish
+            Effect: Allow
+            Resource: !Ref shcasnstopic6E0C527F
+            Sid: SNSPolicy
+        Version: "2012-10-17"
+
+  shcastepfunctionpolicy4D1B2100:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Step-Function-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action: states:SendTaskSuccess
+            Effect: Allow
+            Resource: "*"
+            Sid: StepFunctionPolicy
+        Version: "2012-10-17"
+
+  # Lambda Layer
+  shcaawssdkforpandaslayerB1E44501:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.11
+      Content:
+        S3Bucket: !Ref CodeBucket
+        S3Key: e06748af8982847e7936cddd150dfcfe165690da09d0cbf9996f081e368d7065.zip
+
+  # Lambda Function Roles
+  shcacreatesummaryfunctionrole64730D33:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Create-Summary-Function-Role
+
+  shcakmspolicy19B41581:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-KMS-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Effect: Allow
+            Resource: !GetAtt shcakmskey42982659.Arn
+            Sid: KMSLambdaPolicy
+        Version: "2012-10-17"
+
+  shcaconfigrulesscrapefunctionrole45C537A8:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+        - !Ref shcasecurityhublambdapolicy81A8E91C
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Config-Rules-Scrape-Function-Role
+
+  shcaparsenistcontrolsfunctionrole4DC1E54F:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Parse-Nist-Controls-Function-Role
+
+  shcacreateoscalfunctionfunctionrole18540FED:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Create-OSCAL-Function-Role
+
+  shcacreateocsffunctionfunctionrole99FE39B9:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Create-OCSF-Function-Role
+
+  shcacreatepackageartifactsfunctionroleC4371846:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - !Join
+          - ""
+          - - "arn:"
+            - !Ref AWS::Partition
+            - ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+        - !Ref shcasqspolicy92ECFF9B
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcas3lambdapolicy718122F6
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Package-Artifacts-Function-Role
+
+    # Lambda Functions
+  shcaconfigrulesscrapefunctionE9ED390E:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: 02bb756ef60756d80b99697569c8c17c9b7516e6914a8bdba4f1148ef4c13e96.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 1-Retrieve data from AWS Security Hub and export ASFF format.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Config-Rules-Scrape
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcaconfigrulesscrapefunctionrole45C537A8.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  shcaparsenistcontrolsfunction6E71BFE7:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: 8a110efb7d0c446d3113d66988d044fb5fa680a5f13ccc8e898b53361aaf57fd.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 2-Extract findings by resource/security control id, save as CSV.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Parse-NIST-Controls
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      Layers:
+        - !Ref shcaawssdkforpandaslayerB1E44501
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcaparsenistcontrolsfunctionrole4DC1E54F.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  shcacreatesummaryfunction750A61A3:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: 0d30aca47faa89a9010e88c85b38a3d838e0a421aaaff136a4225c095d5e2761.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 3-Analyze prior results and create a summary CSV.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Create-Summary
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      Layers:
+        - !Ref shcaawssdkforpandaslayerB1E44501
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcacreatesummaryfunctionrole64730D33.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  shcapackageartifactsfunctionB7D2FDD4:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: 7fe5085b0a28184990c9710be2497a976b300dd715887ac214b8bef759d54146.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 4-Package artifacts into .zip file.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Package-Artifacts
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      Layers:
+        - !Ref shcaawssdkforpandaslayerB1E44501
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcacreatepackageartifactsfunctionroleC4371846.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  shcacreateocsffunction0399CEE3:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: 98dd408a8cbaee13a1ef0e507f727a99161497ab960db10578d62534de2dcb1e.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 5-Create ocsf version of results.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Create-OCSF
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      Layers:
+        - !Ref shcaawssdkforpandaslayerB1E44501
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcacreateocsffunctionfunctionrole99FE39B9.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  shcacreateoscalfunctionBDF481A7:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: a73f558c2c4b029c13cbaad6025e96f03a02cb1db83299ff448d13a0c70fe75e.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt shcadeadletterqueueCE99844D.Arn
+      Description: 6-Create oscal version of results.
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref shcaresources2B573286
+      EphemeralStorage:
+        Size: 4096
+      FunctionName: shca-Create-OSCAL
+      Handler: lambda_function.lambda_handler
+      KmsKeyArn: !GetAtt shcakmskey42982659.Arn
+      Layers:
+        - !Ref shcaawssdkforpandaslayerB1E44501
+      MemorySize: 4096
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt shcacreateoscalfunctionfunctionrole18540FED.Arn
+      Runtime: python3.11
+      Timeout: 600
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt shcalambdasecuritygroupCA026EB3.GroupId
+        SubnetIds:
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet1Subnet5323FCA6,
+              !Ref ExistingPrivateSubnet1Id,
+            ]
+          - !If [
+              CreateVPC,
+              !Ref shcavpcPrivateIsolatedSubnet2Subnet96EFC26E,
+              !Ref ExistingPrivateSubnet2Id,
+            ]
+
+  # Step Functions
+  shcastepfunctionloggroup172ED29D:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !GetAtt shcakmskey42982659.Arn
+      LogGroupName: shca-Step-Function-Logs
+      RetentionInDays: 365
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  shcastatemachinerole1D4F082F:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Ref shcastatespolicy7FD71342
+        - !Ref shcakmspolicy19B41581
+        - !Ref shcasnspolicy8B6C4854
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-State-Machine-Role
+
+  shcastatemachineA42B9F4C:
+    Type: AWS::StepFunctions::StateMachine
+    DependsOn:
+      - shcastatemachineroleDefaultPolicy9BAA5B86
+    Properties:
+      DefinitionString: !Join
+        - ""
+        - - '{"StartAt":"shca-1-config-rules-scrape","States":{"shca-1-config-rules-scrape":{"Next":"shca-2-parse-nist-controls","Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcaconfigrulesscrapefunctionE9ED390E.Arn
+          - '","Payload.$":"$"}},"shca-2-parse-nist-controls":{"Next":"shca-3-create-summary","Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcaparsenistcontrolsfunction6E71BFE7.Arn
+          - '","Payload.$":"$"}},"shca-3-create-summary":{"Next":"shca-4-package-artifacts","Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcacreatesummaryfunction750A61A3.Arn
+          - '","Payload.$":"$"}},"shca-4-package-artifacts":{"Next":"shca-5-create-ocsf","Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcapackageartifactsfunctionB7D2FDD4.Arn
+          - '","Payload.$":"$"}},"shca-5-create-ocsf":{"Next":"shca-6-create-oscal","Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcacreateocsffunction0399CEE3.Arn
+          - '","Payload.$":"$"}},"shca-6-create-oscal":{"End":true,"Retry":[{"ErrorEquals":["Lambda.ClientExecutionTimeoutException","Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException"],"IntervalSeconds":2,"MaxAttempts":6,"BackoffRate":2}],"Catch":[{"ErrorEquals":["States.ALL"],"ResultPath":"$.taskresult","Next":"shca-fail-task"}],"Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::lambda:invoke","Parameters":{"FunctionName":"'
+          - !GetAtt shcacreateoscalfunctionBDF481A7.Arn
+          - '","Payload.$":"$"}},"shca-fail-task":{"Next":"shca-failure-state","Type":"Task","Resource":"arn:'
+          - !Ref AWS::Partition
+          - ':states:::sns:publish","Parameters":{"TopicArn":"'
+          - !Ref shcasnstopic6E0C527F
+          - '","Message.$":"$.taskresult","Subject":"Job Failed"}},"shca-failure-state":{"Type":"Fail","Error":"TaskFailed","Cause":"Task Failed"}},"TimeoutSeconds":900}'
+      LoggingConfiguration:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt shcastepfunctionloggroup172ED29D.Arn
+        IncludeExecutionData: true
+        Level: ALL
+      RoleArn: !GetAtt shcastatemachinerole1D4F082F.Arn
+      StateMachineName: shca-State-Machine
+
+    # EventBridge (CloudWatch Events) Rule
+  shcaeventspolicyD73F718C:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Events-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action: states:StartExecution
+            Effect: Allow
+            Resource: !Ref shcastatemachineA42B9F4C
+            Sid: EventsPolicy
+        Version: "2012-10-17"
+
+  shcaeventrole3D7F0D89:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Ref shcaeventspolicyD73F718C
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      RoleName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-Event-Role
+
+  shcaeventrule5DCA9096:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: shca-event-rule
+      ScheduleExpression: !Ref SHCAEvaluationFrequency
+      State: ENABLED
+      Targets:
+        - Arn: !Ref shcastatemachineA42B9F4C
+          Id: Target0
+          RoleArn: !GetAtt shcaeventrole3D7F0D89.Arn
+
+  # State Machine Policies
+  shcastatespolicy7FD71342:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: ""
+      ManagedPolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shca-States-Policy
+      Path: /
+      PolicyDocument:
+        Statement:
+          - Action:
+              - logs:CreateLogDelivery
+              - logs:DeleteLogDelivery
+              - logs:DescribeLogGroups
+              - logs:DescribeResourcePolicies
+              - logs:GetLogDelivery
+              - logs:ListLogDeliveries
+              - logs:PutLogEvents
+              - logs:PutResourcePolicy
+              - logs:UpdateLogDelivery
+            Effect: Allow
+            Resource: !GetAtt shcastepfunctionloggroup172ED29D.Arn
+            Sid: LogsPolicy
+          - Action: lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - !GetAtt shcaconfigrulesscrapefunctionE9ED390E.Arn
+              - !GetAtt shcacreateocsffunction0399CEE3.Arn
+              - !GetAtt shcacreateoscalfunctionBDF481A7.Arn
+              - !GetAtt shcacreatesummaryfunction750A61A3.Arn
+              - !GetAtt shcapackageartifactsfunctionB7D2FDD4.Arn
+              - !GetAtt shcaparsenistcontrolsfunction6E71BFE7.Arn
+            Sid: LambdaInvokePolicy
+        Version: "2012-10-17"
+
+  shcastatemachineroleDefaultPolicy9BAA5B86:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - !GetAtt shcaconfigrulesscrapefunctionE9ED390E.Arn
+              - !GetAtt shcacreateocsffunction0399CEE3.Arn
+              - !GetAtt shcacreateoscalfunctionBDF481A7.Arn
+              - !GetAtt shcacreatesummaryfunction750A61A3.Arn
+              - !GetAtt shcapackageartifactsfunctionB7D2FDD4.Arn
+              - !GetAtt shcaparsenistcontrolsfunction6E71BFE7.Arn
+              - !Join
+                - ""
+                - - !GetAtt shcaconfigrulesscrapefunctionE9ED390E.Arn
+                  - ":*"
+              - !Join
+                - ""
+                - - !GetAtt shcacreateocsffunction0399CEE3.Arn
+                  - ":*"
+              - !Join
+                - ""
+                - - !GetAtt shcacreateoscalfunctionBDF481A7.Arn
+                  - ":*"
+              - !Join
+                - ""
+                - - !GetAtt shcacreatesummaryfunction750A61A3.Arn
+                  - ":*"
+              - !Join
+                - ""
+                - - !GetAtt shcapackageartifactsfunctionB7D2FDD4.Arn
+                  - ":*"
+              - !Join
+                - ""
+                - - !GetAtt shcaparsenistcontrolsfunction6E71BFE7.Arn
+                  - ":*"
+          - Action: sns:Publish
+            Effect: Allow
+            Resource: !Ref shcasnstopic6E0C527F
+          - Action:
+              - logs:CreateLogDelivery
+              - logs:DeleteLogDelivery
+              - logs:DescribeLogGroups
+              - logs:DescribeResourcePolicies
+              - logs:GetLogDelivery
+              - logs:ListLogDeliveries
+              - logs:PutResourcePolicy
+              - logs:UpdateLogDelivery
+            Effect: Allow
+            Resource: "*"
+        Version: "2012-10-17"
+      PolicyName: !Join
+        - ""
+        - - Ref: Prefix
+          - shcastatemachineroleDefaultPolicy9BAA5B86
+      Roles:
+        - !Ref shcastatemachinerole1D4F082F
+
+Outputs:
+  BucketName:
+    Description: shca S3 Bucket Name
+    Value: !Ref shcaresources2B573286
