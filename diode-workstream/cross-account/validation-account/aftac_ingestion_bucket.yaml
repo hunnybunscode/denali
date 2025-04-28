@@ -11,6 +11,7 @@ Metadata:
           default: Tags
         Parameters:
           - IngestBucketMappingId
+          - DfdlBound
           - IngestBucketDestinationBucket
 
           - IngestBucketDataOwner
@@ -46,6 +47,8 @@ Metadata:
         default: Resource Suffix
       IngestBucketMappingId:
         default: (Conditional) Mapping ID
+      DfdlBound:
+        default: DFDL Bound
       IngestBucketDestinationBucket:
         default: (Conditional) Destination Bucket Name
       IngestBucketDataOwner:
@@ -89,6 +92,13 @@ Parameters:
     Default: 12346789-abcd-1234-abcd-123456789012
     AllowedPattern: ^$|^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
     ConstraintDescription: Must be a valid Mapping ID
+
+  DfdlBound:
+    Type: String
+    Description: (Required) If you select "Yes", any file uploaded to this bucket will be sent through the DFDL pipeline.
+    Default: "No"
+    AllowedValues: ["Yes", "No"]
+    ConstraintDescription: Must be "Yes" or "No"
 
   IngestBucketDestinationBucket:
     Type: String
@@ -218,6 +228,8 @@ Resources:
           - Key: MappingId
             Value: !Ref IngestBucketMappingId
           - !Ref AWS::NoValue
+        - Key: DfdlBound
+          Value: !Ref DfdlBound
         - !If
           - UseDestinationBucket
           - Key: DestinationBucket
