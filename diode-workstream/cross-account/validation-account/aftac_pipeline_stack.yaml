@@ -894,7 +894,6 @@ Resources:
         skip:
           - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
             comment: Versioning not enabled intentionally
-    DependsOn: TransferQueuePolicy
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -914,10 +913,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      NotificationConfiguration:
-        QueueConfigurations:
-          - Event: s3:ObjectCreated:*
-            Queue: !GetAtt TransferQueue.Arn
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
