@@ -77,12 +77,17 @@ def _process_file(
     invalid_files_bucket = ssm_params[
         f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
     ]
+    dfdl_input_bucket = ssm_params[f"/pipeline/DfdlInputBucketName-{resource_suffix}"]
 
     if exit_status == 0:
         destination_bucket = user_tags.get("DestinationBucket")
+        dfdl_bound = user_tags.get("DfdlBound")
         if destination_bucket:
             logger.info(f"Uploading {key} file to {destination_bucket}")
             upload_file(destination_bucket, key, file_path, url_encoded_tags)
+        elif dfdl_bound == "Yes":
+            logger.info(f"Uploading {key} file to {dfdl_input_bucket}")
+            upload_file(dfdl_input_bucket, key, file_path, url_encoded_tags)
         else:
             logger.info(f"Uploading {key} file to Data Transfer bucket")
             upload_file(data_transfer_bucket, key, file_path, url_encoded_tags)
