@@ -211,23 +211,51 @@ Resources:
                 action: ExecuteBash
                 inputs:
                   commands:
-                    # Set environment variables for proxy servers
+                    - echo "Setting the script to exit on any error..."
+                    - set -e
+
+                    - echo "Setting environment variables for proxy servers..."
                     - export http_proxy=${ProxyServerAddress}:3128
                     - export https_proxy=${ProxyServerAddress}:3128
                     - export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
 
-                    # Install python3.11, pip, and other libraries
-                    - yum install -y python3.11 python3.11-pip curl unzip
-                    - python3.11 -m pip install pip --upgrade
-                    - python3.11 -m pip install boto3 puremagic pyjwt
+                    # Create a function to check if a package is installed
+                    - |
+                      is_installed() {
+                          rpm -q "$1" >/dev/null 2>&1
+                      }
 
-                    # Update all packages
+                    - echo "Gathering yum packages to install..."
+                    - PACKAGES="python3.11 python3.11-pip curl unzip"
+                    - PACKAGES_TO_INSTALL=""
+                    - |
+                      for package in $PACKAGES; do
+                          if ! is_installed "$package"; then
+                              PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL $package"
+                          else
+                              echo "$package is already installed"
+                          fi
+                      done
+                    - |
+                      if [ -n "$PACKAGES_TO_INSTALL" ]; then
+                          echo "Installing packages:$PACKAGES_TO_INSTALL"
+                          yum install -y $PACKAGES_TO_INSTALL
+                      else
+                          echo "All required packages are already installed"
+                      fi
+
+                    - echo "Upgrading pip and installing Python packages..."
+                    - python3.11 -m pip install pip --upgrade --no-cache-dir
+                    - python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
+
+                    - echo "Updating all packages..."
                     - yum update -y
 
                     # Install awscli
                     - ARCH=$(uname -m)
+                    - echo "Downloading awscliv2.zip..."
                     - curl "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH.zip" -o /tmp/awscliv2.zip
-                    - echo Unzipping awscliv2.zip
+                    - echo "Unzipping awscliv2.zip..."
                     - unzip -q -o /tmp/awscliv2.zip
                     - BINARY=/usr/local/aws-cli/v2/current/bin/aws
                     - |
@@ -239,7 +267,8 @@ Resources:
                           echo Installing awscli v2
                           ./aws/install
                       fi
-                    # Install CloudWatch Agent
+
+                    - echo "Downloading and installing CloudWatch Agent..."
                     - ARCH=$(arch)
                     - |
                       if [ "$ARCH" = "arm64" ]; then
@@ -249,20 +278,22 @@ Resources:
                       fi
                     - rpm -U /tmp/amazon-cloudwatch-agent.rpm
 
-                    # Download all files from S3 bucket
+                    - echo "Downloading all required files from S3 bucket..."
                     - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
-                    # Enable CloudWatch Agent
+                    - echo "Enabling CloudWatch Agent..."
                     - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-                    - systemctl enable amazon-cloudwatch-agent
-                    - systemctl start amazon-cloudwatch-agent
+                    - systemctl enable --now amazon-cloudwatch-agent
+                    - systemctl is-active --quiet amazon-cloudwatch-agent
 
-                    # Enable SQS Poller Service
+                    - echo "Enabling SQS Poller Service..."
                     # Replaces the placeholder ("") with actual environment variables
                     - sed -i 's/""/resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
                     - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
-                    - systemctl enable sqs_poller.service
-                    - systemctl start sqs_poller.service
+                    - systemctl enable --now sqs_poller.service
+                    - systemctl is-active --quiet sqs_poller.service
+
+                    - echo "Complete"
 
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
