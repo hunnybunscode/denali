@@ -323,12 +323,21 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
 
     file_type, mime_type = get_file_identity(file_path)
 
-    if file_type == UNKNOWN and file_ext in exempt_file_types:
-        logger.info(
-            f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
+    # If puremagic can't determine the file type
+    if file_type == UNKNOWN:
+        dfdl_file_types = (
+            ssm_params[f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"]
+            .replace(".", "")
+            .replace(" ", "")
+            .split(",")
         )
-        tags = create_tags_for_file_validation("None", file_ext)
-        return True, tags
+
+        if file_ext in exempt_file_types + dfdl_file_types:
+            logger.info(
+                f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
+            )
+            tags = create_tags_for_file_validation("None", file_ext)
+            return True, tags
 
     if file_type != file_ext:
         logger.warning(
