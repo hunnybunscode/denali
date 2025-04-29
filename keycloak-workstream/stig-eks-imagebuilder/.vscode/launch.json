@@ -15,7 +15,8 @@
       "env": {
         "AWS_DEFAULT_REGION": "us-west-1",
         "CDK_DEFAULT_REGION": "us-west-1",
-        "DEBUG": "true"
+        "DEBUG": "true",
+        "ENVIRONMENT": "standard-dev"
       },
       "envFile": "${workspaceFolder}/.env"
     }

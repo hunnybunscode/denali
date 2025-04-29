@@ -5,6 +5,10 @@ environment:
   iam:
     prefix: AFC2S
     # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+  # proxy:
+  #   httpProxy: http://k8s-squid-squidser-13d34973ba-ab13161c945847d1.elb.us-west-1.amazonaws.com:3128
+  #   httpsProxy: http://k8s-squid-squidser-13d34973ba-ab13161c945847d1.elb.us-west-1.amazonaws.com:3128
+  #   noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
 
 .storage: &storage
   type: gp3
@@ -21,17 +25,19 @@ environment:
   subnet:
     id: subnet-01c1318200cc26785
 
+.instanceTypes: &instanceTypes
+  - m6i.8xlarge
+  - m6a.xlarge
+  - m5.xlarge
+  - m5.large
+
 pipelines:
   - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
-    version: &pipeline-version 1.0.199
+    version: &pipeline-version 1.0.219
     scan: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.xlarge
-      - m5.large
+    instanceTypes: *instanceTypes
     ami:
       name: amazon-eks-node-al2023-x86_64-standard-1.30-*
     storages:
@@ -56,6 +62,7 @@ pipelines:
       - lib/component/AllowEKSOperationalStatus.yml
       - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
@@ -64,11 +71,7 @@ pipelines:
     test: false
     enhancedImageMetadata: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.xlarge
-      - m5.large
+    instanceTypes: *instanceTypes
     ami:
       name: RHEL-8.10.*_HVM-*-x86_64-*-Hourly2-GP3
     storages:
@@ -104,6 +107,7 @@ pipelines:
       - lib/component/AllowEKSOperationalStatus.yml
       - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
@@ -112,11 +116,7 @@ pipelines:
     test: false
     enhancedImageMetadata: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.large
-      - m5.xlarge
+    instanceTypes: *instanceTypes
     ami:
       name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
     storages:
@@ -151,6 +151,7 @@ pipelines:
       - lib/component/AllowEKSOperationalStatus.yml
       - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml
 
   - name: amazon-node-rhel9-x86_64-standard-stig-high
     description: "Optimized Image with STIG High"
@@ -159,11 +160,7 @@ pipelines:
     test: false
     enhancedImageMetadata: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.xlarge
-      - m5.large
+    instanceTypes: *instanceTypes
     ami:
       name: RHEL-9.5.*_HVM-*-x86_64-0-Hourly2-GP3
     storages:
@@ -189,6 +186,7 @@ pipelines:
             value: "Yes"
       - lib/component/allow-software-access.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
@@ -197,11 +195,7 @@ pipelines:
     test: false
     enhancedImageMetadata: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.large
-      - m5.xlarge
+    instanceTypes: *instanceTypes
     ami:
       name: RHEL-8.10.*_HVM-*-x86_64-*-Hourly2-GP3
     storages:
@@ -225,6 +219,7 @@ pipelines:
             value: /tmp/workspace
       - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
@@ -233,11 +228,7 @@ pipelines:
     test: false
     enhancedImageMetadata: false
     vpc: *vpc
-    instanceTypes:
-      - m6i.8xlarge
-      - m6a.xlarge
-      - m5.large
-      - m5.xlarge
+    instanceTypes: *instanceTypes
     ami:
       name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
     storages:
@@ -261,3 +252,4 @@ pipelines:
             value: /tmp/workspace
       - lib/component/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
+      - lib/component/cleanup-RHEL.yml

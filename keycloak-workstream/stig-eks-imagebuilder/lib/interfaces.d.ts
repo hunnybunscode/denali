@@ -17,6 +17,11 @@ interface Environment {
     prefix?: string;
     permissionBoundaryArn?: string;
   };
+  proxy?: {
+    noProxy?: string[] | string;
+    httpProxy?: string;
+    httpsProxy?: string;
+  };
 }
 
 interface Component {

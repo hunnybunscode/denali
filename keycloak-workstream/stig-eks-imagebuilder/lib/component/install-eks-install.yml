@@ -175,7 +175,6 @@ phases:
         maxAttempts: 1
         inputs:
           commands:
-            - bash {{ HomePath }}/{{ GithubDir }}/templates/shared/provisioners/cleanup.sh
             - bash {{ HomePath }}/{{ GithubDir }}/templates/rhel/provisioners/validate.sh
             - sudo rm -rf {{ HomePath }}/*
             - sudo rm -rf {{ TempPath }}/provisioners

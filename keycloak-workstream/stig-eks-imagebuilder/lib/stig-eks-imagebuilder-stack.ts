@@ -9,7 +9,17 @@
  * -----
  */
 
-import { Stack, StackProps, aws_imagebuilder as imageBuilder, aws_ec2 as ec2, aws_iam as iam, Tags } from "aws-cdk-lib";
+import {
+  Stack,
+  StackProps,
+  aws_imagebuilder as imageBuilder,
+  aws_ec2 as ec2,
+  aws_iam as iam,
+  aws_s3 as s3,
+  Tags,
+  RemovalPolicy,
+  Duration,
+} from "aws-cdk-lib";
 import { Construct } from "constructs";
 
 import * as fs from "fs";
@@ -35,6 +45,20 @@ export class StigEksImageBuilderStack extends Stack {
     super(scope, id, { description: "CDK Project: Creates EC2 Image Builder Pipeline ", ...props });
 
     const pipelines = props?.pipelines ?? [];
+
+    const s3LoggingImageBuilder = new s3.Bucket(this, "ImageBuilderLogging", {
+      bucketName: `image-builder-logging-${this.account}-${this.region}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: RemovalPolicy.DESTROY,
+      enforceSSL: true,
+      versioned: false,
+      lifecycleRules: [
+        {
+          expiration: Duration.days(30),
+        },
+      ],
+    });
 
     // Create an EC2 instance role for image builder
     const imageBuilderRole = new iam.Role(this, "ImageBuilderRole", {
@@ -73,7 +97,10 @@ export class StigEksImageBuilderStack extends Stack {
       },
     });
 
+    s3LoggingImageBuilder.grantReadWrite(imageBuilderRole);
+
     const imageBuilderInstanceProfile = new iam.InstanceProfile(this, "ImageBuilderInstanceProfile", {
+      instanceProfileName: "ImageBuilderRoleProfile",
       role: imageBuilderRole,
     });
 
@@ -135,6 +162,12 @@ export class StigEksImageBuilderStack extends Stack {
           },
           subnetId: vpc?.subnet.id,
           securityGroupIds: securityGroup ? [securityGroup.securityGroupId] : undefined,
+          logging: {
+            s3Logs: {
+              s3BucketName: s3LoggingImageBuilder.bucketName,
+              s3KeyPrefix: "pipeline",
+            },
+          },
         }
       );
 
@@ -215,6 +248,42 @@ export class StigEksImageBuilderStack extends Stack {
 
       const amiImage = amiLookup.getImage(this);
 
+      const completeUserData: string[] = [];
+
+      if (props.environment.proxy) {
+        const { httpProxy = "", httpsProxy = "", noProxy } = props.environment.proxy;
+
+        let noProxyStr = "";
+
+        if (noProxy) {
+          if (Array.isArray(noProxy)) {
+            noProxyStr = noProxy.join(",");
+          } else {
+            noProxyStr = noProxy;
+          }
+        }
+
+        const defaultCleanupUserData = fs.readFileSync(
+          path.resolve(projectRootDir, "lib/script", "default-cleanup-userdata.sh"),
+          "utf8"
+        );
+
+        const proxyUserData = fs
+          .readFileSync(path.resolve(projectRootDir, "lib/script", "proxy-userdata.sh"), "utf8")
+          .replace(/{{HTTP_PROXY}}/g, httpProxy)
+          .replace(/{{HTTPS_PROXY}}/g, httpsProxy)
+          .replace(/{{NO_PROXY}}/g, noProxyStr);
+
+        const userData = fs
+          .readFileSync(path.resolve(projectRootDir, "lib/script", "userdata.sh"), "utf8")
+          .replace(/{{AWS_REGION}}/g, this.region)
+          .replace(/{{S3_ENDPOINT}}/g, `https://s3.${this.region}.amazonaws.com`);
+
+        completeUserData.push(defaultCleanupUserData, proxyUserData, userData);
+      }
+
+      const userDataBase64 = Buffer.from(completeUserData.join("\n")).toString("base64");
+
       const imageRecipe = new imageBuilder.CfnImageRecipe(this, `${pipelineName}-ImageRecipe`, {
         name: pipelineName,
         version,
@@ -224,6 +293,7 @@ export class StigEksImageBuilderStack extends Stack {
           systemsManagerAgent: {
             uninstallAfterBuild: false,
           },
+          userDataOverride: props.environment.proxy ? userDataBase64 : undefined,
         },
         blockDeviceMappings,
         description,
