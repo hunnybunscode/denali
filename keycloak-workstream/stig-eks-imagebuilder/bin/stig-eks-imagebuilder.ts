@@ -19,6 +19,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as yaml from "js-yaml";
 import IamRoleAspect from "../lib/IamRoleAspect";
+import LambdaEnvAspect from "../lib/LambdaEnvAspect";
 
 const { env } = process;
 const app = new App();
@@ -70,6 +71,16 @@ Aspects.of(app).add(
   new IamRoleAspect({
     namePrefix: doc.environment?.iam?.prefix,
     permissionBoundaryArn: doc.environment?.iam?.permissionBoundaryArn,
+    verbose: true,
+  })
+);
+
+Aspects.of(app).add(
+  new LambdaEnvAspect({
+    environmentVariables: {
+      REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    },
     verbose: true,
   })
 );

@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as yaml from "js-yaml";
 import { SharedServicesStack } from "../lib/shared-services-stack";
 import IamRoleAspect from "../lib/IamRoleAspect";
-import { AddLambdaEnvironmentVariables } from "@cdklabs/cdk-enterprise-iac";
+import LambdaEnvAspect from "../lib/LambdaEnvAspect";
 
 const { env } = process;
 const app = new App();
@@ -69,9 +69,12 @@ Aspects.of(app).add(
 );
 
 Aspects.of(app).add(
-  new AddLambdaEnvironmentVariables({
-    REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-    NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+  new LambdaEnvAspect({
+    environmentVariables: {
+      REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    },
+    verbose: true,
   })
 );
 

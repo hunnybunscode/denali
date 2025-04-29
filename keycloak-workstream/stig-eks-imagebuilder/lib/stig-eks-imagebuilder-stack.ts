@@ -53,6 +53,7 @@ export class StigEksImageBuilderStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       enforceSSL: true,
       versioned: false,
+      autoDeleteObjects: true,
       lifecycleRules: [
         {
           expiration: Duration.days(30),
