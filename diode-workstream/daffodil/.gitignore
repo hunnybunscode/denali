@@ -1,0 +1,24 @@
+# 2025 Amazon Web Services, Inc. All Rights Reserved. This AWS Content is
+# subject to the terms of the C2E Task Order
+# 22-D-0030-0003.
+
+# vscode
+**/.vscode
+
+# maven target
+**/target
+
+# python build
+packages/**/build
+*.egg-info
+build
+
+# venv
+**/.env/
+**/.venv/
+
+#cdk output
+**/cdk.out
+**/cdk-output.json
+**/cdk.context.json
+**/cdk.json
