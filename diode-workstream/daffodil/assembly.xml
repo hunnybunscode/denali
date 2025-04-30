@@ -1,0 +1,32 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 http://maven.apache.org/xsd/assembly-2.2.0.xsd">
+    <id>bin</id>
+    <formats>
+        <format>zip</format>
+    </formats>
+    <includeBaseDirectory>false</includeBaseDirectory>
+    <fileSets>
+        <fileSet>
+            <directory>${basedir}/daffodil_conversion/assets/lambda/java/parser/target</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes>
+                <include>parser.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>${basedir}/daffodil_conversion/assets/lambda/java/precompiler/target</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes>
+                <include>precompiler.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>${project.build.directory}</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes>
+                <include>*.yaml</include>
+            </includes>
+        </fileSet>
+    </fileSets>
+</assembly>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:dfdl="http://www.ogf.org/dfdl/dfdl-1.0/"
+           xmlns:fn="http://www.w3.org/2005/xpath-functions"
+           xmlns:daf="urn:ogf:dfdl:2013:imp:daffodil.apache.org:2018:ext">
+
+    <xs:include schemaLocation="/org/apache/daffodil/xsd/DFDLGeneralFormat.dfdl.xsd"/>
+
+    <xs:annotation>
+        <xs:appinfo source="http://www.ogf.org/dfdl/">
+            <dfdl:format ref="GeneralFormat" representation="text" encoding="utf-8" lengthKind="delimited"/>
+        </xs:appinfo>
+    </xs:annotation>
+
+    <xs:element name="message">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="row" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="value_1" type="xs:string" dfdl:terminator=","/>
+                            <xs:element name="value_2" type="xs:string" dfdl:terminator=",%WSP*;"/>
+                            <xs:element name="value_3" type="xs:string" dfdl:terminator=",%WSP*;"/>
+                            <xs:element name="value_4" type="xs:string" dfdl:terminator=",%WSP*;"/>
+                            <xs:element name="value_5" type="xs:string" dfdl:terminator=",%WSP*;"/>
+                            <xs:element name="value_6" type="xs:string" dfdl:terminator="%NL;"/>
+                       </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="end-value" maxOccurs="1">
+               <xs:complexType>
+              <xs:sequence>
+             <xs:element name="value_1" type="xs:string"/>
+             <xs:element name="value_2" type="xs:string"/>
+            <xs:element name="value_3" type="xs:string"/>
+            <xs:element name="value_4" type="xs:string"/>
+            </xs:sequence>
+           </xs:complexType>
+           </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
