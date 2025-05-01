@@ -6,9 +6,11 @@ environment:
     prefix: AFC2S
     # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
   # proxy:
-  #   httpProxy: http://k8s-squid-squidser-13d34973ba-ab13161c945847d1.elb.us-west-1.amazonaws.com:3128
-  #   httpsProxy: http://k8s-squid-squidser-13d34973ba-ab13161c945847d1.elb.us-west-1.amazonaws.com:3128
+  #   httpProxy: http://k8s-squid-squidser-f43c81c3e8-6c1ac72a42b02a9e.elb.us-west-1.amazonaws.com:3128
+  #   httpsProxy: http://k8s-squid-squidser-f43c81c3e8-6c1ac72a42b02a9e.elb.us-west-1.amazonaws.com:3128
   #   noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
+
+.pipelineVersion: &pipeline-version 1.0.232
 
 .storage: &storage
   type: gp3
@@ -34,7 +36,7 @@ environment:
 pipelines:
   - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
-    version: &pipeline-version 1.0.222
+    version: *pipeline-version
     scan: false
     vpc: *vpc
     instanceTypes: *instanceTypes

@@ -5,18 +5,35 @@ schemaVersion: 1.0
 phases:
   - name: build
     steps:
-      - name: whoami
+      - name: Information
+        action: ExecuteBash
+        onFailure: Ignore
+        inputs:
+          commands:
+            - |
+              echo "Additional Software Component"
+              echo "-----------------------------"
+              echo "This component installs additional software."
+              echo "-----------------------------"
+              echo "Environment Variables"
+              echo "----------------------"
+              printenv
+              echo "----------------------"
+              echo "Current User: $(whoami)"
+              echo "Current Directory: $(pwd)"
+              echo "----------------------"
+              echo "Current Version: $(cat /etc/system-release)"
+              echo "----------------------"
+              echo "Current Date: $(date)"
+              echo "----------------------"
+
+      - name: InstallSoftware
         action: ExecuteBash
         onFailure: Ignore
         maxAttempts: 1
         inputs:
           commands:
             - |
-              echo "Current User: $(whoami)"
-
-              # Get the current version
-              current_version=$(cat /etc/system-release)
-              echo "Current version: $current_version"
 
               # Check if running AL2023
               if [ -f /etc/os-release ]; then

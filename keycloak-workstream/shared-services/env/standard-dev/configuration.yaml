@@ -4,7 +4,7 @@ environment:
   account: "908027385618"
   iam:
     prefix: AFC2S
-    permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+    # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
 
 hostedZones: &hostedZones
   - zoneName: denali.jktruong.people.aws.dev
@@ -23,8 +23,13 @@ hostedZones: &hostedZones
   - id: subnet-0995934b1e5de960d
   - id: subnet-0cad71af0b2618a11
 
-.workerNodeRootstorage: &storage
+.workerNodeAlRootstorage: &al-storage
   rootDeviceName: /dev/xvda
+  sizeInGB: 20
+  type: gp3
+
+.workerNodeRhelRootstorage: &rhel-storage
+  rootDeviceName: /dev/sda1
   sizeInGB: 20
   type: gp3
 
@@ -36,11 +41,66 @@ clusters:
       subnets: *controlNodeGroupSubnets
     hostedZones: *hostedZones
     nodeGroups:
-      - name: compute-xlarge
+      # - name: al2-compute-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-1.30-*
+      #   storage: *al-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 40
+      - name: al2023-compute-xlarge
         instanceType: m5a.xlarge
-        ami: *ami
-        storage: *storage
+        ami:
+          name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+        storage: *al-storage
         subnets: *workerNodeGroupSubnets
         minSize: 1
-        desiredCapacity: 2
+        desiredCapacity: 1
+        maxSize: 50    
+      # - name: al2023-compute-normal-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+      #   storage: *al-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50    
+      # - name: rhel8-compute-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high *
+      #   storage: *rhel-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50
+      - name: rhel9-compute-xlarge
+        instanceType: m5a.xlarge
+        ami:
+          name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
+        storage: *rhel-storage
+        subnets: *workerNodeGroupSubnets
+        minSize: 1
+        desiredCapacity: 1
         maxSize: 50
+      # - name: rhel9-compute-normal-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal *
+      #   storage: *rhel-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50
+      # - name: rhel8-compute-normal-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal *
+      #   storage: *rhel-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50

@@ -13,9 +13,7 @@
       "args": [
         "-Enhance",
         "-TemplateFile",
-        // "/Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json"
-        // "/Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json"
-        // "/Users/jktruong/workspace/engagements/c3e/project/jktruong+team-c3e-sandbox-00-Admin.us-west-1.cdk.out/SapDomainServicesStack.template.json"
+        "(Get-ChildItem -Path . -Recurse -Filter *cdk.out -Directory | Select-Object -First 1 | Get-ChildItem -Filter *.template.json | Select-Object -First 1 -ExpandProperty FullName)"
       ]
     },
     {
@@ -26,7 +24,7 @@
       "runtimeArgs": ["-r", "./node_modules/ts-node/register/transpile-only"],
       "args": ["./bin/main.ts"],
       "envFile": "${workspaceFolder}/.env",
-      "env": {      
+      "env": {
         "AWS_DEFAULT_REGION": "us-west-1"
       }
     }

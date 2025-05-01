@@ -63,6 +63,13 @@ PROCESS {
 
     $requiredActions = @()
 
+    if ($Enhance) {
+        $caller = aws sts get-caller-identity --output json | ConvertFrom-Json;
+        $partition = ($caller.Arn -split ":")[1]
+        Write-Host "Account [$partition]: $($caller.Account)"
+        Write-Host "User: $($caller.UserId)"
+    }
+
     Write-Host "Preparing to process following files: $TemplateFile"
 
     foreach ( $templateFileJSONPath in $TemplateFile) {
@@ -74,7 +81,7 @@ PROCESS {
         foreach ( $resource in $resources.psobject.properties) {
             $resourceType = $resource.Value.Type
 
-            if ($resourceType.Contains("5Custom::") -or $resourceType.Contains("AWS::CDK::")) {
+            if ($resourceType.Contains("Custom::") -or $resourceType.Contains("AWS::CDK::")) {
                 Write-Warning "Skipping Type: $resourceType"
                 $skippedResourceTypes += $resourceType
                 continue
@@ -99,18 +106,68 @@ PROCESS {
                     }
                 }
             }
-        }   
+        }
+
+        # Additional Parsing for Extra Role
+        foreach ( $resource in $resources.psobject.properties) {
+            $resourceType = $resource.Value.Type         
+
+            switch ($resourceType) {
+                AWS::IAM::Policy {
+                    $policyDocument = $resource.Value.Properties.PolicyDocument
+                    if ($null -ne $policyDocument) {
+                        $policyStatements = $policyDocument.Statement | Where-Object { $_.Effect -eq "Allow" }
+                        $requiredActions += $policyStatements | ForEach-Object { $_.Action } | Select-Object -Unique
+                    }
+                }
+                AWS::IAM::Role {
+                    if ($Enhance) {                      
+                        if ($LASTEXITCODE -eq 0) {
+                            $managedPolicyArns = $resource.Value.Properties.ManagedPolicyArns
+                            # Lookup all the managed policy statements and extract the allow actions
+                            if ($null -ne $managedPolicyArns) {
+                                foreach ($managedPolicyArn in $managedPolicyArns) {                                    
+                                    if ($managedPolicyArn -is [Object]) {
+                                        $entry = $managedPolicyArn.psobject.properties | Select-Object -First 1
+
+                                        $managedPolicyArn = $managedPolicyArn.psobject.properties.Value
+                                        if ($entry.Name -eq "Fn::Join") {
+                                            $managedPolicyArn = $managedPolicyArn | ForEach-Object { $_.psobject.properties.Value }
+                                            $data = $entry.Value[1] | Where-Object { $_ -is [string] }
+                                            $policyArn = "$($data[0])$partition$($data[1])"
+                                            
+                                            $policyDocument = (aws iam get-policy --output json --policy-arn $policyArn | ConvertFrom-Json).Policy
+                                            $policyVersion = $policyDocument.DefaultVersionId
+                                            $policyDocument = (aws iam get-policy-version --output json --policy-arn $policyArn --version-id $policyVersion | ConvertFrom-Json).PolicyVersion.Document
+                                            $policyStatements = $policyDocument.Statement | Where-Object { $_.Effect -eq "Allow" }
+                                            $requiredActions += $policyStatements | ForEach-Object { $_.Action } | Select-Object -Unique
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else {                            
+                            Write-Warning "Unable to get caller identity, skipping role parsing ... $($resource.Value.Properties.RoleName)"
+                        }
+                    }
+                }
+                Default {}
+            }
+        }  
     }
 
     if ($Enhance) {
         Write-host  "Using Enhanced generation ..."
 
-        # Check for basic sts access
-        aws sts get-caller-identity --output json 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
+        if ($null -ne $caller) {
             if ([string]::IsNullOrWhiteSpace($RoleArn)) {
                 # Use the default arn found in SSM
+                Write-Warning "Using default role arn for cloudformation-admin-exec-role-arn"
                 $RoleArn = (aws ssm get-parameter --with-decryption --region $Region --output json --name "cloudformation-admin-exec-role-arn" | ConvertFrom-Json).Parameter.Value
+                if ($null -eq $RoleArn) {
+                    Write-Error "Unable to find role arn for cloudformation-admin-exec-role-arn. Unable to continue. Specify a Role ARN required or not use Enhance".
+                    Exit 1                
+                }
             }
     
             $cloudTrailArn = (aws ssm get-parameter --with-decryption --region $Region --output json --name "iam-analyzer-cloudtrail-arn" | ConvertFrom-Json).Parameter.Value
@@ -118,7 +175,7 @@ PROCESS {
     
             Write-Debug "CloudTrail ARN: $cloudTrailArn"
             Write-Debug "IAM Analyzer Role ARN: $IamAnalyzerRoleArn"
-            Write-host "Calcuating using Role Arn: $RoleArn"
+            Write-host "Calculating using Role Arn: $RoleArn"
             Write-host "Starting Policy Generation ..."
     
             $cloudTrailDetails = @{
@@ -179,7 +236,7 @@ PROCESS {
     
                 $diffActions = $generatedActions | Where-Object { $requiredActions -notcontains $_ }
                 if ($diffActions.Count -gt 0) {
-                    Write-Host "Additional Actions: $($diffActions.Count)"                
+                    Write-Host "Additional Actions: $($diffActions.Count)"
                     Write-Host "  $($diffActions -join ', ' )"
                 }
     
@@ -199,4 +256,3 @@ PROCESS {
 
 END {
 }
-

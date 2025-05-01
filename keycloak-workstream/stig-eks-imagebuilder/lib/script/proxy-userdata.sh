@@ -7,6 +7,14 @@ cat <<EOF >/etc/environment
   export NO_PROXY='{{NO_PROXY}}'
 EOF
 
+cat <<EOF >/etc/systemd/environment
+  HTTP_PROXY={{HTTP_PROXY}}
+  HTTPS_PROXY={{HTTPS_PROXY}}
+  NO_PROXY='{{NO_PROXY}}'
+EOF
+
+chmod a+r /etc/systemd/environment
+
 # Source environment
 source /etc/environment
 
@@ -21,7 +29,8 @@ EOF
 mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
 cat <<EOF >/etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf
 [Service]
-EnvironmentFile=/etc/environment
+EnvironmentFile=/etc/systemd/environment
+PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY
 EOF
 
 # Enable debug logs for aws ssm agent
