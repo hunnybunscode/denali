@@ -8,14 +8,11 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_s3_notifications as s3n,
 
-    Aws,
     BundlingOptions,
-    CfnCondition,
     CfnOutput,
     CfnParameter,
     DockerVolume,
     Duration,
-    Fn,
     RemovalPolicy,
     Stack,
 )
@@ -45,7 +42,7 @@ class DaffodilConversionStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
-        self.iam_prefix = CfnParameter(self, "IamPrefix", type="String", default="Cust", min_length=2,
+        self.iam_prefix = CfnParameter(self, "IamPrefix", type="String", default="None", min_length=2,
             description="The customer prefix to be used for IAM policies.")  # noqa: E501
         permissions_boundary = CfnParameter(self, "PermissionsBoundaryPolicyArn", type="String", min_length=1,
             description="The arn for permissions boundary.")  # noqa: E501
@@ -77,12 +74,13 @@ class DaffodilConversionStack(Stack):
         }
 
         input_bucket_name = CfnParameter(self, "InputBucket",
-            description="The name of the Amazon S3 bucket where uploaded files will be stored.")
+            description="The name of the Amazon S3 bucket where files to be processed by daffodil will be stored.")
         self.input_bucket = s3.Bucket.from_bucket_name(self, "inputBucket",
             bucket_name=input_bucket_name.value_as_string)
 
         output_bucket_name = CfnParameter(self, "OutputBucket",
-            description="The name of the Amazon S3 bucket where transformed files will be stored.")
+            description="The name of the Amazon S3 bucket where successful daffodil transformed "
+            "files will be stored.")
         self.output_bucket = s3.Bucket.from_bucket_name(self, "outputBucket",
             bucket_name=output_bucket_name.value_as_string)
 
@@ -90,7 +88,7 @@ class DaffodilConversionStack(Stack):
             self, "VpcSubnetIDs",
             default=get_parameter("/platform/networking/vpc/default/subnet/private") if DEVELOPMENT else None,
             type="List<AWS::EC2::Subnet::Id>",
-            description="Comma-delimited list of vpc subnets to deploy the compute resources into"
+            description="The list of private subnet IDs to use for the daffodil pipeline"
         )
 
         vpc_id = CfnParameter(
@@ -101,60 +99,51 @@ class DaffodilConversionStack(Stack):
         )
         
         namespace = CfnParameter(self, "Namespace", default=environ.get("NAMESPACE", ""),
-            description="The optional namespace to deploy to if deploying multiple stacks to the same account.")
+            description="The optional namespace to deploy to if deploying multiple stacks to the "
+            "same account. (Resource Suffix)")
         
         sns_error_topic_arn = CfnParameter(
             self, "SnsErrorTopicArn", default="",
-            description="The optional ARN of the SNS topic to send error notifications to"
+            description="The optional ARN of the SNS topic to send error notifications to."
         )
         
         enable_detailed_metrics = CfnParameter(self, "EnableDetailedMetrics",
             allowed_values=["true", "false"], default="false",
-            description="Whether or not the more detailed metrics are enabled")
+            description="Whether or not the more detailed custom CloudFormation metrics are enabled.")
         
-        proxy = CfnParameter(
-            self, "Proxy",
-            default=environ.get("PROXY", "") if DEVELOPMENT else "",
-            description="The optional proxy to use for the parser")
+        # proxy = CfnParameter(
+        #     self, "Proxy",
+        #     default=environ.get("PROXY", "") if DEVELOPMENT else "",
+        #     description="The optional proxy to use for the parser")
         
-        no_proxy = CfnParameter(
-            self, "NoProxy",
-            default=environ.get("NO_PROXY", "") if DEVELOPMENT else "",
-            description="The optional no-proxy to use for the parser")
+        # no_proxy = CfnParameter(
+        #     self, "NoProxy",
+        #     default=environ.get("NO_PROXY", "") if DEVELOPMENT else "",
+        #     description="The optional no-proxy to use for the parser")
         
         parser_filter_suffix = CfnParameter(
             self, "ParserFilterSuffix",
             default=None,
-            description="Optional file suffix filter(s) as a csv to apply to the Bucket event listener",
+            description="Optional - File suffix filter(s) as a comma-separated-value to apply to the "
+            "Bucket event listener. If no filter prefix is provided, all files will be sent to the "
+            "daffodil parser.",
         )
         
-
         self.schema_bucket = self.optional_bucket_from_context_param("schema-bucket")
 
-        # self.archive_bucket = self.optional_bucket_from_context_param("archive-bucket",
-        #     default_bucket_options={
-        #         **self.default_bucket_options,
-        #         "lifecycle_rules": [s3.LifecycleRule(
-        #             abort_incomplete_multipart_upload_after=Duration.days(1),
-        #             transitions=[s3.Transition(
-        #                 storage_class=s3.StorageClass.INFREQUENT_ACCESS,
-        #                 transition_after=Duration.days(30)
-        #             ),
-        #             s3.Transition(
-        #                 storage_class=s3.StorageClass.GLACIER,
-        #                 transition_after=Duration.days(90)
-        #             )],
-        #         )]
-        #     })
         self.archive_bucket_name = CfnParameter(
             self, "ArchiveBucket",
             default=None,
             description="Optional - The name of the Amazon S3 bucket where original files will be "
-                "archived to. If none supplied, original file will just be deleted")
+                "moved to from the Input Bucket after succesful daffodil transformation. If no "
+                "name is supplied, successful transformed files will just be deleted from the "
+                "Input Bucket.")
 
         # self.dead_letter_bucket = self.optional_bucket_from_context_param("dead-letter-bucket")
         dead_letter_bucket_name = CfnParameter(self, "DeadLetterBucket",
-            description="Optional - The name of the Amazon S3 bucket where failed converted objects will be stored.")
+            description="Optional - The name of the Amazon S3 bucket where failed daffodil "
+            "transformation will be stored. If no bucket name is provided, failed daffodil "
+            "transformation files will remain in the Input Bucket")
         self.dead_letter_bucket = s3.Bucket.from_bucket_name(self, "deadLetterBucket",
             bucket_name=dead_letter_bucket_name.value_as_string)
 
@@ -163,25 +152,25 @@ class DaffodilConversionStack(Stack):
         # have a bucket notification listner on it)
         self.create_precompile_fn = self.node.try_get_context("schema-bucket") is None
 
-        cond_proxy_exist=CfnCondition(
-            self, "ProxyExistsCondition",
-            expression=Fn.condition_not(Fn.condition_equals(proxy, '')))
-        proxy_value = Fn.condition_if(
-            cond_proxy_exist.logical_id, proxy.value_as_string, Aws.NO_VALUE).to_string()
+        # cond_proxy_exist=CfnCondition(
+        #     self, "ProxyExistsCondition",
+        #     expression=Fn.condition_not(Fn.condition_equals(proxy, '')))
+        # proxy_value = Fn.condition_if(
+        #     cond_proxy_exist.logical_id, proxy.value_as_string, Aws.NO_VALUE).to_string()
 
-        cond_no_proxy_exist=CfnCondition(
-            self, "NoProxyExistsCondition",
-            expression=Fn.condition_not(Fn.condition_equals(no_proxy, '')))
-        no_proxy_value = Fn.condition_if(
-            cond_no_proxy_exist.logical_id, no_proxy.value_as_string, Aws.NO_VALUE).to_string()
-        proxy_env = {
-            "HTTPS_PROXY": proxy_value,
-            "HTTP_PROXY": proxy_value,
-            "https_proxy": proxy_value,
-            "http_proxy": proxy_value,
-            "NO_PROXY": no_proxy_value,
-            "no_proxy": no_proxy_value,
-        }
+        # cond_no_proxy_exist=CfnCondition(
+        #     self, "NoProxyExistsCondition",
+        #     expression=Fn.condition_not(Fn.condition_equals(no_proxy, '')))
+        # no_proxy_value = Fn.condition_if(
+        #     cond_no_proxy_exist.logical_id, no_proxy.value_as_string, Aws.NO_VALUE).to_string()
+        # proxy_env = {
+        #     "HTTPS_PROXY": proxy_value,
+        #     "HTTP_PROXY": proxy_value,
+        #     "https_proxy": proxy_value,
+        #     "http_proxy": proxy_value,
+        #     "NO_PROXY": no_proxy_value,
+        #     "no_proxy": no_proxy_value,
+        # }
 
         content_types_file_key = CfnParameter(self, "ContentTypeFileKey", default="content-types.yaml",
             description="content-type file mapping s3 key, defaults to content-types.yaml")
@@ -203,11 +192,11 @@ class DaffodilConversionStack(Stack):
             
             parser_lambda_code_param = CfnParameter(self, 'ParserLambdaCodeKey',
                 default="parser.jar",
-                description="The key of the parser code in the code bucket")
+                description="The S3 key of the parser code in the code bucket (including prefixes).")
             
             precompiler_lambda_code_param = CfnParameter(self, 'PrecompilerLambdaCodeKey',
                 default="precompiler.jar",
-                description="The key of the precompiler code in the code bucket")
+                description="The S3 key of the precompiler code in the code bucket (including prefixes)")
             
             parser_code = _lambda.Code.from_bucket(
                 bucket=code_bucket,
@@ -218,6 +207,67 @@ class DaffodilConversionStack(Stack):
                 bucket=code_bucket,
                 key=precompiler_lambda_code_param.value_as_string,
             )
+
+        self.template_options.metadata = {
+            'AWS::CloudFormation::Interface': {
+                'ParameterGroups': [
+                    {
+                        'Label': { 'default': 'General'},
+                        'Parameters': [
+                            self.iam_prefix.logical_id,
+                            permissions_boundary.logical_id,
+                            namespace.logical_id,
+                        ]
+                    },
+                    {
+                        'Label': { 'default': 'Templates Location'},
+                        'Parameters': [
+                            lambda_code_bucket_param.logical_id,
+                            parser_lambda_code_param.logical_id,
+                            precompiler_lambda_code_param.logical_id,
+                        ]
+                    },
+                    {
+                        'Label': { 'default': 'Networking'},
+                        'Parameters': [
+                            vpc_id.logical_id,
+                            vpc_subnet_ids.logical_id,
+                        ]
+                    },
+                    {
+                        'Label': { 'default': 'Daffodil Stack'},
+                        'Parameters': [
+                            input_bucket_name.logical_id,
+                            output_bucket_name.logical_id,
+                            self.archive_bucket_name.logical_id,
+                            dead_letter_bucket_name.logical_id,
+                            sns_error_topic_arn.logical_id,
+                            content_types_file_key.logical_id,
+                            enable_detailed_metrics.logical_id,
+                            parser_filter_suffix.logical_id,
+                        ]
+                    },
+                ],
+                'ParameterLabels': {
+                    self.iam_prefix.logical_id: {'default': 'IAM Prefix'},
+                    permissions_boundary.logical_id: {'default': 'Permissions Boundary Policy ARN'},
+                    namespace.logical_id: {'default': 'Namespace (Resource Suffix)'},
+                    lambda_code_bucket_param.logical_id: {'default': 'Template Bucket Name'},
+                    parser_lambda_code_param.logical_id: {'default': 'Parser Lambda Key'},
+                    precompiler_lambda_code_param.logical_id: {'default': 'Precompiler Lambda Key'},
+                    vpc_id.logical_id: {'default': 'VPC ID'},
+                    vpc_subnet_ids.logical_id: {'default': 'Private Subnet IDs within the VPC'},
+                    input_bucket_name.logical_id: {'default': 'Input Bucket'},
+                    output_bucket_name.logical_id: {'default': 'Output Bucket (Data Transfer Bucket)'},
+                    self.archive_bucket_name.logical_id: {'default': 'Archive Bucket'},
+                    dead_letter_bucket_name.logical_id: {'default': 'Dead Letter Bucket (Invalid Files Bucket)'},
+                    sns_error_topic_arn.logical_id: {'default': 'Invalid Files Topic ARN'},
+                    content_types_file_key.logical_id: {'default': 'Content Types File S3 Key'},
+                    enable_detailed_metrics.logical_id: {'default': 'Enable Detailed Performance Metrics'},
+                    parser_filter_suffix.logical_id: {'default': 'Parser Filter S3 Key Suffix(es)'},
+                },
+            }
+        }
 
         lambda_security_group = ec2.CfnSecurityGroup(
             self, "DfdlLambdaSecurityGroup",
@@ -246,7 +296,7 @@ class DaffodilConversionStack(Stack):
             "NAMESPACE": namespace.value_as_string,
             "ENABLE_DETAILED_METRICS": enable_detailed_metrics.value_as_string,
             "SNS_ERROR_TOPIC_ARN": sns_error_topic_arn.value_as_string,
-            **proxy_env,
+            # **proxy_env,
         }
         if self.archive_bucket_name and self.archive_bucket_name.value_as_string:
             environment["ARCHIVE_BUCKET"] = self.archive_bucket_name.value_as_string
@@ -294,7 +344,7 @@ class DaffodilConversionStack(Stack):
                 timeout=Duration.seconds(30),
                 log_group=precompiler_log_group,
                 environment={
-                    **proxy_env,
+                    # **proxy_env,
                 }
             )
             self.precompiler_fn.node.default_child.vpc_config=_lambda.CfnFunction.VpcConfigProperty(

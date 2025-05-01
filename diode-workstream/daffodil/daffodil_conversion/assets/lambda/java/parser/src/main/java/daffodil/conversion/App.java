@@ -156,7 +156,7 @@ public class App implements RequestHandler<S3Event, Void> {
                         .putMetric("Count", 1, Unit.COUNT)
                         .flush();
                 }
-                if(ARCHIVE_BUCKET != null && !ARCHIVE_BUCKET.trim().isEmpty()) {
+                if(ARCHIVE_BUCKET != null && !ARCHIVE_BUCKET.isBlank()) {
                     logger.info("Archiving s3://{}/{} to s3://{}/{}",
                         s3Bucket, s3Key, ARCHIVE_BUCKET, s3Key);
                     moveQuietly(s3Bucket, ARCHIVE_BUCKET, s3Key);
@@ -181,12 +181,12 @@ public class App implements RequestHandler<S3Event, Void> {
                         .flush();
                 }
                 boolean moved = false;
-                if(DEAD_LETTER_BUCKET != null && !DEAD_LETTER_BUCKET.trim().isEmpty()) {
+                if(DEAD_LETTER_BUCKET != null && !DEAD_LETTER_BUCKET.isBlank()) {
                     logger.info("Moving failed transformed file s3://{}/{} to dead-letter bucket s3://{}/{}",
                         s3Bucket, s3Key, DEAD_LETTER_BUCKET, s3Key);
                     moved = moveQuietly(s3Bucket, DEAD_LETTER_BUCKET, s3Key);
                 }
-                if(SNS_ERROR_TOPIC_ARN != null && !SNS_ERROR_TOPIC_ARN.trim().isEmpty()) {
+                if(SNS_ERROR_TOPIC_ARN != null && !SNS_ERROR_TOPIC_ARN.isBlank()) {
                     StringBuilder message = new StringBuilder(
                         String.format(
                             "An error occured while performing daffodil parsing for file s3://%s/%s\n",
