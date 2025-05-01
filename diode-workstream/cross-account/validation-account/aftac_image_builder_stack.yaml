@@ -293,7 +293,9 @@ Resources:
                     - systemctl enable --now sqs_poller.service
                     - systemctl is-active --quiet sqs_poller.service
 
-                    - echo "Complete"
+                    # https://docs.aws.amazon.com/imagebuilder/latest/userguide/security-best-practices.html#post-build-cleanup
+                    - touch perform_cleanup
+                    - echo "SUCCESS"
 
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
