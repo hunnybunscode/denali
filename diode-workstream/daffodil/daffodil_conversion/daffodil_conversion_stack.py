@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_s3_notifications as s3n,
 
+    Aspects,
     BundlingOptions,
     CfnOutput,
     CfnParameter,
@@ -16,6 +17,11 @@ from aws_cdk import (
     RemovalPolicy,
     Stack,
 )
+from cdklabs.cdk_enterprise_iac import (
+    AddPermissionBoundary,
+    ConvertInlinePoliciesToManaged,
+)
+from .custom_aspects import PermissionBoundaryAspect
 from constructs import Construct
 from typing import Optional, Sequence
 
@@ -42,7 +48,7 @@ class DaffodilConversionStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
-        self.iam_prefix = CfnParameter(self, "IamPrefix", type="String", default="None", min_length=2,
+        self.iam_prefix = CfnParameter(self, "IamPrefix", type="String", min_length=2,
             description="The customer prefix to be used for IAM policies.")  # noqa: E501
         permissions_boundary = CfnParameter(self, "PermissionsBoundaryPolicyArn", type="String", min_length=1,
             description="The arn for permissions boundary.")  # noqa: E501
@@ -99,8 +105,7 @@ class DaffodilConversionStack(Stack):
         )
         
         namespace = CfnParameter(self, "Namespace", default=environ.get("NAMESPACE", ""),
-            description="The optional namespace to deploy to if deploying multiple stacks to the "
-            "same account. (Resource Suffix)")
+            description="(Resource Suffix)", min_length=1)
         
         sns_error_topic_arn = CfnParameter(
             self, "SnsErrorTopicArn", default="",
@@ -357,6 +362,21 @@ class DaffodilConversionStack(Stack):
                 s3.NotificationKeyFilter(suffix=".dfdl.xsd")
             )
 
+        Aspects.of(self).add(
+            # AddPermissionBoundary(
+            #     permissions_boundary_policy_name="Admin",
+            #     instance_profile_prefix=self.iam_prefix.value_as_string + namespace.value_as_string,
+            #     policy_prefix=self.iam_prefix.value_as_string + namespace.value_as_string,
+            #     role_prefix=self.iam_prefix.value_as_string + namespace.value_as_string,
+            # )
+            PermissionBoundaryAspect(
+                permission_boundary=self.permissions_boundary,
+                iam_prefix=self.iam_prefix.value_as_string,
+                iam_suffix="_" + namespace.value_as_string,
+            ),
+        )
+        Aspects.of(self).add(ConvertInlinePoliciesToManaged())
+
     def get_bundling_options(self, module_name) -> BundlingOptions:
         return BundlingOptions(
             command = [
@@ -390,15 +410,14 @@ class DaffodilConversionStack(Stack):
             self,
             "DaffodilParserRole",
             assumed_by=iam.ServicePrincipal(self.lambda_endpoint),
-            role_name=f"{self.iam_prefix.value_as_string}_Daffodil_Parser_Role",  # noqa: E501
+            role_name=f"Daffodil_Parser_Role",  # noqa: E501
             managed_policies=managed_policies,
-            permissions_boundary=self.permissions_boundary,
         )
         role.add_managed_policy(
             policy=iam.ManagedPolicy(
                 self,
                 "DaffodilParserPolicy",
-                managed_policy_name=f"{self.iam_prefix.value_as_string}_DaffodilParserPolicy",  # noqa: E501
+                managed_policy_name=f"DaffodilParserPolicy",  # noqa: E501
                 document=iam.PolicyDocument(
                     statements=[
                         iam.PolicyStatement(
