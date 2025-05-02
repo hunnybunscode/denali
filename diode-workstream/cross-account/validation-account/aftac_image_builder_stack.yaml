@@ -214,11 +214,6 @@ Resources:
                     - echo "Setting the script to exit on any error..."
                     - set -e
 
-                    - echo "Setting environment variables for proxy servers..."
-                    - export http_proxy=${ProxyServerAddress}:3128
-                    - export https_proxy=${ProxyServerAddress}:3128
-                    - export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
-
                     # Create a function to check if a package is installed
                     - |
                       is_installed() {
@@ -247,36 +242,6 @@ Resources:
                     - echo "Upgrading pip and installing Python packages..."
                     - python3.11 -m pip install pip --upgrade --no-cache-dir
                     - python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
-
-                    - echo "Updating all packages..."
-                    - yum update -y
-
-                    # Install awscli
-                    - ARCH=$(uname -m)
-                    - echo "Downloading awscliv2.zip..."
-                    - curl "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH.zip" -o /tmp/awscliv2.zip
-                    - echo "Unzipping awscliv2.zip..."
-                    - unzip -q -o /tmp/awscliv2.zip
-                    - BINARY=/usr/local/aws-cli/v2/current/bin/aws
-                    - |
-                      # If the binary exists, update it
-                      if [ -x $BINARY ]; then
-                          echo Updating awscli v2
-                          ./aws/install --update
-                      else
-                          echo Installing awscli v2
-                          ./aws/install
-                      fi
-
-                    - echo "Downloading and installing CloudWatch Agent..."
-                    - ARCH=$(arch)
-                    - |
-                      if [ "$ARCH" = "arm64" ]; then
-                          curl https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/redhat/arm64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
-                      else # x86_64
-                          curl https://amazoncloudwatch-agent-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
-                      fi
-                    - rpm -U /tmp/amazon-cloudwatch-agent.rpm
 
                     - echo "Downloading all required files from S3 bucket..."
                     - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
@@ -341,9 +306,40 @@ Resources:
         UserDataOverride:
           Fn::Base64: !Sub |
             #!/bin/bash
-            export http_proxy=${ProxyServerAddress}:3128
-            export https_proxy=${ProxyServerAddress}:3128
-            export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
+
+            cat >/etc/environment <<EOF
+            HTTP_PROXY=${ProxyServerAddress}:3128
+            HTTPS_PROXY=${ProxyServerAddress}:3128
+            NO_PROXY=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+            http_proxy=${ProxyServerAddress}:3128
+            https_proxy=${ProxyServerAddress}:3128
+            no_proxy=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+
+            resource_suffix=${ResourceSuffix}
+            region=${AWS::Region}
+            EOF
+            source /etc/environment
+
+            cat > /etc/systemd/environment <<EOF
+            HTTP_PROXY=${ProxyServerAddress}:3128
+            HTTPS_PROXY=${ProxyServerAddress}:3128
+            NO_PROXY=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+            http_proxy=${ProxyServerAddress}:3128
+            https_proxy=${ProxyServerAddress}:3128
+            no_proxy=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+            EOF
+            chmod a+r /etc/systemd/environment
+
+            mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            [Service]
+            EnvironmentFile=/etc/systemd/environment
+            PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY
+            EOF
+
+            cat >> /etc/yum.conf <<EOF
+            proxy=$https_proxy
+            EOF
 
             # Install SSM Agent
             BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
@@ -354,39 +350,14 @@ Resources:
                 yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
             fi
 
-            ## Uncomment the block below to enable SSM Agent to use the proxy settings with AWS-managed components
-            # CONFIG_FILE="/etc/systemd/system/amazon-ssm-agent.service.d/override.conf"
-            # # Create override directory
-            # mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d/
-            # # Create override.conf with proxy settings
-            # cat > "$CONFIG_FILE" << EOF
-            # [Service]
-            # Environment="http_proxy=${ProxyServerAddress}:3128"
-            # Environment="https_proxy=${ProxyServerAddress}:3128"
-            # Environment="no_proxy=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com"
-            # EOF
-            # # Restart SSM Agent
-            # systemctl daemon-reload
-            # systemctl restart amazon-ssm-agent
+            # Restart SSM Agent
+            systemctl daemon-reload
+            systemctl restart amazon-ssm-agent
 
-            ## Uncomment the below lines if an instance requires internet access
-            # cat << EOF > /etc/profile.d/proxy.sh
-            # #!/bin/bash
-            # export http_proxy=${ProxyServerAddress}:3128
-            # export https_proxy=${ProxyServerAddress}:3128
-            # export no_proxy='169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com'
-            # EOF
-            # chmod 755 /etc/profile.d/proxy.sh
-            # /etc/profile.d/proxy.sh
-
-            cat << EOF > /etc/profile.d/set_env.sh
-            #!/bin/bash
-            export resource_suffix=${ResourceSuffix}
-            export region=${AWS::Region}
-            EOF
-            chmod 755 /etc/profile.d/set_env.sh
-            /etc/profile.d/set_env.sh
       Components:
+        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/update-linux/x.x.x
+        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/aws-cli-version-2-linux/x.x.x
+        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/amazon-cloudwatch-agent-linux/x.x.x
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
       #   - DeviceName: String
