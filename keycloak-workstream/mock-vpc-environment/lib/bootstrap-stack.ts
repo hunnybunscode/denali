@@ -8,7 +8,6 @@ import {
   aws_route53 as route53,
   aws_iam as iam,
   aws_inspectorv2 as inspector2,
-  aws_guardduty as guardduty,
 } from "aws-cdk-lib";
 
 export interface BootstrapStackProps extends StackProps {
@@ -21,6 +20,8 @@ export class BootstrapStack extends Stack {
   constructor(scope: Construct, id: string, props: BootstrapStackProps) {
     super(scope, id, props);
 
+    this.createInspector();
+
     const vpc = new ec2.Vpc(this, "vpc", {
       vpcName: `vpc-${this.node.id}`,
       ipAddresses: ec2.IpAddresses.cidr("10.0.0.0/16"),
@@ -32,12 +33,6 @@ export class BootstrapStack extends Stack {
       restrictDefaultSecurityGroup: true,
       subnetConfiguration: [
         {
-          name: "cluster-public-",
-          subnetType: ec2.SubnetType.PUBLIC,
-          cidrMask: 24,
-          mapPublicIpOnLaunch: false,
-        },
-        {
           name: "cluster-api-",
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
           cidrMask: 24,
@@ -45,27 +40,68 @@ export class BootstrapStack extends Stack {
         {
           name: "cluster-worker-nodes-",
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-          cidrMask: 19,
+          cidrMask: 22,
         },
         {
-          name: "cluster-services-",
+          name: "cluster-service-public-",
+          subnetType: ec2.SubnetType.PUBLIC,
+          cidrMask: 24,
+          mapPublicIpOnLaunch: false,
+        },
+        {
+          name: "cluster-service-private-",
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-          cidrMask: 19,
+          cidrMask: 23,
         },
         {
           name: "cluster-pods-",
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
           cidrMask: 19,
         },
+        // Isolated subnets
+        {
+          name: "isolated-cluster-api-",
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          cidrMask: 24,
+        },
+        {
+          name: "isolated-cluster-worker-nodes-",
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          cidrMask: 22,
+        },
+        {
+          name: "isolated-cluster-service-public-",
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          cidrMask: 24,
+        },
+        {
+          name: "isolated-cluster-service-private-",
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          cidrMask: 23,
+        },
+        {
+          name: "isolated-cluster-pods-",
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          cidrMask: 19,
+        },
       ],
     });
 
-    vpc.publicSubnets.forEach((subnet) => Tags.of(subnet).add("kubernetes.io/role/elb", "1"));
-    vpc.privateSubnets.forEach((subnet) => {
-      if (subnet.node.id.includes("cluster-services")) {
-        Tags.of(subnet).add("kubernetes.io/role/internal-elb", "1");
+    vpc.publicSubnets.forEach((subnet) => {
+      if (subnet.node.id.includes("cluster-service-public")) {
+        Tags.of(subnet).add("kubernetes.io/role/elb", "1");
       }
     });
+    vpc.privateSubnets.forEach((subnet) => {
+      if (subnet.node.id.includes("cluster-service-private")) {
+        Tags.of(subnet).add("kubernetes.io/role/internal-elb", "1");
+      }
+
+      if (subnet.node.id.includes("cluster-pods")) {
+        Tags.of(subnet).add("kubernetes.io/role/cni", "");
+      }
+    });
+
     vpc.privateSubnets.forEach((subnet) => {
       if (subnet.node.id.includes("cluster-pods")) {
         Tags.of(subnet).add("kubernetes.io/role/cni", "");
@@ -101,13 +137,20 @@ export class BootstrapStack extends Stack {
       this.createRoute53Zone(vpc);
     }
 
-    this.createInspector();
+    // Create a new security group name public access
+    const publicAccessSg = new ec2.SecurityGroup(this, "public-access-outbound-sg", {
+      vpc,
+      allowAllOutbound: true,
+      description: "Security Group for public access - outbound only",
+      securityGroupName: "public-access-outbound-only-sg",
+    });
+    Tags.of(publicAccessSg).add("Name", "public-access-outbound-only-sg");
   }
 
   private createRoute53Zone(vpc: ec2.Vpc) {
     // Create a Route53 Private Hosted Zone with developer.local
     const privateHostedZone = new route53.PrivateHostedZone(this, "PrivateHostedZone", {
-      zoneName: "developer.local",
+      zoneName: "local.dev",
       vpc: vpc,
     });
 
