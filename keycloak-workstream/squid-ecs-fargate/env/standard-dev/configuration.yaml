@@ -1,0 +1,11 @@
+environment:
+  name: standard-dev
+  region: us-west-1
+  account: "908027385618"
+
+.vpc: &vpc
+  id: vpc-0ea1fbb49ae45a7d2  
+
+cluster:
+  name: StandardSharedServices
+  vpc: *vpc

@@ -1,0 +1,190 @@
+{
+  "vpc-provider:account=908027385618:filter.vpc-id=vpc-0ea1fbb49ae45a7d2:region=us-west-1:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-0ea1fbb49ae45a7d2",
+    "vpcCidrBlock": "10.0.0.0/16",
+    "ownerAccountId": "908027385618",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "isolated-cluster-worker-nodes-",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-05884f84ac04232f4",
+            "cidr": "10.0.100.0/22",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-0c1471a64356c69b2"
+          },
+          {
+            "subnetId": "subnet-0555d1cfda0d90d37",
+            "cidr": "10.0.104.0/22",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0802501b0cd49a8c3"
+          }
+        ]
+      },
+      {
+        "name": "isolated-cluster-pods-",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-0fdf00e7dc7a5aaa2",
+            "cidr": "10.0.128.0/19",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-0fba91667b3192f2a"
+          },
+          {
+            "subnetId": "subnet-07f76e5fb2ae78820",
+            "cidr": "10.0.160.0/19",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-04faff0b030c088ee"
+          }
+        ]
+      },
+      {
+        "name": "cluster-pods-",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-0c50d1f343a84dc4f",
+            "cidr": "10.0.32.0/19",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-0b6a393fe844616d1"
+          },
+          {
+            "subnetId": "subnet-098d40c1fc550ef24",
+            "cidr": "10.0.64.0/19",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0346719671b92ed24"
+          }
+        ]
+      },
+      {
+        "name": "cluster-worker-nodes-",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-0e1ddd26680e52a10",
+            "cidr": "10.0.4.0/22",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-0b5d53c3476aabe19"
+          },
+          {
+            "subnetId": "subnet-0e8350b80dd689d3e",
+            "cidr": "10.0.8.0/22",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0d7e5592db9ccd868"
+          }
+        ]
+      },
+      {
+        "name": "cluster-api-",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-06560cfdbfb912a8d",
+            "cidr": "10.0.0.0/24",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-0382a93b2bf2914cc"
+          },
+          {
+            "subnetId": "subnet-0ebd9551df362cfea",
+            "cidr": "10.0.1.0/24",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0bed1abad1165093a"
+          }
+        ]
+      },
+      {
+        "name": "isolated-cluster-service-private-",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-0dcff4b08aaf5fd76",
+            "cidr": "10.0.110.0/23",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-007dc807625d8b2f0"
+          },
+          {
+            "subnetId": "subnet-06d321002a029f2bc",
+            "cidr": "10.0.112.0/23",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0135bd087933d33cd"
+          }
+        ]
+      },
+      {
+        "name": "isolated-cluster-service-public-",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-04f62dd616dc5ac82",
+            "cidr": "10.0.108.0/24",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-040c9da06a11e2fa1"
+          },
+          {
+            "subnetId": "subnet-093c87512833c960f",
+            "cidr": "10.0.109.0/24",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0ce9d4c95b84fc25f"
+          }
+        ]
+      },
+      {
+        "name": "cluster-service-public-",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-018b7be1db18452d2",
+            "cidr": "10.0.12.0/24",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-09727dd4353aff96d"
+          },
+          {
+            "subnetId": "subnet-014a4a93240303529",
+            "cidr": "10.0.13.0/24",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0e203d868496a7d27"
+          }
+        ]
+      },
+      {
+        "name": "cluster-service-private-",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-0e0128a0badcd9954",
+            "cidr": "10.0.14.0/23",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-01c07b872ffa3cb9c"
+          },
+          {
+            "subnetId": "subnet-006618099135a8e32",
+            "cidr": "10.0.16.0/23",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-09d9caf27e332f0d5"
+          }
+        ]
+      },
+      {
+        "name": "isolated-cluster-api-",
+        "type": "Isolated",
+        "subnets": [
+          {
+            "subnetId": "subnet-042c5dcde3059b394",
+            "cidr": "10.0.96.0/24",
+            "availabilityZone": "us-west-1a",
+            "routeTableId": "rtb-01a1432f2456fa7d1"
+          },
+          {
+            "subnetId": "subnet-049c85f8feaa48120",
+            "cidr": "10.0.97.0/24",
+            "availabilityZone": "us-west-1b",
+            "routeTableId": "rtb-0e85e45df706d72a1"
+          }
+        ]
+      }
+    ]
+  }
+}
