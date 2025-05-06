@@ -63,3 +63,27 @@ environment:
     ```bash
     python index.py
     ```
+
+## Integration into CDK
+In order the leverage the CDK deployment with this custom template, you need to modify the default stack synthesizer to make it aware of the changes.
+Otherwise, it will use the default values for the stack
+
+To update, modify the stack prop `synthesizer` with a new class that implements `StackSynthesizer`.
+
+Sample Typescript / Javascript
+```javascript
+import { DefaultStackSynthesizer } from "aws-cdk-lib";
+```
+
+```javascript
+{
+    synthesizer: new DefaultStackSynthesizer({
+        qualifier: "a",
+        cloudFormationExecutionRole: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-cfn-exec-role-908027385618-us-east-1`,
+        deployRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-deploy-role-908027385618-us-east-1`,
+        fileAssetPublishingRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-file-publishing-role-908027385618-us-east-1`,
+        imageAssetPublishingRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-ipr-908027385618-us-east-1`,
+        lookupRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-lookup-role-908027385618-us-east-1`,
+  })
+}
+```

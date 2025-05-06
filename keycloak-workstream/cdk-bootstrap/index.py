@@ -90,7 +90,29 @@ else:
         # Get the old Role Name, Add prefix to old role name and update
         for resource_name, resource in iam_roles:
             role_name = resource["Properties"]["RoleName"]["Fn::Sub"]
+
+            role_name_short = role_name.replace("cdk-${Qualifier}-", "")
+            role_name_short = role_name_short.replace("-${AWS::AccountId}-${AWS::Region}", "")
+            test_role_name = role_name.replace("${Qualifier}", "a")
+            test_role_name = test_role_name.replace("${AWS::Region}", environment_region)
+            test_role_name = test_role_name.replace("${AWS::AccountId}", environment_account)
+            test_full_role_name = f"{iam_prefix}-{test_role_name}"
+
             new_role_name = f"{iam_prefix}-{role_name}"
+
+            # Check the length of the new role name is less than 64 characters
+            if len(test_full_role_name) > 64:
+                logging.warning(f"Role Name {new_role_name} is greater than 64 characters")
+                logging.warning(f"Role Name {new_role_name} will be truncated to 64 characters")
+                # split the short role name by "-" and use only the first letters
+
+                # Split the short role name by "-" and join first letters
+                role_name_parts = role_name_short.split("-")
+                role_name_shorten = "".join(part[0] for part in role_name_parts)
+                new_role_name = new_role_name.replace(role_name_short, role_name_shorten)
+
+                logging.warning(f"Role Name {new_role_name} will be updated")
+
             resource["Properties"]["RoleName"]["Fn::Sub"] = new_role_name
             logging.info(f"Updated Role Name - {role_name} to {resource['Properties']['RoleName']["Fn::Sub"]}")
 
@@ -114,7 +136,8 @@ with open("cdk.output.yaml", "w") as file:
 iam_permission_boundary_name = iam_permission_boundary_arn
 if iam_permission_boundary_arn is not None:
     iam_permission_boundary_name = iam_permission_boundary_arn.split("/")[-1]
-
+else:
+    iam_permission_boundary_name = '""'
 
 logging.info(f"Permission Boundary Name: {iam_permission_boundary_name}")
 logging.info(f"Permission Boundary ARN: {iam_permission_boundary_arn}")

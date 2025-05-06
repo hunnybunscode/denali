@@ -10,7 +10,7 @@ environment:
   #   httpsProxy: http://k8s-squid-squidser-f43c81c3e8-6c1ac72a42b02a9e.elb.us-west-1.amazonaws.com:3128
   #   noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
 
-.pipelineVersion: &pipeline-version 1.0.232
+.pipelineVersion: &pipeline-version 1.0.243
 
 .storage: &storage
   type: gp3
@@ -23,9 +23,9 @@ environment:
   sizeInGB: 20
 
 .vpc: &vpc
-  id: vpc-03341f2c7303b3635
+  id: vpc-0ea1fbb49ae45a7d2
   subnet:
-    id: subnet-01c1318200cc26785
+    id: subnet-006618099135a8e32
 
 .instanceTypes: &instanceTypes
   - m6i.8xlarge
