@@ -64,6 +64,7 @@ environment_region = environment_config.get("region")
 environment_account = environment_config.get("account")
 environment_iam = environment_config.get("iam", {})
 environment_execute = environment_config.get("execute", True)
+environment_qualifier = environment_config.get("qualifier", "a")
 
 # Check if region and account is defined
 if not environment_region or not environment_account:
@@ -104,9 +105,7 @@ else:
             if len(test_full_role_name) > 64:
                 logging.warning(f"Role Name {new_role_name} is greater than 64 characters")
                 logging.warning(f"Role Name {new_role_name} will be truncated to 64 characters")
-                # split the short role name by "-" and use only the first letters
 
-                # Split the short role name by "-" and join first letters
                 role_name_parts = role_name_short.split("-")
                 role_name_shorten = "".join(part[0] for part in role_name_parts)
                 new_role_name = new_role_name.replace(role_name_short, role_name_shorten)
@@ -144,7 +143,7 @@ logging.info(f"Permission Boundary ARN: {iam_permission_boundary_arn}")
 
 logging.info("Deploying cdk bootstrap yaml file")
 
-command = f"aws cloudformation deploy --template-file cdk.output.yaml --stack-name CDKToolkit-Bootstrap-{environment_name} --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region {environment_region} --parameter-overrides InputPermissionsBoundary={iam_permission_boundary_name} Qualifier=a --tags Environment={environment_name}"
+command = f"aws cloudformation deploy --template-file cdk.output.yaml --stack-name CDKToolkit-Bootstrap-{environment_name} --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region {environment_region} --parameter-overrides InputPermissionsBoundary={iam_permission_boundary_name} Qualifier={environment_qualifier} --tags Environment={environment_name}"
 logging.info(f"Command:\n  {command}")
 
 if environment_execute:

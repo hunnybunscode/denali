@@ -30,6 +30,7 @@ The default environment is `dev`
 | environment.region                    | AWS region where resources will be deployed | us-west-1                                        | Yes      |
 | environment.account                   | AWS account ID for deployment               | "908027385618"                                   | Yes      |
 | environment.execute                   | Flag to control execution of bootstrap      | false                                            | No       |
+| environment.qualifier                 | Value to control qualifier of bootstrap     | a                                                | No       |
 | environment.iam.prefix                | Prefix for IAM resource names               | AFC2S                                            | No       |
 | environment.iam.permissionBoundaryArn | ARN of IAM permission boundary policy       | arn:aws:iam::908027385618:policy/ProjAdminPolicy | No       |
 
