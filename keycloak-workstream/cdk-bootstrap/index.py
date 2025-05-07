@@ -114,7 +114,7 @@ else:
                 logging.warning(f"Role Name {new_role_name} will be updated")
 
             resource["Properties"]["RoleName"]["Fn::Sub"] = new_role_name
-            logging.info(f"Updated Role Name - {role_name} to {resource['Properties']['RoleName']["Fn::Sub"]}")
+            logging.info(f"Updated Role Name - {role_name} to {new_role_name}")
 
 # Check is region starts with us-iso
 if environment_region.startswith("us-iso"):
