@@ -15,6 +15,7 @@ import {
   Stack,
   Tags,
   CfnOutput,
+  DefaultStackSynthesizer,
 } from "aws-cdk-lib";
 
 import { globSync } from "glob";
@@ -506,7 +507,12 @@ export class EKSClustersConstruct extends Construct {
         })
       )
       .useDefaultSecretEncryption(false)
-      .build(this, `cluster-${clusterName}-stack`, { description: `Stack to create EKS Cluster: ${clusterName}` });
+      .build(this, `cluster-${clusterName}-stack`, {
+        description: `Stack to create EKS Cluster: ${clusterName}`,
+        synthesizer: this.props.environment?.synthesizeOverride
+          ? new DefaultStackSynthesizer(this.props.environment.synthesizeOverride)
+          : undefined,
+      });
 
     return clusterStack;
   }

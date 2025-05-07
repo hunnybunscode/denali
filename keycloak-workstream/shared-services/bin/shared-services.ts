@@ -2,7 +2,7 @@
 ///<reference path="../lib/interfaces.d.ts" />
 
 import "source-map-support/register";
-import { App, Aspects, Tags } from "aws-cdk-lib";
+import { App, Aspects, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NIST80053R4Checks, NagSuppressions } from "cdk-nag";
 import * as path from "path";
 import * as fs from "fs";
@@ -53,6 +53,9 @@ const environment = {
     region: doc.environment.region ?? env!.CDK_DEFAULT_REGION,
   },
   ...doc,
+  synthesizer: doc.environment.synthesizeOverride
+    ? new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
+    : undefined,
 };
 
 new SharedServicesStack(app, "SharedServicesStack", environment);
