@@ -43,10 +43,3 @@ if systemctl list-unit-files --type service | grep amazon-ssm-agent.service; the
   systemctl daemon-reload
   systemctl restart amazon-ssm-agent
 fi
-
-# Configure the kubelet with the proxy
-mkdir -p /etc/systemd/system/kubelet.service.d
-cat <<EOF >/etc/systemd/system/kubelet.service.d/proxy.conf
-[Service]
-EnvironmentFile=/etc/environment
-EOF

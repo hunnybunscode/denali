@@ -68,3 +68,8 @@ aws imagebuilder list-image-pipelines | jq -r '.imagePipelineList[].arn' | xargs
 ```bash
 ./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/stig-eks-imagebuilder/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-48) -RoleArn arn:aws:iam::908027385618:role/cdk-hnb659fds-cfn-exec-role-908027385618-us-west-1 
 ```
+
+Scan Build Action
+```bash
+./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/stig-eks-imagebuilder/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-48) -RoleArn arn:aws:iam::908027385618:role/cdk-hnb659fds-cfn-exec-role-908027385618-us-west-1 
+```

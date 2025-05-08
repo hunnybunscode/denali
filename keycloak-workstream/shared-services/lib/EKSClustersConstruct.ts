@@ -23,6 +23,7 @@ import * as blueprints from "@aws-quickstart/eks-blueprints";
 import { StorageClassDefaultAddon } from "./eks-blueprints/addons/storage-class-default-addon";
 
 import { NagSuppressions } from "cdk-nag";
+import { VpcCniProxyPatchAddon, VpcCniProxyPatchAddonProps } from "./eks-blueprints/addons/vpc-cni-proxy-patch-addon";
 
 export interface EksClustersConstructProps extends StackProps, ConfigurationDocument {
   extended: {
@@ -226,7 +227,6 @@ export class EKSClustersConstruct extends Construct {
         minimumIpTarget: 20,
         awsVpcK8sCniLogFile: "stderr",
         awsVpcK8sPluginLogFile: "stderr",
-        podSecurityGroupEnforcingMode: "standard",
       }),
       new blueprints.addons.CoreDnsAddOn(),
       new blueprints.addons.KubeProxyAddOn(),
@@ -298,6 +298,8 @@ export class EKSClustersConstruct extends Construct {
 
           const maxPodsLimit = enxMaxPods[instanceType] ?? "15";
 
+          const userDataCollection: string[] = [];
+
           let rawUserData = fs.readFileSync(path.join(__dirname, "scripts/worker-node-userdata.sh"), {
             encoding: "utf-8",
           });
@@ -305,7 +307,46 @@ export class EKSClustersConstruct extends Construct {
           rawUserData = rawUserData.replace("{{clusterName}}", clusterName);
           rawUserData = rawUserData.replace("{{MAX_PODS}}", maxPodsLimit);
 
-          userData.addCommands(...rawUserData.split("\n").filter(line => line.length != 0));
+          if (this.props.environment.proxy) {
+            const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
+
+            let noProxyStr = "";
+
+            if (noProxy) {
+              if (Array.isArray(noProxy)) {
+                noProxyStr = noProxy.join(",");
+              } else {
+                noProxyStr = noProxy;
+              }
+            }
+
+            let rawProxyUserdata = fs
+              .readFileSync(path.join(__dirname, "scripts/proxy-userdata.sh"), {
+                encoding: "utf-8",
+              })
+              .replace(/{{HTTP_PROXY}}/g, httpProxy)
+              .replace(/{{HTTPS_PROXY}}/g, httpsProxy)
+              .replace(/{{NO_PROXY}}/g, noProxyStr);
+
+            let rawProxyWorkerUserdata = fs.readFileSync(
+              path.join(__dirname, "scripts/proxy-worker-node-userdata.sh"),
+              {
+                encoding: "utf-8",
+              }
+            );
+
+            userDataCollection.push(rawProxyUserdata);
+            userDataCollection.push(rawProxyWorkerUserdata);
+          }
+
+          userDataCollection.push(rawUserData);
+
+          userData.addCommands(
+            ...userDataCollection
+              .join("\n")
+              .split("\n")
+              .filter(line => line.length != 0)
+          );
 
           const keyPair = ec2.KeyPair.fromKeyPairAttributes(
             scope,
@@ -333,9 +374,17 @@ export class EKSClustersConstruct extends Construct {
         console.debug(`[${nodeGroupName}] minSize: ${minSize}`);
         console.debug(`[${nodeGroupName}] desiredCapacity: ${desiredCapacity}`);
 
+        let isIsolatedSubnet = false;
+
+        (nodeGroupSubnets ?? []).forEach(subnet => {
+          if (subnet.isolated) {
+            isIsolatedSubnet = true;
+          }
+        });
+
         const nodeGroupSubnetFilter = nodeGroupSubnets
           ? {
-              subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+              subnetType: isIsolatedSubnet ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
               subnetFilters: [ec2.SubnetFilter.byIds((nodeGroupSubnets ?? []).map(subnet => subnet.id))],
             }
           : clusterSubnetFilter;
@@ -480,6 +529,31 @@ export class EKSClustersConstruct extends Construct {
 
         eksBuilder.resourceProvider(zoneName, new blueprints.LookupHostedZoneProvider(zoneName));
       });
+    }
+
+    if (this.props.environment.proxy) {
+      const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
+
+      let noProxyStr = "";
+
+      if (noProxy) {
+        if (Array.isArray(noProxy)) {
+          noProxyStr = noProxy.join(",");
+        } else {
+          noProxyStr = noProxy;
+        }
+      }
+
+      const proxyAddonConfig: VpcCniProxyPatchAddonProps = {
+        proxy: {
+          httpProxy,
+          httpsProxy,
+          noProxy: noProxyStr,
+        },
+      };
+
+      blueprintsAddons.push(new VpcCniProxyPatchAddon(proxyAddonConfig));
+      console.warn("Adding Proxy Patch");
     }
 
     const clusterStack = eksBuilder

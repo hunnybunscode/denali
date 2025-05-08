@@ -214,6 +214,11 @@ interface Environment {
       [key: string]: any;
     };
   };
+  proxy?: {
+    noProxy?: string[] | string;
+    httpProxy?: string;
+    httpsProxy?: string;
+  };
 }
 
 interface HostedZone {
@@ -262,6 +267,7 @@ interface NodeGroup {
   };
   subnets?: {
     id: string;
+    isolated?: boolean;
   }[];
   desiredCapacity?: number;
   minSize?: number;

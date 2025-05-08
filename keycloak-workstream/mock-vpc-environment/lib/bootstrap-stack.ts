@@ -174,6 +174,9 @@ export class BootstrapStack extends Stack {
       securityGroupName: "vpc-endpoint-sg",
     });
 
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), "Allow SSH inbound");
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3389), "Allow RDP inbound");
+
     // List of VPC Interface Endpoints
     const vpcInterfaceEndpointServices = [
       ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
@@ -197,16 +200,26 @@ export class BootstrapStack extends Stack {
     });
 
     // List of VPC Gateway Endpoints
-    // const vpcGatewayEndpointServices = [
-    //   { name: "dynamoDB", service: ec2.GatewayVpcEndpointAwsService.DYNAMODB },
-    //   { name: "s3", service: ec2.GatewayVpcEndpointAwsService.S3 },
-    // ];
+    const vpcGatewayEndpointServices = [
+      { name: "dynamoDB", service: ec2.GatewayVpcEndpointAwsService.DYNAMODB },
+      { name: "s3", service: ec2.GatewayVpcEndpointAwsService.S3 },
+    ];
 
-    // vpcGatewayEndpointServices.forEach((service) => {
-    //   vpc.addGatewayEndpoint(`endpoint-${service.name}`, {
-    //     service: service.service,
-    //   });
-    // });
+    vpcGatewayEndpointServices.forEach((service) => {
+      vpc.addGatewayEndpoint(`endpoint-${service.name}`, {
+        service: service.service,
+      });
+    });
+
+    const targetSubnets = [vpc.isolatedSubnets.filter((subnet) => subnet.node.id.includes("cluster-worker-nodes"))[0]];
+
+    targetSubnets.forEach((subnet) => {
+      new ec2.CfnInstanceConnectEndpoint(this, `instance-connect-endpoint-${subnet.node.id}`, {
+        subnetId: subnet.subnetId,
+        preserveClientIp: true,
+        securityGroupIds: [securityGroup.securityGroupId],
+      });
+    });
   }
 
   private createBastion(vpc: ec2.Vpc) {

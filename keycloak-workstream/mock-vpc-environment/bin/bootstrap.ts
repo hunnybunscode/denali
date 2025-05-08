@@ -28,7 +28,7 @@ new BootstrapStack(app, "BootstrapStack", {
     account: env!.CDK_DEFAULT_ACCOUNT,
     region: env!.CDK_DEFAULT_REGION,
   },
-  enableEndpoints: false,
+  enableEndpoints: true,
   createBastion: false,
   createRoute53: false,
 });

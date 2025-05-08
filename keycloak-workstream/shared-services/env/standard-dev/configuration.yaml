@@ -5,6 +5,11 @@ environment:
   iam:
     prefix: AFC2S
     # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+  proxy:
+    httpProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+    httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+    #noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
+    noProxy: 10.0.0.0/16,localhost,127.0.0.1,169.254.169.254,.internal,s3.amazonaws.com,.s3.us-west-1.amazonaws.com,api.ecr.us-west-1.amazonaws.com,dkr.ecr.us-west-1.amazonaws.com,ec2.us-west-1.amazonaws.com,us-west-1.eks.amazonaws.com
 
 .vpc: &vpc
   id: vpc-0ea1fbb49ae45a7d2
@@ -24,6 +29,12 @@ hostedZones: &hostedZones
 .workerNodeGroupSubnets: &workerNodeGroupSubnets
   - id: subnet-0e1ddd26680e52a10
   - id: subnet-0e8350b80dd689d3e
+
+.workerProxyNodeGroupSubnets: &workerProxyNodeGroupSubnets
+  - id: subnet-05884f84ac04232f4
+    isolated: true
+  - id: subnet-0555d1cfda0d90d37
+    isolated: true
 
 .workerNodeAlRootstorage: &al-storage
   rootDeviceName: /dev/xvda
@@ -85,6 +96,15 @@ clusters:
           name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
         storage: *rhel-storage
         subnets: *workerNodeGroupSubnets
+        minSize: 1
+        desiredCapacity: 1
+        maxSize: 50
+      - name: rhel9-compute-proxy-xlarge
+        instanceType: m5a.xlarge
+        ami:
+          name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
+        storage: *rhel-storage
+        subnets: *workerProxyNodeGroupSubnets
         minSize: 1
         desiredCapacity: 1
         maxSize: 50
