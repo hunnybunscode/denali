@@ -191,7 +191,7 @@ export class EKSClustersConstruct extends Construct {
     });
 
     const clusterSubnetFilter = {
-      subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+      subnetType: vpcData.isolated ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
       subnetFilters: [ec2.SubnetFilter.byIds((vpcData.subnets ?? []).map(subnet => subnet.id))],
     };
 
@@ -270,6 +270,7 @@ export class EKSClustersConstruct extends Construct {
         taints,
         storage,
         subnets: nodeGroupSubnets,
+        isolated: useNodeIsolatedSubnets,
       }): blueprints.ManagedNodeGroup => {
         const nodeWorkerImage = ami
           ? ec2.MachineImage.lookup({
@@ -374,17 +375,9 @@ export class EKSClustersConstruct extends Construct {
         console.debug(`[${nodeGroupName}] minSize: ${minSize}`);
         console.debug(`[${nodeGroupName}] desiredCapacity: ${desiredCapacity}`);
 
-        let isIsolatedSubnet = false;
-
-        (nodeGroupSubnets ?? []).forEach(subnet => {
-          if (subnet.isolated) {
-            isIsolatedSubnet = true;
-          }
-        });
-
         const nodeGroupSubnetFilter = nodeGroupSubnets
           ? {
-              subnetType: isIsolatedSubnet ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
+              subnetType: useNodeIsolatedSubnets ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
               subnetFilters: [ec2.SubnetFilter.byIds((nodeGroupSubnets ?? []).map(subnet => subnet.id))],
             }
           : clusterSubnetFilter;

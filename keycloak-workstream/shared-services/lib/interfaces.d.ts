@@ -242,6 +242,11 @@ interface Cluster {
     id?: string;
     cidr?: string;
     subnets?: { id: string; cidr: string }[];
+    /**
+     * Use only isolated subnets. If cause, only subnets tagged as private would be used
+     * @default false
+     */
+    isolated?: boolean;
   };
   nodeGroups: NodeGroup[];
   tags?: { [key: string]: string };
@@ -267,7 +272,6 @@ interface NodeGroup {
   };
   subnets?: {
     id: string;
-    isolated?: boolean;
   }[];
   desiredCapacity?: number;
   minSize?: number;
@@ -275,6 +279,11 @@ interface NodeGroup {
   labels?: { [key: string]: string };
   tags?: { [key: string]: string };
   taints?: { key: string; value: string; effect: string }[];
+  /**
+   * Use only isolated subnets. If cause, only subnets tagged as private would be used
+   * @default false
+   */
+  isolated?: boolean;
 }
 
 interface Bastion {
