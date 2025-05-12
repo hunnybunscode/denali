@@ -5,6 +5,10 @@ cat <<EOF >/etc/environment
   export HTTP_PROXY={{HTTP_PROXY}}
   export HTTPS_PROXY={{HTTPS_PROXY}}
   export NO_PROXY='{{NO_PROXY}}'
+
+  export http_proxy={{HTTP_PROXY}}
+  export https_proxy={{HTTPS_PROXY}}
+  export no_proxy='{{NO_PROXY}}'  
 EOF
 
 cat <<EOF >/etc/systemd/environment

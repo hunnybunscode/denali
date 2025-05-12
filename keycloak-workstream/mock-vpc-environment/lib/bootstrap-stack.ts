@@ -190,6 +190,8 @@ export class BootstrapStack extends Stack {
       ec2.InterfaceVpcEndpointAwsService.EC2,
       ec2.InterfaceVpcEndpointAwsService.EKS,
       ec2.InterfaceVpcEndpointAwsService.EKS_AUTH,
+      ec2.InterfaceVpcEndpointAwsService.AUTOSCALING,
+      ec2.InterfaceVpcEndpointAwsService.RDS
     ];
 
     vpcInterfaceEndpointServices.forEach((service) => {

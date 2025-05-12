@@ -1,8 +1,6 @@
-# Welcome to your CDK TypeScript project
+# Mock VPC Environment
 
-This is a blank project for CDK development with TypeScript.
-
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+Creates a new vpc with multiple subnets to ease test of EKS deployments 
 
 ## Useful commands
 

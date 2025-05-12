@@ -26,15 +26,17 @@ hostedZones: &hostedZones
   - id: subnet-06560cfdbfb912a8d
   - id: subnet-0ebd9551df362cfea
 
+.controlIsolatedNodeGroupSubnets: &controlIsolatedNodeGroupSubnets
+  - id: subnet-042c5dcde3059b394
+  - id: subnet-049c85f8feaa48120
+
 .workerNodeGroupSubnets: &workerNodeGroupSubnets
   - id: subnet-0e1ddd26680e52a10
   - id: subnet-0e8350b80dd689d3e
 
-.workerProxyNodeGroupSubnets: &workerProxyNodeGroupSubnets
+.workerIsolatedNodeGroupSubnets: &workerIsolatedNodeGroupSubnets
   - id: subnet-05884f84ac04232f4
-    isolated: true
   - id: subnet-0555d1cfda0d90d37
-    isolated: true
 
 .workerNodeAlRootstorage: &al-storage
   rootDeviceName: /dev/xvda
@@ -49,9 +51,11 @@ hostedZones: &hostedZones
 clusters:
   - name: StandardSharedServices
     version: "1.30"
+    private: false
     vpc:
       <<: *vpc
       subnets: *controlNodeGroupSubnets
+      # subnets: *controlIsolatedNodeGroupSubnets
     hostedZones: *hostedZones
     nodeGroups:
       # - name: al2-compute-xlarge
@@ -63,15 +67,15 @@ clusters:
       #   minSize: 1
       #   desiredCapacity: 1
       #   maxSize: 40
-      - name: al2023-compute-xlarge
-        instanceType: m5a.xlarge
-        ami:
-          name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
-        storage: *al-storage
-        subnets: *workerNodeGroupSubnets
-        minSize: 1
-        desiredCapacity: 1
-        maxSize: 50
+      # - name: al2023-compute-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+      #   storage: *al-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50
       # - name: al2023-compute-normal-xlarge
       #   instanceType: m5a.xlarge
       #   ami:
@@ -90,21 +94,22 @@ clusters:
       #   minSize: 1
       #   desiredCapacity: 1
       #   maxSize: 50
-      - name: rhel9-compute-xlarge
-        instanceType: m5a.xlarge
-        ami:
-          name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
-        storage: *rhel-storage
-        subnets: *workerNodeGroupSubnets
-        minSize: 1
-        desiredCapacity: 1
-        maxSize: 50
+      # - name: rhel9-compute-xlarge
+      #   instanceType: m5a.xlarge
+      #   ami:
+      #     name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
+      #   storage: *rhel-storage
+      #   subnets: *workerNodeGroupSubnets
+      #   minSize: 1
+      #   desiredCapacity: 1
+      #   maxSize: 50
       - name: rhel9-compute-proxy-xlarge
         instanceType: m5a.xlarge
         ami:
           name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high *
         storage: *rhel-storage
-        subnets: *workerProxyNodeGroupSubnets
+        isolated: true
+        subnets: *workerIsolatedNodeGroupSubnets
         minSize: 1
         desiredCapacity: 1
         maxSize: 50
