@@ -320,21 +320,11 @@ Resources:
             EOF
             source /etc/environment
 
-            cat > /etc/systemd/environment <<EOF
-            HTTP_PROXY=${ProxyServerAddress}:3128
-            HTTPS_PROXY=${ProxyServerAddress}:3128
-            NO_PROXY=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
-            http_proxy=${ProxyServerAddress}:3128
-            https_proxy=${ProxyServerAddress}:3128
-            no_proxy=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
-            EOF
-            chmod a+r /etc/systemd/environment
-
             mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
             cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
             [Service]
-            EnvironmentFile=/etc/systemd/environment
-            PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY
+            EnvironmentFile=/etc/environment
+            PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy
             EOF
 
             cat >> /etc/yum.conf <<EOF
