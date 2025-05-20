@@ -141,7 +141,7 @@ Parameters:
   AllowedExternalRoleArn:
     Type: String
     Description: (Optional) ARN of the role that is allowed to put objects into the ingestion bucket
-    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/\S+
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::\d{12}:role/\S+
     ConstraintDescription: Must start with 'arn:' and be composed of lowercase letters, numbers, and hyphens; it cannot exceed 1024 characters.
 
   SftpUserName:

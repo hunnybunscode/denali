@@ -1,12 +1,13 @@
 import os
 
+instance_info = {"instance_id": ""}
 
 resource_suffix = os.getenv("resource_suffix") or ""
 
 file_handler_config = {
     "filename": "/var/log/sqs_poller.log",
     "when": "midnight",
-    "backupCount": 30,
+    "backupCount": 7,
 }
 
 mime_mapping = {

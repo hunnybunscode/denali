@@ -1,10 +1,14 @@
 import logging
 import os
+import re
+import subprocess  # nosec B404
+import urllib.request
 import zipfile
 from datetime import datetime
 from functools import lru_cache
 from functools import reduce
 from pathlib import Path
+from time import sleep
 from time import time
 
 import boto3  # type: ignore
@@ -25,6 +29,7 @@ S3_CLIENT = boto3.client("s3", config=config, region_name=region)
 SSM_CLIENT = boto3.client("ssm", config=config, region_name=region)
 SNS_CLIENT = boto3.client("sns", config=config, region_name=region)
 SQS_CLIENT = boto3.client("sqs", config=config, region_name=region)
+AUTOSCALING_CLIENT = boto3.client("autoscaling", config=config, region_name=region)
 
 KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
 UNKNOWN = "Unknown"
@@ -411,6 +416,81 @@ def delete_av_scan_message(receipt_handle: str):
     """
     queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
     delete_sqs_message(queue_url, receipt_handle)
+
+
+def mark_instance_as_unhealthy(instance_id: str):
+    response = AUTOSCALING_CLIENT.set_instance_health(
+        InstanceId=instance_id,
+        HealthStatus="Unhealthy",
+        ShouldRespectGracePeriod=False,
+    )
+    logger.info(response)
+
+
+def await_clamd():
+    """
+    Waits for clamd to start, for up to 300 seconds
+    """
+
+    logger.info("Waiting for clamd to start")
+
+    retry_interval = 5
+    max_retries = 60
+
+    for retry in range(max_retries):
+        logger.info(f"Attempt {retry + 1} of {max_retries}")
+        try:
+            ping_result = subprocess.run(
+                ["clamdscan", "--ping", "1"],
+                capture_output=True,
+                text=True,
+            )  # nosec B603, B607
+
+            if ping_result.returncode == 0:
+                logger.info("clamd has started!")
+                return True
+
+            if ping_result.stderr:
+                logger.warning(f"clamd ping error: {ping_result.stderr}")
+
+        except Exception:
+            logger.exception("Could not ping clamd")
+
+        logger.info(f"Re-checking after {retry_interval} seconds")
+        sleep(retry_interval)  # nosemgrep arbitrary-sleep
+
+    logger.error("Max retries exhausted waiting for clamd to start")
+    return False
+
+
+def get_instance_id():
+    """Get the EC2 instance ID using IMDSv2"""
+
+    # Step 1: Generate a token
+    token_req = urllib.request.Request(
+        url="http://169.254.169.254/latest/api/token",
+        method="PUT",
+        headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+    )
+    token = (
+        urllib.request.urlopen(token_req, timeout=2)  # nosec B310
+        .read()
+        .decode("utf-8")
+    )
+    # Step 2: Use the token to get instance ID
+    id_req = urllib.request.Request(
+        url="http://169.254.169.254/latest/meta-data/instance-id",
+        headers={"X-aws-ec2-metadata-token": token},
+    )
+    instance_id = (
+        urllib.request.urlopen(id_req, timeout=2).read().decode("utf-8")  # nosec B310
+    )
+
+    if re.match(r"i-[a-z0-9]+", instance_id):
+        logger.info(f"Instance ID: {instance_id}")
+        return instance_id
+
+    raise ValueError("Failed to get the instance ID")
 
 
 #################################

@@ -1462,5 +1462,5 @@ Outputs:
       Name: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
 
   PresignedUrlGeneratorInvokeUrl:
-    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
+    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/upload
     Description: URL of the Presign Generator API Endpoint

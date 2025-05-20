@@ -316,6 +316,17 @@ Resources:
               - Effect: Allow
                 Action: kms:Decrypt
                 Resource: !Ref IngestKmsKeyArn
+        - PolicyName: Ec2AutoScalingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:SetInstanceHealth
+                Resource: "*" # Can't reference the auto scaling group ARN due to a circular dependency
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
 
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -1004,6 +1015,14 @@ Resources:
           Arn: !GetAtt Ec2ScannerInstanceProfile.Arn
         ImageId: !Ref PipelineAmiId
         InstanceType: m5.large
+        BlockDeviceMappings:
+          # TODO: Get the device name dynamically
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 50
+              VolumeType: gp3
+              # Encrypted: true
+              # KmsKeyId: !Ref PipelineKmsKey
         Monitoring:
           Enabled: false
         MetadataOptions:

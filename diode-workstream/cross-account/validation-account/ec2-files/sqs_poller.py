@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import time
@@ -5,10 +6,14 @@ from logging.handlers import TimedRotatingFileHandler
 
 from config import approved_filetypes
 from config import file_handler_config
+from config import instance_info
 from config import resource_suffix
 from config import ssm_params
+from utils import await_clamd
 from utils import change_message_visibility
+from utils import get_instance_id
 from utils import get_params_values
+from utils import mark_instance_as_unhealthy
 from utils import receive_sqs_message
 from validation import validate_file
 
@@ -26,6 +31,14 @@ def main():
     # TODO: Explore using SSM Document to update the values when changes occur
     # TODO: Use signal to gracefully exit in case of instance termination
     # TODO: Implement a health check
+
+    instance_info["instance_id"] = get_instance_id()
+
+    clamd_ready = await_clamd()
+    if not clamd_ready:
+        logger.error("Marking the instance as unhealthy")
+        mark_instance_as_unhealthy(instance_info["instance_id"])
+        return
 
     ttl = 60
     clock = -ttl  # To enable the first run within the while loop
@@ -80,6 +93,15 @@ def main():
             validate_file(s3_event, receipt_handle)
 
             logger.info("-" * 100)
+
+        except OSError as e:
+            if e.errno == errno.ENOSPC:
+                logger.exception("No space left on device")
+                mark_instance_as_unhealthy(instance_info["instance_id"])
+                return
+            else:
+                logger.exception("Other OSError")
+                raise
 
         except Exception as e:
             logger.exception(e)

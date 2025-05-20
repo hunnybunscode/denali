@@ -12,6 +12,7 @@ Metadata:
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
           - ProxyServerAddress
+          - NoProxyList
           - EmailEndPoint
 
       - Label:
@@ -43,6 +44,8 @@ Metadata:
         default: Resource Suffix
       ProxyServerAddress:
         default: Proxy Server Address
+      NoProxyList:
+        default: No Proxy List
       EmailEndPoint:
         default: Email Notification
       SemVer:
@@ -81,7 +84,7 @@ Parameters:
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
     ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
@@ -90,13 +93,19 @@ Parameters:
       Suffix added to the named AWS resources. It must start with a lowercase letter and contain
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
-    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    ConstraintDescription: >
+      Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
   ProxyServerAddress:
     Type: String
-    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
     AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
     ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  NoProxyList:
+    Type: String
+    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
+    Default: 169.254.169.254,s3.us-gov-west-1.amazonaws.com
 
   EmailEndPoint:
     Type: String
@@ -107,14 +116,15 @@ Parameters:
   SemVer:
     Type: String
     Description: >
-      Semantic version of the Diode Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
+      Semantic version of the Diode Image Recipe and other associated resources.
+      Increment this when updating the parent image below or any associated resources in the template itself.
       The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
     Default: "1.0.0"
 
   ParentImage:
     Type: String
     Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
-    AllowedPattern: ^(arn:(aws|aws-us-gov):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
+    AllowedPattern: ^(arn:(aws|aws-us-gov|aws-iso-b|aws-iso):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid Image ARN or AMI ID
 
   ImageNamePattern:
@@ -310,10 +320,10 @@ Resources:
             cat >/etc/environment <<EOF
             HTTP_PROXY=${ProxyServerAddress}:3128
             HTTPS_PROXY=${ProxyServerAddress}:3128
-            NO_PROXY=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+            NO_PROXY=${NoProxyList}
             http_proxy=${ProxyServerAddress}:3128
             https_proxy=${ProxyServerAddress}:3128
-            no_proxy=169.254.169.254,vi2e.io,s3.${AWS::Region}.amazonaws.com
+            no_proxy=${NoProxyList}
 
             resource_suffix=${ResourceSuffix}
             region=${AWS::Region}
@@ -335,9 +345,9 @@ Resources:
             BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
             ARCH=$(arch)
             if [ "$ARCH" = "arm64" ]; then
-                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
             else # x86_64
-                yum install -y https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
             fi
 
             # Restart SSM Agent
@@ -345,9 +355,9 @@ Resources:
             systemctl restart amazon-ssm-agent
 
       Components:
-        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/update-linux/x.x.x
-        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/aws-cli-version-2-linux/x.x.x
-        - ComponentArn: arn:aws-us-gov:imagebuilder:us-gov-west-1:aws:component/amazon-cloudwatch-agent-linux/x.x.x
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
       #   - DeviceName: String
