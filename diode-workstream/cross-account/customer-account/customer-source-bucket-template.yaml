@@ -45,7 +45,7 @@ Parameters:
   DestinationBucketKeyArn:
     Type: String
     Description: Name of the destination bucket KMS Key Arn
-    AllowedPattern: ^arn:(aws|aws-us-gov):kms:[a-z0-9\-]+:[0-9]{12}:key\/[a-z0-9\-]{36}$
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9\-]+:[0-9]{12}:key\/[a-z0-9\-]{36}$
     ConstraintDescription: Must be a valid KMS Key Arn
 
   ObjectExpirationInDays:

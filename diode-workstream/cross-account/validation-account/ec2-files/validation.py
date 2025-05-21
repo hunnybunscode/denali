@@ -5,6 +5,7 @@ from urllib.parse import unquote_plus
 from urllib.parse import urlencode
 
 import clamscan
+from config import instance_info
 from config import resource_suffix
 from config import ssm_params
 from utils import create_tags_for_file_validation
@@ -149,6 +150,7 @@ def _send_file_rejected_sns_msg(bucket: str, key: str):
             f"File: {key}\n"
             f"File Location: {bucket}/{key}\n"
             f"Reject Reason: {subject}\n"
+            f"Instance ID: {instance_info['instance_id']}"
         )
         publish_sns_message(topic_arn, message, subject)
     except Exception as e:

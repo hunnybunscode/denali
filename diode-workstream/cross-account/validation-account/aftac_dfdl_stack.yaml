@@ -484,7 +484,7 @@ Resources:
         SubnetIds: !Ref VpcSubnetIDs
 
 Outputs:
-  oDaffodilParserRoleArn:
+  DaffodilParserRoleArn:
     Value: !GetAtt DaffodilParserRole4894954B.Arn
-  oschemabucket:
+  SchemaBucket:
     Value: !Ref schemabucketE4BFADA8

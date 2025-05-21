@@ -2,6 +2,7 @@ import logging
 import subprocess  # nosec B404
 from urllib.parse import urlencode
 
+from config import instance_info
 from config import resource_suffix
 from config import ssm_params
 from utils import create_tags_for_av_scan
@@ -140,7 +141,8 @@ def _send_file_quarantined_msg(
             f"File Name: {key}\n"
             f"File Location: {bucket}/{key}\n"
             f"Scan Status: {scan_status}\n"
-            f"ClamAV Exit Code: {exit_status}"
+            f"ClamAV Exit Code: {exit_status}\n"
+            f"Instance ID: {instance_info['instance_id']}"
         )
         publish_sns_message(topic_arn, message, subject)
     except Exception as e:
@@ -165,7 +167,8 @@ def _send_file_rejected_msg(
             f"File Name: {key}\n"
             f"File Location: {bucket}/{key}\n"
             f"Scan Status: {scan_status}\n"
-            f"ClamAV Exit Code: {exit_status}"
+            f"ClamAV Exit Code: {exit_status}\n"
+            f"Instance ID: {instance_info['instance_id']}"
         )
         publish_sns_message(topic_arn, message, subject)
     except Exception as e:

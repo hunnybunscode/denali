@@ -72,10 +72,6 @@ freshclam --config-file=/usr/local/etc/freshclam.conf
 sudo systemctl daemon-reload
 sudo systemctl start clamd
 sudo systemctl enable clamd
-```
 
-## How to create a EICAR test file
-
-```
-echo 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' > /tmp/eicar.com
+history -c
 ```

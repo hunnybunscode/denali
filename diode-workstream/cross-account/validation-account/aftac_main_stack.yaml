@@ -125,7 +125,7 @@ Metadata:
       DataTransferBucketExpirationInDays:
         default: Object Expiration In Days For Data Transfer Bucket
       DfdlInputBucketExpirationInDays:
-         default: Object Expiration In Days For Dfdl Input Bucket
+        default: Object Expiration In Days For Dfdl Input Bucket
       InvalidFilesBucketExpirationInDays:
         default: Object Expiration In Days For Invalid Files Bucket
       AccessLogBucketExpirationInDays:
@@ -142,7 +142,7 @@ Parameters:
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
     ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
@@ -196,7 +196,7 @@ Parameters:
     Description: >
       If using a Diode Simulator, the ARN of the role associated with the instance profile for the Diode Simulator instance.
       Otherwise, leave it blank.
-    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::\d{12}:role/.*
 
   PipelineStackDiodeAccountId:
     Type: String
@@ -326,7 +326,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_logging_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_logging_stack.yaml
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
@@ -339,7 +339,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_ingest_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_ingest_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -355,7 +355,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_pipeline_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_pipeline_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -400,7 +400,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.amazonaws.com/${TemplatePrefix}/aftac_sftp_stack.yaml
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_sftp_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
