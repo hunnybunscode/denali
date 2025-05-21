@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:dfdl="http://www.ogf.org/dfdl/dfdl-1.0/"
+           xmlns:fn="http://www.w3.org/2005/xpath-functions"
+           xmlns:daf="urn:ogf:dfdl:2013:imp:daffodil.apache.org:2018:ext">
+
+    <xs:include schemaLocation="org/apache/daffodil/xsd/DFDLGeneralFormat.dfdl.xsd"/>
+
+    <xs:annotation>
+        <xs:appinfo source="http://www.ogf.org/dfdl/">
+            <dfdl:format ref="GeneralFormat" representation="text" encoding="utf-8" lengthKind="delimited"/>
+        </xs:appinfo>
+    </xs:annotation>
+
+    <xs:element name="message">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="Header">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="line_1">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="field_1" type="xs:string" dfdl:initiator="%WSP;%WSP;%WSP;%WSP;%WSP;" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;"/>
+                                        <xs:element name="field_2" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;RINEX%WSP;VERSION%WSP;/%WSP;TYPE%NL;"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="line_2">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="field_1" type="xs:string" dfdl:terminator="%WSP;%WSP;"/>
+                                        <xs:element name="field_2" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;"/>
+                                        <xs:element name="field_3" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;"/>
+                                        <xs:element name="field_4" type="xs:string" dfdl:terminator="%WSP;"/>
+                                        <xs:element name="field_5" type="xs:string" dfdl:terminator="PGM%WSP;/%WSP;RUN%WSP;BY%WSP;/%WSP;DATE%NL;"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="line_3">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="field_1" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="line_4">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="field_1" type="xs:string" dfdl:initiator="%WSP;%WSP;%WSP;%WSP;%WSP;" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;"/>
+                                        <xs:element name="field_2" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="line_5">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="field_1" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;"/>
+                                        <xs:element name="field_2" type="xs:string" dfdl:terminator="COMMENT%NL;This%WSP;file%WSP;contains%WSP;the%WSP;validated%WSP;broadcast%WSP;navigation%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;messages%WSP;from%WSP;the%WSP;following%WSP;files:%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;"/>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="broadcast_navigation_messages_from_files">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="row" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="file_1" type="xs:string" dfdl:terminator=",%WSP;"/>
+                                                    <xs:element name="file_2" type="xs:string" dfdl:terminator=",%WSP;"/>
+                                                    <xs:element name="file_3" type="xs:string" dfdl:terminator=",%WSP;"/>
+                                                    <xs:element name="file_4" type="xs:string" dfdl:terminator=",%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="last_row">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="file_1" type="xs:string" dfdl:terminator=",%WSP;"/>
+                                                    <xs:element name="file_2" type="xs:string" dfdl:terminator="%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;COMMENT%NL;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;%WSP;END%WSP;OF%WSP;HEADER%NL;"/>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="Data">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="section" maxOccurs="unbounded">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="first_seven_values" maxOccurs="1">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:choice>
+                                                        <xs:element name="value_1-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="value_1-2" type="xs:string" dfdl:lengthKind="explicit" dfdl:length="2"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_2-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="value_2-2" type="xs:string" dfdl:terminator="%WSP;"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_3-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="field_3-2" type="xs:string" dfdl:terminator="%WSP;"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_4-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="value_4-2" type="xs:string" dfdl:terminator="%WSP;"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_5-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="value_5-2" type="xs:string" dfdl:terminator="%WSP;"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_6-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:terminator="%WSP;"/>
+                                                        <xs:element name="value_6-2" type="xs:string" dfdl:terminator="%WSP;"/>
+                                                    </xs:choice>
+                                                    <xs:choice>
+                                                        <xs:element name="value_7-1" type="xs:string" dfdl:initiator="%WSP;" dfdl:lengthKind="explicit" dfdl:length="3"/>
+                                                        <xs:element name="value_7-2" type="xs:string" dfdl:lengthKind="explicit" dfdl:length="4"/>
+                                                    </xs:choice>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="other_value" maxOccurs="28">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:choice>
+                                                        <xs:element name="other_value-1" type="xs:string" dfdl:initiator="%NL;%WSP;%WSP;%WSP;%WSP;" dfdl:lengthKind="explicit" dfdl:length="18"/>
+                                                        <xs:element name="other_value-2" type="xs:string" dfdl:initiator="%NL;%WSP;%WSP;%WSP;" dfdl:lengthKind="explicit" dfdl:length="19"/>
+                                                        <xs:element name="other_value-3" type="xs:string" dfdl:initiator="%WSP;" dfdl:lengthKind="explicit" dfdl:length="18"/>
+                                                        <xs:element name="other_value-4" type="xs:string" dfdl:lengthKind="explicit" dfdl:length="19"/>
+                                                    </xs:choice>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="last_other_value" minOccurs="0" maxOccurs="1">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:choice>
+                                                        <xs:element name="other_value-1" type="xs:string" dfdl:terminator="%NL;"/>
+                                                    </xs:choice>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

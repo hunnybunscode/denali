@@ -1,3 +1,4 @@
 "text/csv": "csv.dfdl.xsd"
 "INTERVAL": "usndc.da.dfdl.xsd"
 "WWLLN": "A202309201610.dfdl.xsd"
+"BRDC": "brdc2620.23n.dfdl.xsd"
