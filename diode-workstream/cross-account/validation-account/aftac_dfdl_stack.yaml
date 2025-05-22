@@ -13,7 +13,9 @@ Metadata:
         Parameters:
           - LambdaCodeBucket
           - ParserLambdaCodeKey
+          - ParserLambdaCodeKeyVersionId
           - PrecompilerLambdaCodeKey
+          - PrecompilerLambdaCodeKeyVersionId
 
       - Label:
           default: Networking
@@ -44,8 +46,12 @@ Metadata:
         default: Template Bucket Name
       ParserLambdaCodeKey:
         default: Parser Lambda Key
+      ParserLambdaCodeKeyVersionId:
+        default: Parser Lambda Key Version ID
       PrecompilerLambdaCodeKey:
         default: Precompiler Lambda Key
+      PrecompilerLambdaCodeKeyVersionId:
+        default: Precompiler Lambda Key Version ID
       VpcId:
         default: VPC ID
       VpcSubnetIDs:
@@ -130,17 +136,25 @@ Parameters:
 
   LambdaCodeBucket:
     Type: String
-    Description: The name of the Amazon S3 bucket where uploaded code will be stored.
+    Description: The name of the Amazon S3 bucket where uploaded code will be stored
 
   ParserLambdaCodeKey:
     Type: String
     Default: parser.jar
-    Description: The S3 key of the parser code in the code bucket (including prefixes).
+    Description: The S3 key of the parser code in the code bucket (including prefixes)
+
+  ParserLambdaCodeKeyVersionId:
+    Type: String
+    Description: The S3 key version ID of the parser code in the code bucket
 
   PrecompilerLambdaCodeKey:
     Type: String
     Default: precompiler.jar
     Description: The S3 key of the precompiler code in the code bucket (including prefixes)
+
+  PrecompilerLambdaCodeKeyVersionId:
+    Type: String
+    Description: The S3 key version ID of the precompiler code in the code bucket
 
 Resources:
   DaffodilParserRole4894954B:
@@ -310,6 +324,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Ref ParserLambdaCodeKey
+        S3ObjectVersion: !Ref ParserLambdaCodeKeyVersionId
       Environment:
         Variables:
           OUTPUT_BUCKET: !Ref OutputBucket
@@ -471,6 +486,7 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Ref PrecompilerLambdaCodeKey
+        S3ObjectVersion: !Ref PrecompilerLambdaCodeKeyVersionId
       Handler: daffodil.precompile.App
       LoggingConfig:
         LogGroup: !Ref DfdlPrecompilerLogGroupEEE29A0D
