@@ -69,3 +69,11 @@ The daffodil parser uses the filename to determine which schema to use. It captu
 in the 3rd part of the filename (3rd segment separated by `.`). For example, a file with the name
 UNCLASS.USNDC.`INTERVAL`..._da_interval_1709659229.txt, it will look up the schema mapping for 
 `INTERVAL`.
+
+## Caching
+The daffodil parser will cache reading in the content-types.yaml file from the schema bucket and
+creating the content-types mapping every minute. This value can be overwritten with the parser lambda
+environment variable `CONTENT_TYPE_CACHE_TTL_MINUTES`. Also, the retrieval of the data parser (and
+compiling of the schema if the data parser hasn't been precompiled yet) from the schema bucket is
+cached every 15 minutes. This value can be overwritten with the parser lambda environment variable
+`DATA_PROCESSOR_CACHE_TTL_MINUTES`.

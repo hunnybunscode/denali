@@ -60,6 +60,10 @@ public class S3OutputStream extends OutputStream {
    * indicates whether the stream is still open / valid
    */
   private boolean open;
+  /**
+   * indicates whether we ever started writing to the s3 object
+   */
+  private boolean started;
 
   private final String contentType;
 
@@ -99,6 +103,7 @@ public class S3OutputStream extends OutputStream {
     position = 0;
     etags = new ArrayList<>();
     open = true;
+    started = false;
   }
 
   /**
@@ -168,7 +173,7 @@ public class S3OutputStream extends OutputStream {
 
   @Override
   public void close() {
-    if (open) {
+    if (started && open) {
       open = false;
       String eTag = "";
       if (uploadId != null) {
@@ -219,6 +224,7 @@ public class S3OutputStream extends OutputStream {
     if (!open) {
       throw new IllegalStateException("Closed");
     }
+    started=true;
   }
 
   protected void flushBufferAndRewind() {

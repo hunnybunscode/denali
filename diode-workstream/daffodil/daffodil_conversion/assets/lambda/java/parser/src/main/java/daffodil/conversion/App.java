@@ -30,7 +30,9 @@ import org.apache.daffodil.japi.Daffodil;
 import org.apache.daffodil.japi.DataProcessor;
 import org.apache.daffodil.japi.Diagnostic;
 import org.apache.daffodil.japi.InvalidParserException;
+import org.apache.daffodil.japi.ParseResult;
 import org.apache.daffodil.japi.ProcessorFactory;
+import org.apache.daffodil.japi.UnparseResult;
 import org.apache.daffodil.japi.infoset.XMLTextInfosetInputter;
 import org.apache.daffodil.japi.infoset.XMLTextInfosetOutputter;
 import org.apache.daffodil.japi.io.InputSourceDataInputStream;
@@ -76,6 +78,9 @@ public class App implements RequestHandler<S3Event, Void> {
     private static final Region REGION = Region.of(System.getenv(SdkSystemSetting.AWS_REGION.environmentVariable()));
     private static final Logger logger = LoggerFactory.getLogger(App.class);
 
+    private static final int CONTENT_TYPE_CACHE_TTL_MINUTES=Integer.valueOf(getEnv("CONTENT_TYPE_CACHE_TTL_MINUTES", "1"));
+    private static final int DATA_PROCESSOR_CACHE_TTL_MINUTES=Integer.valueOf(getEnv("DATA_PROCESSOR_CACHE_TTL_MINUTES", "15"));
+
     private final MetricsLogger metrics = new MetricsLogger()
         .setNamespace((NAMESPACE != null && !NAMESPACE.isBlank() ? NAMESPACE+"/" : "") + "Daffodil");
 
@@ -98,7 +103,7 @@ public class App implements RequestHandler<S3Event, Void> {
     @SuppressWarnings("unchecked")
     private final LoadingCache<String, Map<String, Object> > contentTypeMapCache = Caffeine.newBuilder()
         .maximumSize(1)
-        .expireAfterWrite(Duration.ofMinutes(1))
+        .expireAfterWrite(Duration.ofMinutes(CONTENT_TYPE_CACHE_TTL_MINUTES))
         .build(bucket -> {
             String contentTypesFile = getEnv("CONTENT_TYPES_FILE", "content-types.yaml");
             try {
@@ -114,7 +119,7 @@ public class App implements RequestHandler<S3Event, Void> {
     // cached value, but it will refresh in the background) for data processors.
     private final LoadingCache<String, CompletableFuture<DataProcessor>> dataProcessorCache = Caffeine.newBuilder()
         .maximumSize(100)
-        .refreshAfterWrite(Duration.ofMinutes(15))
+        .refreshAfterWrite(Duration.ofMinutes(DATA_PROCESSOR_CACHE_TTL_MINUTES))
         .build(contentType -> getDataProcessor(contentType).thenApply(dp -> {
             if(dp == null) {
                 throw new RuntimeException("Could not find data processor for Content-Type: " + contentType);
@@ -305,7 +310,14 @@ public class App implements RequestHandler<S3Event, Void> {
             try (ResponseInputStream<GetObjectResponse> in = inFuture.join(); OutputStream out = new S3OutputStream(s3Client, System.getenv("OUTPUT_BUCKET"), outputKey, null, tags, null)) {
                 DataProcessor dp = dpFuture.get();
                 long initialized = new Date().getTime();
-                dp.parse(new InputSourceDataInputStream(in), new XMLTextInfosetOutputter(out, false));
+                ParseResult res = dp.parse(new InputSourceDataInputStream(in), new XMLTextInfosetOutputter(out, false));
+                if(res.isError()) {
+                    List<Diagnostic> diags = res.getDiagnostics();
+                    for(Diagnostic diag : diags) {
+                        logger.error(diag.getMessage());
+                    }
+                    throw new Exception(String.format("There was an error with parser for %s", contentType), diags.get(0).getSomeCause());
+                }
                 long finished = new Date().getTime();
                 metrics
                     .putProperty("Action", "Parse")
@@ -390,6 +402,7 @@ public class App implements RequestHandler<S3Event, Void> {
                 .collect(Collectors.toList());
 
             Map<String, String> tagMap = originalContentTypeAndETag.join();
+            String contentType = tagMap.get("ContentType");
             Consumer<String> validator = tagMap.containsKey("ETag") ? s -> {
                 logger.trace("Validating eTags...");
                 if(!s.equals(tagMap.get("ETag"))) {
@@ -403,7 +416,14 @@ public class App implements RequestHandler<S3Event, Void> {
 
             try (ResponseInputStream<GetObjectResponse> in = inFuture.join(); OutputStream out = new S3OutputStream(s3Client, System.getenv("OUTPUT_BUCKET"), outputKey, null, tags, validator)) {
                 long initialized = new Date().getTime();
-                dp.unparse(new XMLTextInfosetInputter(in), java.nio.channels.Channels.newChannel(out));
+                UnparseResult res = dp.unparse(new XMLTextInfosetInputter(in), java.nio.channels.Channels.newChannel(out));
+                if(res.isError()) {
+                    List<Diagnostic> diags = res.getDiagnostics();
+                    for(Diagnostic diag : diags) {
+                        logger.error(diag.getMessage());
+                    }
+                    throw new Exception(String.format("There was an error with unparser for %s", contentType), diags.get(0).getSomeCause());
+                }
                 long finished = new Date().getTime();
                 metrics
                     .putProperty("Action", "Unparse")
