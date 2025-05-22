@@ -32,6 +32,8 @@ Metadata:
           - DeadLetterBucket
           - SnsErrorTopicArn
           - ContentTypeFileKey
+          - ContentTypeCacheTtlMinutes
+          - DataProcessorCacheTtlMinutes
           - EnableDetailedMetrics
           - ParserFilterSuffix
 
@@ -68,6 +70,10 @@ Metadata:
         default: Invalid Files Topic ARN
       ContentTypeFileKey:
         default: Content Types File S3 Key
+      ContentTypeCacheTtlMinutes:
+        default: Content Types Cache TTL (Minutes)
+      DataProcessorCacheTtlMinutes:
+        default: Data Processors Cache TTL (Minutes)
       EnableDetailedMetrics:
         default: Enable Detailed Performance Metrics
       ParserFilterSuffix:
@@ -132,7 +138,17 @@ Parameters:
   ContentTypeFileKey:
     Type: String
     Default: content-types.yaml
-    Description: content-type file mapping s3 key, defaults to content-types.yaml
+    Description: Content Type file mapping s3 key, defaults to content-types.yaml
+
+  ContentTypeCacheTtlMinutes:
+    Type: Number
+    Default: 1
+    Description: Content Type cache TTL in minutes
+
+  DataProcessorCacheTtlMinutes:
+    Type: Number
+    Default: 15
+    Description: Data Processor cache TTL in minutes
 
   LambdaCodeBucket:
     Type: String
@@ -335,6 +351,8 @@ Resources:
           ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
           SNS_ERROR_TOPIC_ARN: !Ref SnsErrorTopicArn
           ARCHIVE_BUCKET: !Ref ArchiveBucket
+          CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
+          DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
       Handler: daffodil.conversion.App
       LoggingConfig:
         LogGroup: !Ref DfdlParserLogGroupDCB20E49
