@@ -1,19 +1,12 @@
 package daffodil.conversion;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
 import java.net.URLDecoder;
-import java.nio.channels.Channels;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Base64.Decoder;
@@ -21,32 +14,31 @@ import java.util.Base64.Encoder;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.apache.daffodil.japi.Daffodil;
 import org.apache.daffodil.japi.DataProcessor;
 import org.apache.daffodil.japi.Diagnostic;
-import org.apache.daffodil.japi.InvalidParserException;
 import org.apache.daffodil.japi.ParseResult;
-import org.apache.daffodil.japi.ProcessorFactory;
 import org.apache.daffodil.japi.UnparseResult;
 import org.apache.daffodil.japi.infoset.XMLTextInfosetInputter;
 import org.apache.daffodil.japi.infoset.XMLTextInfosetOutputter;
 import org.apache.daffodil.japi.io.InputSourceDataInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yaml.snakeyaml.Yaml;
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.amazonaws.services.lambda.runtime.events.models.s3.S3EventNotification.S3EventNotificationRecord;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 
+import daffodil.conversion.contenttype.CachedContentTypeSchemaMap;
+import daffodil.conversion.contenttype.CaseInsensitiveContentTypeSchemaMap;
+import daffodil.conversion.contenttype.ContentTypeSchemaMap;
+import daffodil.conversion.contenttype.S3ContentTypeSchemaMap;
+import daffodil.conversion.dataprocessor.CachedDataProcessorRepo;
+import daffodil.conversion.dataprocessor.DataProcessorRepo;
+import daffodil.conversion.dataprocessor.S3DataProcessorRepo;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.SdkSystemSetting;
@@ -68,64 +60,88 @@ import software.amazon.cloudwatchlogs.emf.model.DimensionSet;
 import software.amazon.cloudwatchlogs.emf.model.Unit;
 
 public class App implements RequestHandler<S3Event, Void> {
-    private final Pattern CONTENT_TYPE = Pattern.compile("^\\w+\\.\\w+\\.(\\w+).*$");
-    private static final String INFOSET_EXTENSION = getEnv("INFOSET_EXTENSION", ".infoset.xml");
+    private static final String INFOSET_EXTENSION = Utils.getEnv("INFOSET_EXTENSION", ".infoset.xml");
     private static final String ARCHIVE_BUCKET = System.getenv("ARCHIVE_BUCKET");
     private static final String DEAD_LETTER_BUCKET = System.getenv("DEAD_LETTER_BUCKET");
     private static final String NAMESPACE = System.getenv("NAMESPACE");
-    private static final boolean ENABLE_DETAILED_METRICS = Boolean.valueOf(getEnv("ENABLE_DETAILED_METRICS", "false"));
+    private static final boolean ENABLE_DETAILED_METRICS = Boolean.valueOf(Utils.getEnv("ENABLE_DETAILED_METRICS", "false"));
     private static final String SNS_ERROR_TOPIC_ARN = System.getenv("SNS_ERROR_TOPIC_ARN");
     private static final Region REGION = Region.of(System.getenv(SdkSystemSetting.AWS_REGION.environmentVariable()));
     private static final Logger logger = LoggerFactory.getLogger(App.class);
 
-    private static final int CONTENT_TYPE_CACHE_TTL_MINUTES=Integer.valueOf(getEnv("CONTENT_TYPE_CACHE_TTL_MINUTES", "1"));
-    private static final int DATA_PROCESSOR_CACHE_TTL_MINUTES=Integer.valueOf(getEnv("DATA_PROCESSOR_CACHE_TTL_MINUTES", "15"));
 
-    private final MetricsLogger metrics = new MetricsLogger()
-        .setNamespace((NAMESPACE != null && !NAMESPACE.isBlank() ? NAMESPACE+"/" : "") + "Daffodil");
-
-    private final S3AsyncClient s3Client= S3AsyncClient.crtBuilder()
-        .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
-        .region(REGION)
-        .build();
-
-    private final SnsClient snsClient = SnsClient.builder()
-        .region(REGION)
-        .build();
-
-    private final org.apache.daffodil.japi.Compiler c = Daffodil.compiler();
     private final Pattern AMPERSAND = Pattern.compile("&");
-    private final Yaml yaml = new Yaml();
     private final Encoder b64Encoder = Base64.getEncoder();
     private final Decoder b64Decoder = Base64.getDecoder();
+
+    private final MetricsLogger metrics;
+    private final S3AsyncClient s3Client;
+    private final SnsClient snsClient;
+    private final DataProcessorRepo dataProcessorRepo;
+    private final ContentTypeSchemaMap contentTypeSchemaMap;
+
+    public App() {
+        this(
+            S3AsyncClient.crtBuilder()
+                .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
+                .region(REGION)
+                .build(),
+            SnsClient.builder()
+                .region(REGION)
+                .build(),
+            new MetricsLogger()
+                .setNamespace((NAMESPACE != null && !NAMESPACE.isBlank() ? NAMESPACE+"/" : "") + "Daffodil")            
+        );
+    }
+
+    public App(
+        S3AsyncClient s3Client,
+        SnsClient snsClient,
+        MetricsLogger metrics
+    ) {
+        this(
+            s3Client,
+            snsClient,
+            metrics,
+            new CachedContentTypeSchemaMap(
+                new CaseInsensitiveContentTypeSchemaMap(
+                    new S3ContentTypeSchemaMap(s3Client)
+                )
+            )
+        );
+    }
+
+    public App(
+        S3AsyncClient s3Client,
+        SnsClient snsClient,
+        MetricsLogger metrics,
+        ContentTypeSchemaMap contentTypeSchemaMap
+    ) {
+        this(
+            s3Client,
+            snsClient,
+            metrics,
+            contentTypeSchemaMap,
+            new CachedDataProcessorRepo(
+                new S3DataProcessorRepo(s3Client, contentTypeSchemaMap)
+            )
+        );
+    }
+
+    public App(
+        S3AsyncClient s3Client,
+        SnsClient snsClient,
+        MetricsLogger metrics,
+        ContentTypeSchemaMap contentTypeSchemaMap,
+        DataProcessorRepo dataProcessorRepo
+    ) {
+        this.s3Client = s3Client;
+        this.snsClient = snsClient;
+        this.metrics = metrics;
+        this.contentTypeSchemaMap = contentTypeSchemaMap;
+        this.dataProcessorRepo = dataProcessorRepo;
+    }
     
-    // Loading cache that evicts after a minute to retrieve the content-type mapping from s3
-    @SuppressWarnings("unchecked")
-    private final LoadingCache<String, Map<String, Object> > contentTypeMapCache = Caffeine.newBuilder()
-        .maximumSize(1)
-        .expireAfterWrite(Duration.ofMinutes(CONTENT_TYPE_CACHE_TTL_MINUTES))
-        .build(bucket -> {
-            String contentTypesFile = getEnv("CONTENT_TYPES_FILE", "content-types.yaml");
-            try {
-                return s3Client.getObject(req -> req.bucket(bucket).key(contentTypesFile),
-                            AsyncResponseTransformer.toBlockingInputStream())
-                    .thenApply(in -> (Map<String, Object>) yaml.load(in)).join();
-            } catch(Exception e) {
-                logger.warn("Could not load contentTypes map in cache, returning empty map: " + e.getLocalizedMessage());
-                return new HashMap<>();
-            }
-        });
-    // Loading cache that refreshes after 15 minutes (which means at 15 minutes you'll git the
-    // cached value, but it will refresh in the background) for data processors.
-    private final LoadingCache<String, CompletableFuture<DataProcessor>> dataProcessorCache = Caffeine.newBuilder()
-        .maximumSize(100)
-        .refreshAfterWrite(Duration.ofMinutes(DATA_PROCESSOR_CACHE_TTL_MINUTES))
-        .build(contentType -> getDataProcessor(contentType).thenApply(dp -> {
-            if(dp == null) {
-                throw new RuntimeException("Could not find data processor for Content-Type: " + contentType);
-            }
-            return dp;
-        }));
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
@@ -265,22 +281,24 @@ public class App implements RequestHandler<S3Event, Void> {
     }
 
     /**
+     * Parses a file into an infoset using DFDL DataProcessor, mapped by the S3 key.
      * 
-     * @param s3Bucket
-     * @param s3Key
-     * @return
+     * Uses multi-threading to maximize performance
+     * 
+     * @param s3Bucket The s3 Bucket of the dfdl infoset to unparse
+     * @param s3Key The s3 Key of the dfdl infoset to unparse
+     * @return CompletableFuture of Void, indicating only when this has finished or if there was
+     * an error
      */
     protected CompletableFuture<Void> parse(String s3Bucket, String s3Key) {
-        Matcher m = CONTENT_TYPE.matcher(s3Key);
-        if(!m.matches()) {
+        final String contentType = contentTypeSchemaMap.getContentTypeFromPath(s3Key);
+        if(contentType == null) {
             metrics.putProperty("ErrorType", "ContentType Mapping");
-            return CompletableFuture.failedFuture(new RuntimeException("S3 key " + s3Key + " does not match the content type pattern"));
+            return CompletableFuture.failedFuture(new RuntimeException("S3 key " + s3Key + " does not contain a valid content type"));
         }
-        final String contentType = m.group(1);
-        metrics.putDimensions(DimensionSet.of("By ContentType", contentType));
-
+       
         // DataProcessor future
-        CompletableFuture<DataProcessor> dpFuture = dataProcessorCache.get(contentType);
+        CompletableFuture<DataProcessor> dpFuture = dataProcessorRepo.get(contentType);
 
         // retrieve s3 object head to create tags
         CompletableFuture<Tag> tagFuture = s3Client.headObject(HeadObjectRequest.builder().bucket(s3Bucket).key(s3Key).build())
@@ -339,16 +357,25 @@ public class App implements RequestHandler<S3Event, Void> {
     }
 
     /**
+     * Unparses an infoset back to the original file by retrieving the s3 object tag
+     * "OriginalContentTypeAndETag" and using the content type to map to which dfdl data parser to
+     * use.
      * 
-     * @param s3Bucket
-     * @param s3Key
-     * @return
+     * Uses multi-threading (CompletableFutures) to maximize performance.
+     * 
+     * @param s3Bucket The s3 Bucket of the dfdl infoset to unparse
+     * @param s3Key The s3 Key of the dfdl infoset to unparse
+     * @return CompletableFuture of Void, indicating only when this has finished or if there was
+     * an error
      */
     protected CompletableFuture<Void> unparse(String s3Bucket, String s3Key) {
+        // Retrieves the s3 object tags
         CompletableFuture<List<Tag>>  tagSetFuture =
             s3Client.getObjectTagging(r -> r.bucket(s3Bucket).key(s3Key))
             .thenApply(tags -> tags.tagSet());
-        
+
+        // When the s3 object tags have been retrieved from s3, base64 decodes the
+        // OriginalContentTypeAndETag and create a Map from that.
         CompletableFuture<Map<String, String>> originalContentTypeAndETag =
             tagSetFuture.thenApply(tagSet -> {
                 String originalValues = tagSet.stream()
@@ -366,29 +393,34 @@ public class App implements RequestHandler<S3Event, Void> {
                 return values;
             });
         
+        // After the OriginalContentTypeAndETag has been converted to a Map, get the original
+        // ContentType. If the ContentType doesn't exist in the tag, then attempt to derive the
+        // ContentType mapping from the object's key.
         CompletableFuture<DataProcessor> dpFuture = originalContentTypeAndETag.thenCompose(tagMap -> {
             String contentType = tagMap.get("ContentType");
             if(contentType == null) {
-                Matcher m = CONTENT_TYPE.matcher(s3Key);
-                if(!m.matches()) {
+                contentType = contentTypeSchemaMap.getContentTypeFromPath(s3Key);
+                if(contentType == null) {
                     metrics.putProperty("ErrorType", "ContentType Matching");
-                    throw new RuntimeException(s3Key + " neither contain ContentType in OriginalContentTypeAndETag tag nor does the key match content type pattern");
+                    throw new RuntimeException(s3Key + " neither contains ContentType in OriginalContentTypeAndETag tag nor does the s3 key contain a valid content type");
                 }
-                contentType = m.group(1);
             }
             logger.info("content-type: " + contentType);
             metrics.putDimensions(DimensionSet.of("ContentType", contentType));
 
-            return dataProcessorCache.get(contentType);
+            return dataProcessorRepo.get(contentType);
         });
 
+        // Retrieves the DFDL infoset from S3 as an InputStream
         CompletableFuture<ResponseInputStream<GetObjectResponse>> inFuture = s3Client.getObject(req -> req.bucket(s3Bucket).key(s3Key), 
             AsyncResponseTransformer.toBlockingInputStream());
 
+        // Waits for all the above completable futures to finish, then creates an OutputStream
+        // for the out file, and while stream-reading the input file, unparses the object and
+        // stream-writes to the output file. This keeps memory overhead to a minimum for large files.
         CompletableFuture<?>[] allFutures = new CompletableFuture[]{
             dpFuture, tagSetFuture, inFuture, originalContentTypeAndETag
         };
-
         CompletableFuture<Void> allWithFailFast =  CompletableFuture.allOf(allFutures)
         .thenAccept(ignoreVoid -> {
             logger.info("Unparsing...");
@@ -414,7 +446,10 @@ public class App implements RequestHandler<S3Event, Void> {
                 }
             } : null;
 
-            try (ResponseInputStream<GetObjectResponse> in = inFuture.join(); OutputStream out = new S3OutputStream(s3Client, System.getenv("OUTPUT_BUCKET"), outputKey, null, tags, validator)) {
+            String outputBucket = System.getenv("OUTPUT_BUCKET");
+            // Try-with-resource, will automatically close these streams after the try/catch has
+            // completed
+            try (ResponseInputStream<GetObjectResponse> in = inFuture.join(); OutputStream out = new S3OutputStream(s3Client, outputBucket, outputKey, null, tags, validator)) {
                 long initialized = new Date().getTime();
                 UnparseResult res = dp.unparse(new XMLTextInfosetInputter(in), java.nio.channels.Channels.newChannel(out));
                 if(res.isError()) {
@@ -429,7 +464,7 @@ public class App implements RequestHandler<S3Event, Void> {
                     .putProperty("Action", "Unparse")
                     .putMetric("Latency", finished - initialized, Unit.MILLISECONDS);
             } catch(Exception e) {
-                s3Client.deleteObject(DeleteObjectRequest.builder().bucket(System.getenv("OUTPUT_BUCKET")).key(outputKey).build());
+                s3Client.deleteObject(DeleteObjectRequest.builder().bucket(outputBucket).key(outputKey).build());
                 metrics.putProperty("ErrorType", "Unparsing");
                 throw new RuntimeException(e);
             }
@@ -441,73 +476,5 @@ public class App implements RequestHandler<S3Event, Void> {
                 return null;
             }));
         return allWithFailFast;
-    }
-
-    private CompletableFuture<DataProcessor> getDataProcessor(String contentType) {
-        final String schemaBucketName = System.getenv("SCHEMA_BUCKET");
-        Object schemaFileObject = contentTypeMapCache.get(schemaBucketName).get(contentType);
-        if(schemaFileObject == null) {
-            throw new RuntimeException("No schema file found for content-type " + contentType);
-        }
-        String schemaFile = String.valueOf(schemaFileObject);
-
-        return s3Client.getObject(req -> req.bucket(schemaBucketName).key(schemaFile+".dp"), 
-            AsyncResponseTransformer.toBlockingInputStream())
-        .thenApply(bis -> {
-            try(InputStream in = bis) {
-                return c.reload(Channels.newChannel(in));
-            } catch (InvalidParserException | IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).exceptionally(e -> {
-            logger.warn("Couldn't get precompiled schema " + schemaFile+".dp, will attempt to compile schema");
-            try {
-                File tmp = File.createTempFile(schemaFile, null);
-                tmp.deleteOnExit();
-
-                return s3Client.getObject(req -> req.bucket(schemaBucketName).key(schemaFile), tmp.toPath())
-                .thenApply(r -> {
-                    try {
-                        return getDataProcessor(tmp.toURI());
-                    } catch (IOException e1) {
-                        throw new RuntimeException(e1);
-                    }
-                }).join();
-            } catch(IOException e1) {
-                throw new RuntimeException(e1);
-            }
-        });
-        
-    }
-
-    private DataProcessor getDataProcessor(URI schemaFileURL) throws IOException {
-        logger.info("compiling source");
-        ProcessorFactory pf = c.compileSource(schemaFileURL);
-        logger.info("compiled error: " + pf.isError());
-        if (pf.isError()) {
-            // didn't compile schema. Must be diagnostic of some sort. 
-            List<Diagnostic> diags = pf.getDiagnostics();
-            for (Diagnostic d : diags) {
-                logger.error(d.getSomeMessage());
-            }
-            return null;
-        }
-        logger.info("gettind data processor");
-        DataProcessor dp = pf.onPath("/");
-        logger.info("data processor error: " + dp.isError());
-        if (dp.isError()) {
-            // didn't compile schema. Must be diagnostic of some sort.
-            List<Diagnostic> diags = dp.getDiagnostics();
-            for (Diagnostic d : diags) {
-                logger.error(d.getSomeMessage());
-            }
-            return null;
-        }
-        return dp;
-    }
-
-    private static final String getEnv(String key, String defaultValue) {
-        String value = System.getenv(key);
-        return value != null && !value.isEmpty() ? value : defaultValue;
     }
 }
