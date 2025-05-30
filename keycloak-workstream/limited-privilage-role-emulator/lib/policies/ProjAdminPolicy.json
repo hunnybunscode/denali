@@ -2,46 +2,55 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Effect": "Allow",
       "Action": [
         "acm:*",
         "acm-pca:*",
         "apigateway:*",
         "application-autoscaling:*",
+        "artifact:Get*",
         "autoscaling:*",
         "aws-marketplace:View*",
         "aws-portal:View*",
         "budgets:ViewBudget",
+        "clouddirectory:*",
         "cloudformation:*",
         "cloudhsm:*",
+        "cloudshell:*",
         "cloudtrail:*",
         "cloudwatch:*",
         "codedeploy:*",
         "comprehend:*",
         "config:*",
         "datapipeline:*",
-        "diode:CreateTransfer",
+        "datasync:*",
+        "detective:*",
         "diode:Describe*",
         "diode:Get*",
         "diode:List*",
         "directconnect:Describe*",
+        "directconnect:List*",
+        "dlm:*",
         "dms:*",
         "ds:*",
         "dynamodb:*",
+        "ec2:ActivateLicense",
+        "ec2:AcceptTransitGatewayVpcAttachment",
+        "ec2:AcceptTransitGatewayPeeringAttachment",
         "ec2:AllocateAddress",
         "ec2:AssignPrivateIpAddresses",
         "ec2:AssociateAddress",
         "ec2:AssociateDhcpOptions",
         "ec2:AssociateIamInstanceProfile",
+        "ec2:AssociateSubnet",
         "ec2:AttachNetworkInterface",
         "ec2:AttachVolume",
-        "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroup*",
         "ec2:BundleInstance",
-        "ec2:CancelBundleTask",
-        "ec2:CancelConversionTask",
-        "ec2:CancelExportTask",
-        "ec2:CancelImportTask",
+        "ec2:Cancel*Task",
+        "ec2:CancelSpotFleetRequests",
         "ec2:CancelSpotInstanceRequests",
+        "ec2:*ClientVpn*",
         "ec2:ConfirmProductInstance",
         "ec2:CopyImage",
         "ec2:CopySnapshot",
@@ -59,7 +68,10 @@
         "ec2:CreateSpotDatafeedSubscription",
         "ec2:CreateSubnet",
         "ec2:CreateTags",
+        "ec2:CreateTransitGatewayVpcAttachment",
         "ec2:CreateVolume",
+        "ec2:CreateVpcEndpoint",
+        "ec2:DeactivateLicense",
         "ec2:DeleteDhcpOptions",
         "ec2:DeleteKeyPair",
         "ec2:DeleteLaunchTemplate",
@@ -71,7 +83,9 @@
         "ec2:DeleteSpotDatafeedSubscription",
         "ec2:DeleteSubnet",
         "ec2:DeleteTags",
+        "ec2:DeleteTransitGatewayVpcAttachment",
         "ec2:DeleteVolume",
+        "ec2:DeleteVpcEndpoints",
         "ec2:DeregisterImage",
         "ec2:Describe*",
         "ec2:DetachNetworkInterface",
@@ -79,44 +93,49 @@
         "ec2:DisassociateAddress",
         "ec2:DisassociateIamInstanceProfile",
         "ec2:EnableEbsEncryptionByDefault",
+        "ec2:EnableTransitGatewayRouteTablePropagation",
+        "ec2:DisableTransitGatewayRouteTablePropagation",
         "ec2:EnableVolumeIO",
+        "ec2:ExportImage",
         "ec2:Get*",
         "ec2:ImportImage",
         "ec2:ImportInstance",
         "ec2:ImportKeyPair",
         "ec2:ImportSnapshot*",
         "ec2:ImportVolume",
+        "ec2:ModifyDefaultCreditSpecification",
         "ec2:ModifyImageAttribute",
         "ec2:ModifyInstanceAttribute",
+        "ec2:ModifyInstanceCreditSpecification",
         "ec2:ModifyLaunchTemplate",
         "ec2:ModifyNetworkInterfaceAttribute",
         "ec2:ModifySnapshotAttribute",
+        "ec2:ModifySpotFleetRequest",
         "ec2:ModifySubnetAttribute",
+        "ec2:ModifyTransitGatewayVpcAttachment",
         "ec2:ModifyVolume*",
+        "ec2:ModifyVpcEndpoint",
         "ec2:MonitorInstances",
         "ec2:RebootInstances",
         "ec2:RegisterImage",
         "ec2:ReleaseAddress",
         "ec2:ReplaceIamInstanceProfileAssociation",
         "ec2:ReportInstanceStatus",
+        "ec2:RequestSpotFleet",
         "ec2:RequestSpotInstances",
         "ec2:ResetImageAttribute",
         "ec2:ResetInstanceAttribute",
         "ec2:ResetNetworkInterfaceAttribute",
         "ec2:ResetSnapshotAttribute",
-        "ec2:RevokeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroup*",
         "ec2:RunInstances",
         "ec2:StartInstances",
         "ec2:StopInstances",
         "ec2:TerminateInstances",
         "ec2:UnassignPrivateIpAddresses",
         "ec2:UnmonitorInstances",
-        "ec2:EnableTransitGatewayRouteTablePropagation",
-        "ec2:DisableTransitGatewayRouteTablePropagation",
-        "ec2:CreateVpcEndpoint",
-        "ec2:ModifyVpcEndpoint",
-        "ec2:DeleteVpcEndpoints",
+        "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
+        "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
         "ec2messages:*",
         "ecr:*",
         "ecs:*",
@@ -127,34 +146,43 @@
         "elasticmapreduce:*",
         "es:*",
         "events:*",
+        "execute-api:Invoke",
+        "execute-api:ManageConnections",
         "firehose:*",
         "fsx:*",
         "glacier:*",
+        "guardduty:*",
         "health:Describe*",
+        "iam:*Certificate",
         "iam:CreateServiceLinkedRole",
-        "iam:DeleteServerCertificate",
-        "iam:DeleteSigningCertificate",
         "iam:GenerateCredentialReport",
         "iam:Get*",
         "iam:List*",
-        "iam:UpdateServerCertificate",
-        "iam:UpdateSigningCertificate",
-        "iam:UploadServerCertificate",
-        "iam:UploadSigningCertificate",
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:UntagOpenIDConnectProvider",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider",
+        "iam:CreateOpenIDConnectProvider",
+        "imagebuilder:*",
+        "kafka:*",
+        "kafka-cluster:*",
         "kinesis:*",
         "kms:*",
         "lambda:*",
         "license-manager:*",
         "logs:*",
-        "medialive:*",
-        "mediapackage:*",
         "ram:*",
         "rds:*",
         "redshift:*",
         "route53:*",
+        "route53domains:List*",
+        "route53resolver:*",
         "s3:*",
-        "sagemaker:*",
-        "snowball:*",
+        "s3-object-lambda:*",
+        "secretsmanager:*",
+        "securityhub:*",
         "sns:*",
         "sqs:*",
         "ssm:*",
@@ -164,118 +192,63 @@
         "sts:GetCallerIdentity",
         "support:*",
         "swf:*",
-        "transcribe:*",
         "translate:*",
         "trustedadvisor:*",
-        "workspaces:*",
-        "cloudshell:*",
-        "ec2:AcceptTransitGatewayVpcAttachment",
-        "ec2:AcceptTransitGatewayPeeringAttachment",
-        "ec2:CreateTransitGatewayVpcAttachment",
-        "ec2:ModifyTransitGatewayVpcAttachment",
-        "ec2:DeleteTransitGatewayVpcAttachment",
-        "acm:*",
-        "kafka:*",
         "wafv2:*",
-        "secretsmanager:*",
-        "securityhub:*"
+        "workspaces:*"
       ],
-      "Resource": "*",
-      "Effect": "Allow",
-      "Sid": "ProjAdminGenAccess"
+      "Resource": "*"
     },
     {
+      "Effect": "Allow",
+      "Action": ["sts:*", "iam:TagInstanceProfile", "iam:UntagInstanceProfile"],
+      "Resource": [
+        "arn:{{partition}}:iam::{{account}}:instance-profile/AFC2S*",
+        "arn:{{partition}}:iam::{{account}}:role/AFC2S*",
+        "arn:{{partition}}:iam::{{account}}:instance-profile/*"
+      ],
+      "Condition": {
+        "StringNotEquals": {
+          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
       "Action": ["iam:PassRole"],
       "Resource": [
+        "arn:{{partition}}:iam::*:role/AFC2S*",
         "arn:{{partition}}:iam::*:role/INSTANCE*",
         "arn:{{partition}}:iam::*:role/LAMBDA*",
+        "arn:{{partition}}:iam::*:role/service-role/*",
         "arn:{{partition}}:iam::*:role/snowball*",
-        "arn:{{partition}}:iam::*:role/AFC2S*",
         "arn:{{partition}}:iam::*:role/workspaces*",
-        "arn:{{partition}}:iam::*:role/service-role/*"
-      ],
-      "Effect": "Allow",
-      "Sid": "ProjAdminGenPassRole"
+        "arn:{{partition}}:iam::*:role/EMRSERVICE"
+      ]
     },
     {
-      "Action": ["iam:PassRole"],
-      "Resource": ["arn:{{partition}}:iam::*:role/EMRSERVICE"],
-      "Effect": "Allow",
-      "Sid": "ProjAdminEMRPassRole"
-    },
-    {
-      "Action": ["elasticache:Purchase*", "rds:Purchase*", "redshift:Purchase*"],
-      "Resource": "*",
       "Effect": "Deny",
-      "Sid": "ProjAdminKMSECPurchaseDeny"
+      "Action": ["elasticache:Purchase*", "rds:Purchase*", "redshift:Purchase*", "ecs:DeleteAccountSetting"],
+      "Resource": "*"
     },
     {
-      "Action": ["ecs:DeleteAccountSetting"],
-      "Resource": "*",
       "Effect": "Deny",
-      "Sid": "ProjAdminKMSGrantDeny"
+      "Action": ["events:*", "s3:*"],
+      "Resource": [
+        "arn:{{partition}}:events:*:{{account}}:event-bus/amps*",
+        "arn:{{partition}}:events:*:{{account}}:rule/amps*",
+        "arn:{{partition}}:s3:::amps-*"
+      ]
     },
     {
-      "Action": ["iam:CreatePolicy"],
+      "Effect": "Deny",
+      "NotAction": ["iam:*", "route53:*"],
       "Resource": "*",
-      "Effect": "Allow",
-      "Sid": "ProjAdminCreateAnyPolicy"
-    },
-    {
-      "Action": ["iam:AttachRolePolicy", "iam:CreateServiceLinkedRole", "iam:PutRolePolicy"],
-      "Resource": ["arn:{{partition}}:iam::{{account}}:role/service-role/*"],
-      "Effect": "Allow",
-      "Sid": "ProjAdminCreateServiceRoles"
-    },
-    {
-      "Action": ["iam:DeleteServiceLinkedRole", "iam:UpdateRoleDescription", "sts:*"],
-      "Resource": ["arn:{{partition}}:iam::{{account}}:role/AFC2S*"],
-      "Effect": "Allow",
-      "Sid": "AFC2SRoles"
-    },
-    {
-      "Condition": {
-        "StringNotEquals": {
-          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
-        }
-      },
-      "Action": ["iam:TagPolicy", "iam:UntagPolicy"],
-      "Resource": ["arn:{{partition}}:iam::{{account}}:policy/AFC2S*"],
-      "Effect": "Allow",
-      "Sid": "AFC2STaggingPolicies"
-    },
-    {
-      "Condition": {
-        "StringNotEquals": {
-          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
-        }
-      },
-      "Action": ["iam:TagInstanceProfile", "iam:UntagInstanceProfile"],
-      "Resource": ["arn:{{partition}}:iam::{{account}}:instance-profile/*"],
-      "Effect": "Allow",
-      "Sid": "AFC2STaggingProfiles"
-    },
-    {
-      "Condition": {
-        "StringLike": {
-          "iam:PermissionsBoundary": "arn:{{partition}}:iam::{{account}}:policy/ProjAdminPolicy"
-        }
-      },
-      "Action": ["iam:AttachRolePolicy"],
-      "Resource": ["arn:{{partition}}:iam::aws:policy/*"],
-      "Effect": "Allow",
-      "Sid": "AllowAttachManagedPolicies"
-    },
-    {
       "Condition": {
         "StringNotEquals": {
           "aws:RequestedRegion": "{{region}}"
         }
-      },
-      "Resource": "*",
-      "Effect": "Deny",
-      "NotAction": ["iam:*", "route53:*"],
-      "Sid": "GovCloudWestEnforce"
+      }
     }
   ]
 }
