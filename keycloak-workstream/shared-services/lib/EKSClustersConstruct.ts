@@ -445,6 +445,7 @@ export class EKSClustersConstruct extends Construct {
       version: clusterVersion ? eks.KubernetesVersion.of(clusterVersion) : eks.KubernetesVersion.V1_30,
       endpointAccess: isPrivateCluster ? eks.EndpointAccess.PRIVATE : eks.EndpointAccess.PUBLIC_AND_PRIVATE,
       clusterName,
+      isolatedCluster: isPrivateCluster ?? false,
       vpcSubnets: [clusterSubnetFilter],
       mastersRole: clusterMasterRole,
       role: clusterRole,
