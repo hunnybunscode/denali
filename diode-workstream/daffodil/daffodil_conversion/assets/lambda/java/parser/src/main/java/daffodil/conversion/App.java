@@ -7,8 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Base64.Decoder;
 import java.util.Base64.Encoder;
 import java.util.concurrent.CompletableFuture;
@@ -378,11 +380,20 @@ public class App implements RequestHandler<S3Event, Void> {
         // OriginalContentTypeAndETag and create a Map from that.
         CompletableFuture<Map<String, String>> originalContentTypeAndETag =
             tagSetFuture.thenApply(tagSet -> {
-                String originalValues = tagSet.stream()
+                Optional<String> originalValuesOptional = tagSet.stream()
                     .filter(t -> t.key().equalsIgnoreCase("OriginalContentTypeAndETag"))
                     .map(t -> new String(b64Decoder.decode(t.value())))
-                    .findFirst()
-                    .get();
+                    .findFirst();
+
+                if(!originalValuesOptional.isPresent()) {
+                    logger.warn(String.format(
+                        "No 'OriginalContentTypeAndETag' tag found for object %s, " +
+                        "attempting to map unparser from key",
+                        s3Key));
+                    return new HashMap<>();
+                }
+
+                String originalValues = originalValuesOptional.get();
         
                 Map<String, String> values = AMPERSAND.splitAsStream(originalValues)
                     .map(s -> s.split("="))
