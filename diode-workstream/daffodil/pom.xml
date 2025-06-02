@@ -16,29 +16,6 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.4.1</version>
-        <executions>
-          <execution>
-            <id>enforce-versions</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <configuration>
-              <rules>
-                <requireEnvironmentVariable>
-                  <message>Python virtual environment is not set up, please follow https://docs.python.org/3/library/venv.html to set up a virtual environment for python</message>
-                  <variableName>VIRTUAL_ENV</variableName>
-                </requireEnvironmentVariable>
-              </rules>
-              <fail>true</fail>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
         <executions>
           <execution>
@@ -53,44 +30,6 @@
                 <descriptor>assembly.xml</descriptor>
               </descriptors>
             </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <version>3.1.0</version>
-        <executions>
-          <execution>
-            <id>install requirements</id>
-            <phase>initialize</phase>
-            <configuration>
-              <target>
-                <exec executable="pip3" failonerror="false">
-                  <arg
-                    line="install -r requirements.txt" />
-                </exec>
-              </target>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-          <execution>
-            <id>generate daffodil template</id>
-            <phase>generate-sources</phase>
-            <configuration>
-              <target>
-                <exec executable="cdk" failonerror="true"
-                  output="${project.build.directory}${file.separator}daffodil.yaml"
-                  error="${project.build.directory}${file.separator}daffodil.err">
-                  <arg
-                    line="synth --require-approval never --no-version-reporting --path-metadata false --app 'python3 app.py' DaffodilConversionStack" />
-                </exec>
-              </target>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
           </execution>
         </executions>
       </plugin>
