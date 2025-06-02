@@ -20,7 +20,7 @@ export class BootstrapStack extends Stack {
   constructor(scope: Construct, id: string, props: BootstrapStackProps) {
     super(scope, id, props);
 
-    this.createInspector();
+    // this.createInspector();
 
     const vpc = new ec2.Vpc(this, "vpc", {
       vpcName: `vpc-${this.node.id}`,
@@ -191,7 +191,9 @@ export class BootstrapStack extends Stack {
       ec2.InterfaceVpcEndpointAwsService.EKS,
       ec2.InterfaceVpcEndpointAwsService.EKS_AUTH,
       ec2.InterfaceVpcEndpointAwsService.AUTOSCALING,
-      ec2.InterfaceVpcEndpointAwsService.RDS
+      ec2.InterfaceVpcEndpointAwsService.LAMBDA,
+      ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
+      ec2.InterfaceVpcEndpointAwsService.RDS,
     ];
 
     vpcInterfaceEndpointServices.forEach((service) => {
