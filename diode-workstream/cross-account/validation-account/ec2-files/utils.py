@@ -404,9 +404,14 @@ def extract_zipfile(zipfile_path: str, extract_dir: str):
     """
     logger.info(f"Extracting {zipfile_path} to {extract_dir}")
 
-    with zipfile.ZipFile(zipfile_path) as zip_file:
-        zip_file.extractall(extract_dir)
-    logger.info("Successfully extracted the zip file")
+    try:
+        with zipfile.ZipFile(zipfile_path) as zip_file:
+            zip_file.extractall(extract_dir)
+        logger.info("Successfully extracted the zip file")
+        return True
+    except zipfile.BadZipFile:
+        logger.exception(f"{zipfile_path} is not a zip file")
+        return False
 
 
 def delete_av_scan_message(receipt_handle: str):
