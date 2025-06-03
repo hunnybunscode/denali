@@ -87,7 +87,12 @@ def _validate_zip_file(file_path: str, depth=0):
         return False, error_tags
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        extract_zipfile(file_path, tmpdir)
+        if not extract_zipfile(file_path, tmpdir):
+            error_tags = create_tags_for_file_validation(
+                "InvalidZipFile",
+                "zip",
+            )
+            return False, error_tags
 
         file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]
         for _file_path in file_paths:
