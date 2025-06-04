@@ -995,6 +995,7 @@ Resources:
                   - !GetAtt ImageBuilderImagePipeline.Arn
                   - !GetAtt InfraConfig.Arn
                   - !GetAtt ImageBuilderDistroConfig.Arn
+                  - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/*
                   - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:component/*
                   - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:image-recipe/*
                   - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:distribution-configuration/*
