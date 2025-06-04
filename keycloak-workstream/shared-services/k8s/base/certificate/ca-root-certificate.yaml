@@ -5,7 +5,7 @@ metadata:
   namespace: cert-manager
 spec:
   isCA: true
-  commonName: sentinel-dev-ca-root
+  commonName: deployment-dev-ca-root
   secretName: root-secret
   privateKey:
     algorithm: RSA

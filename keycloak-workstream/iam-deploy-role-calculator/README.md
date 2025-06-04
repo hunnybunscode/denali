@@ -32,7 +32,7 @@ If `action.txt.` file exist in the workspace, it will update the IAM role `cloud
 2. Use the powershell script under a powershell terminal using your AWS console programmatic access credentials
     Sample command
    ```pwsh
-     ./generateIAMAction.ps1 -TemplateFile /Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json
+     ./generateIAMAction.ps1 -TemplateFile /Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-deployment-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json
     ```
 
 3. Read the output text `action.txt` for the list of IAM Actions related to target role
@@ -46,8 +46,8 @@ Powershell script usage for `generateIAMAction.ps1`
     Create a text file action.txt from parsing Cloudformation template file
 
     Sample command:
-    ./generateIAMAction.ps1 -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path ../../jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out | Select-Object -ExpandProperty FullName)
-    ./generateIAMAction.ps1 -TemplateFile /Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-sentinel-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json
+    ./generateIAMAction.ps1 -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path ../../jktruong+team-deployment-taser-SharedServices-Admin.us-east-1.cdk.out | Select-Object -ExpandProperty FullName)
+    ./generateIAMAction.ps1 -TemplateFile /Users/jktruong/workspace/engagements/c3e/bootstrap/jktruong+team-deployment-taser-SharedServices-Admin.us-east-1.cdk.out/SapDomainServicesStack.template.json,cdk.out/BootstrapStack.template.json
 
 .DESCRIPTION
     This script generate an action.txt text file containing estimated needed resource actions from a Cloudformation Stack Template (JSON) to assist in the creation of IAM Policy.
