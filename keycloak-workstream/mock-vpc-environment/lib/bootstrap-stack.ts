@@ -14,13 +14,14 @@ export interface BootstrapStackProps extends StackProps {
   enableEndpoints: boolean;
   createBastion: boolean;
   createRoute53: boolean;
+  enableInspector: boolean;
 }
 
 export class BootstrapStack extends Stack {
   constructor(scope: Construct, id: string, props: BootstrapStackProps) {
     super(scope, id, props);
 
-    // this.createInspector();
+    if (props.enableInspector) this.createInspector();
 
     const vpc = new ec2.Vpc(this, "vpc", {
       vpcName: `vpc-${this.node.id}`,
@@ -179,22 +180,36 @@ export class BootstrapStack extends Stack {
 
     // List of VPC Interface Endpoints
     const vpcInterfaceEndpointServices = [
-      ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
-      ec2.InterfaceVpcEndpointAwsService.CLOUDFORMATION,
-      ec2.InterfaceVpcEndpointAwsService.SSM,
-      ec2.InterfaceVpcEndpointAwsService.EC2_MESSAGES,
-      ec2.InterfaceVpcEndpointAwsService.SSM_MESSAGES,
-      ec2.InterfaceVpcEndpointAwsService.ECR,
-      ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
-      ec2.InterfaceVpcEndpointAwsService.STS,
-      ec2.InterfaceVpcEndpointAwsService.EC2,
-      ec2.InterfaceVpcEndpointAwsService.EKS,
-      ec2.InterfaceVpcEndpointAwsService.EKS_AUTH,
-      ec2.InterfaceVpcEndpointAwsService.AUTOSCALING,
-      ec2.InterfaceVpcEndpointAwsService.LAMBDA,
       ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
+      ec2.InterfaceVpcEndpointAwsService.AUTOSCALING,
+      ec2.InterfaceVpcEndpointAwsService.CLOUDFORMATION,
+      ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
+      ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_MONITORING,
+      ec2.InterfaceVpcEndpointAwsService.EC2_MESSAGES,
+      ec2.InterfaceVpcEndpointAwsService.EC2,
+      ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
+      ec2.InterfaceVpcEndpointAwsService.ECR,
+      ec2.InterfaceVpcEndpointAwsService.EKS_AUTH,
+      ec2.InterfaceVpcEndpointAwsService.EKS,
+      ec2.InterfaceVpcEndpointAwsService.ELASTIC_LOAD_BALANCING,
+      ec2.InterfaceVpcEndpointAwsService.LAMBDA,
+      ec2.InterfaceVpcEndpointAwsService.SSM_MESSAGES,
+      ec2.InterfaceVpcEndpointAwsService.SSM,
+      ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS_SYNC,
+      ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS,
+      ec2.InterfaceVpcEndpointAwsService.STS,
+      // Extras
+      ec2.InterfaceVpcEndpointAwsService.ELASTIC_FILESYSTEM,
+      ec2.InterfaceVpcEndpointAwsService.IMAGE_BUILDER,
+      ec2.InterfaceVpcEndpointAwsService.KMS,
+      ec2.InterfaceVpcEndpointAwsService.RDS_DATA,
       ec2.InterfaceVpcEndpointAwsService.RDS,
+      ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      ec2.InterfaceVpcEndpointAwsService.XRAY,
     ];
+
+    if (this.region === "us-east-1" || this.region === "us-gov-west-1")
+      vpcInterfaceEndpointServices.push(ec2.InterfaceVpcEndpointAwsService.IAM);
 
     vpcInterfaceEndpointServices.forEach((service) => {
       vpc.addInterfaceEndpoint(`endpoint-${service.shortName}`, {

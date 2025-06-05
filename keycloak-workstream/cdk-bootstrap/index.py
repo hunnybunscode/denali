@@ -101,6 +101,10 @@ else:
 
             new_role_name = f"{iam_prefix}-{role_name}"
 
+            # Check if Permission Boundary ARN is defined
+            if iam_permission_boundary_arn is not None:
+                resource["Properties"]["PermissionsBoundary"] = iam_permission_boundary_arn
+
             # Check the length of the new role name is less than 64 characters
             if len(test_full_role_name) > 64:
                 logging.warning(f"Role Name {new_role_name} is greater than 64 characters")
@@ -131,19 +135,12 @@ with open("cdk.output.yaml", "w") as file:
     yaml.dump(bootstrap_data, file)
     logging.debug("cdk bootstrap yaml file written")
 
-# Using aws cli deploy the bootstrap yaml file with additional parameters Qualifier, InputPermissionsBoundary
-iam_permission_boundary_name = iam_permission_boundary_arn
 if iam_permission_boundary_arn is not None:
-    iam_permission_boundary_name = iam_permission_boundary_arn.split("/")[-1]
-else:
-    iam_permission_boundary_name = '""'
-
-logging.info(f"Permission Boundary Name: {iam_permission_boundary_name}")
-logging.info(f"Permission Boundary ARN: {iam_permission_boundary_arn}")
+    logging.info(f"Using Permission Boundary ARN: {iam_permission_boundary_arn}")
 
 logging.info("Deploying cdk bootstrap yaml file")
 
-command = f"aws cloudformation deploy --template-file cdk.output.yaml --stack-name CDKToolkit-Bootstrap-{environment_name} --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region {environment_region} --parameter-overrides InputPermissionsBoundary={iam_permission_boundary_name} Qualifier={environment_qualifier} --tags Environment={environment_name}"
+command = f"aws cloudformation deploy --template-file cdk.output.yaml --stack-name CDKToolkit-Bootstrap-{environment_name} --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region {environment_region} --parameter-overrides Qualifier={environment_qualifier} --tags Environment={environment_name}"
 logging.info(f"Command:\n  {command}")
 
 if environment_execute:

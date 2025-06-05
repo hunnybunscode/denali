@@ -3,7 +3,7 @@ import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
 import { BootstrapStack } from "../lib/bootstrap-stack";
 
-import { aws_iam as iam, aws_ec2 as ec2, Tags } from "aws-cdk-lib";
+import { Tags } from "aws-cdk-lib";
 
 const { env } = process;
 const app = new cdk.App();
@@ -23,6 +23,8 @@ for (const [key, value] of Object.entries(tags)) {
   });
 }
 
+const enableInspector = false;
+
 new BootstrapStack(app, "BootstrapStack", {
   env: {
     account: env!.CDK_DEFAULT_ACCOUNT,
@@ -31,4 +33,5 @@ new BootstrapStack(app, "BootstrapStack", {
   enableEndpoints: true,
   createBastion: false,
   createRoute53: false,
+  enableInspector,
 });
