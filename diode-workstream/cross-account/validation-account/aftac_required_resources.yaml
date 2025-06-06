@@ -48,7 +48,8 @@ Parameters:
 Conditions:
   IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
   IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
-  # IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
 
 Resources:
   DynamoDbVpcEndpoint:
@@ -108,6 +109,7 @@ Resources:
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
 
+  # Note: As of now, this is NOT supported in usibe1-az1
   SqsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -155,6 +157,7 @@ Resources:
 
   ImagebuilderVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Condition: IsLowSide
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
@@ -170,7 +173,13 @@ Resources:
       PrivateDnsEnabled: true
       SecurityGroupIds:
         - !GetAtt VpcEndpointSecurityGroup.GroupId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.autoscaling
+      ServiceName: !If
+        - IsLCK
+        - !Sub gov.sgov.sc2s.${AWS::Region}.autoscaling
+        - !If
+          - IsDCA
+          - !Sub gov.ic.c2s.${AWS::Region}.autoscaling
+          - !Sub com.amazonaws.${AWS::Region}.autoscaling
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId

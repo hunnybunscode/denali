@@ -320,6 +320,12 @@ Parameters:
     Description: Enter the number of days you want to keep objects in the ACCESS LOGGING Bucket.
     Default: 365
 
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
   LoggingStack:
     Type: AWS::CloudFormation::Stack
@@ -396,6 +402,7 @@ Resources:
 
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
+    Condition: IsLowSide
     DependsOn: PipelineStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
