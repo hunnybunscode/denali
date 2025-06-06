@@ -254,10 +254,6 @@ Resources:
                           echo "All required packages are already installed"
                       fi
 
-                      echo "Upgrading pip and installing Python packages..."
-                      python3.11 -m pip install pip --upgrade --no-cache-dir
-                      python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
-
                       partition=${AWS::Partition}
                       if [ "$partition" = "aws-iso-b" ]; then
                           echo "Installing AWS CLI v2..."
@@ -268,7 +264,30 @@ Resources:
                           rm -rf aws awscliv2.zip
                       fi
 
-                      echo "Downloading all required files from S3 bucket..."
+                      # All the required wheel files can be downloaded by running the following command:
+                      # python -m pip download --only-binary :all: --dest . --no-cache pip boto3 puremagic pyjwt
+
+                      echo "Upgrading pip and installing Python packages..."
+                      # Use wheel files in the high side
+                      if [ "$partition" = "aws-iso-b" ] || [ "$partition" = "aws-iso" ]; then
+                          mkdir wheel
+                          cd wheel
+
+                          echo "Downloading all the wheel files from ${EC2RequiredFilesBucket}/wheel"
+                          aws s3 cp s3://${EC2RequiredFilesBucket}/wheel . --recursive
+
+                          python3.11 -m pip install --no-cache-dir --upgrade pip*.whl
+                          rm -rf pip*.whl
+                          python3.11 -m pip install --no-cache-dir *.whl
+
+                          cd ..
+                          rm -rf wheel
+                      else
+                          python3.11 -m pip install pip --upgrade --no-cache-dir
+                          python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
+                      fi
+
+                      echo "Downloading all required files from ${EC2RequiredFilesBucket}/ec2-files"
                       aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
                       echo "Enabling CloudWatch Agent..."
