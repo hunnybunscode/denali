@@ -109,7 +109,7 @@ Parameters:
 
   EmailEndPoint:
     Type: String
-    Description: "The email address at which to receive notifications for ImageBuilder events"
+    Description: (Recommended) The email address at which to receive notifications for ImageBuilder events
     AllowedPattern: ^$|^\S+@\S+\.+\S+$
     ConstraintDescription: Must be left blank or a valid email address
 
@@ -197,6 +197,13 @@ Parameters:
     AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
     ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
+Conditions:
+  EmailEndpointProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
   BuildComponentPrepareImage:
     Type: AWS::ImageBuilder::Component
@@ -221,19 +228,18 @@ Resources:
                 action: ExecuteBash
                 inputs:
                   commands:
-                    - echo "Setting the script to exit on any error..."
-                    - set -e
-
-                    # Create a function to check if a package is installed
                     - |
+                      echo "Setting the script to exit on any error..."
+                      set -e
+
+                      # Create a function to check if a package is installed
                       is_installed() {
                           rpm -q "$1" >/dev/null 2>&1
                       }
 
-                    - echo "Gathering yum packages to install..."
-                    - PACKAGES="python3.11 python3.11-pip curl unzip"
-                    - PACKAGES_TO_INSTALL=""
-                    - |
+                      echo "Gathering yum packages to install..."
+                      PACKAGES="python3.11 python3.11-pip curl unzip"
+                      PACKAGES_TO_INSTALL=""
                       for package in $PACKAGES; do
                           if ! is_installed "$package"; then
                               PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL $package"
@@ -241,7 +247,6 @@ Resources:
                               echo "$package is already installed"
                           fi
                       done
-                    - |
                       if [ -n "$PACKAGES_TO_INSTALL" ]; then
                           echo "Installing packages:$PACKAGES_TO_INSTALL"
                           yum install -y $PACKAGES_TO_INSTALL
@@ -249,28 +254,38 @@ Resources:
                           echo "All required packages are already installed"
                       fi
 
-                    - echo "Upgrading pip and installing Python packages..."
-                    - python3.11 -m pip install pip --upgrade --no-cache-dir
-                    - python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
+                      echo "Upgrading pip and installing Python packages..."
+                      python3.11 -m pip install pip --upgrade --no-cache-dir
+                      python3.11 -m pip install boto3 puremagic pyjwt --no-cache-dir
 
-                    - echo "Downloading all required files from S3 bucket..."
-                    - aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
+                      partition=${AWS::Partition}
+                      if [ "$partition" = "aws-iso-b" ]; then
+                          echo "Installing AWS CLI v2..."
+                          curl -o awscliv2.zip https://aws-sdk-common-infra-lck-prod-deployment-bucket.s3.${AWS::Region}.{AWS::URLSuffix}/aws-cli-v2/linux/x86_64/awscli-exe-linux-x86_64.zip
+                          unzip awscliv2.zip
+                          ./aws/install
+                          aws --version
+                          rm -rf aws awscliv2.zip
+                      fi
 
-                    - echo "Enabling CloudWatch Agent..."
-                    - mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-                    - systemctl enable --now amazon-cloudwatch-agent
-                    - systemctl is-active --quiet amazon-cloudwatch-agent
+                      echo "Downloading all required files from S3 bucket..."
+                      aws s3 cp s3://${EC2RequiredFilesBucket}/ec2-files/ /usr/bin/validation-pipeline/ --recursive
 
-                    - echo "Enabling SQS Poller Service..."
-                    # Replaces the placeholder ("") with actual environment variables
-                    - sed -i 's/""/resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
-                    - mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
-                    - systemctl enable --now sqs_poller.service
-                    - systemctl is-active --quiet sqs_poller.service
+                      echo "Enabling CloudWatch Agent..."
+                      mv /usr/bin/validation-pipeline/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                      systemctl enable --now amazon-cloudwatch-agent
+                      systemctl is-active --quiet amazon-cloudwatch-agent
 
-                    # https://docs.aws.amazon.com/imagebuilder/latest/userguide/security-best-practices.html#post-build-cleanup
-                    - touch perform_cleanup
-                    - echo "SUCCESS"
+                      echo "Enabling SQS Poller Service..."
+                      # Replaces the placeholder ("") with actual environment variables
+                      sed -i 's/""/resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
+                      mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
+                      systemctl enable --now sqs_poller.service
+                      systemctl is-active --quiet sqs_poller.service
+
+                      # https://docs.aws.amazon.com/imagebuilder/latest/userguide/security-best-practices.html#post-build-cleanup
+                      touch perform_cleanup
+                      echo "SUCCESS"
 
   # ImageBuilderTestComponent:
   #   Type: AWS::ImageBuilder::Component
@@ -356,7 +371,10 @@ Resources:
 
       Components:
         - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
         - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
         - ComponentArn: !Ref BuildComponentPrepareImage
       # BlockDeviceMappings:
@@ -1439,6 +1457,7 @@ Resources:
 
   AsgInstanceRefreshNotificationTopicSubscription:
     Type: AWS::SNS::Subscription
+    Condition: EmailEndpointProvided
     Properties:
       TopicArn: !Ref AsgInstanceRefreshNotificationTopic
       Protocol: email

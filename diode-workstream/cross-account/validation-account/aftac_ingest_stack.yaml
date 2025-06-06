@@ -27,6 +27,12 @@ Parameters:
     Type: String
     Description: The S3 prefix list ID to use for the pipeline
 
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
   IngestKmsKey:
     Type: AWS::KMS::Key
@@ -525,6 +531,7 @@ Resources:
   ### WEB ACL RESOURCES
   IngestAPIWebACL:
     Type: AWS::WAFv2::WebACL
+    Condition: IsLowSide
     Properties:
       Description: WAF for API Gateway protection
       Scope: REGIONAL
@@ -587,6 +594,7 @@ Resources:
   # WAF Association with API Gateway stages
   WebACLAssociationAPI:
     Type: AWS::WAFv2::WebACLAssociation
+    Condition: IsLowSide
     DependsOn: FileUploaderDeploymentStageProd
     Properties:
       ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
@@ -595,6 +603,7 @@ Resources:
   # WAF Logging
   WAFLogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: IsLowSide
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -605,6 +614,7 @@ Resources:
 
   WAFLoggingConfiguration:
     Type: AWS::WAFv2::LoggingConfiguration
+    Condition: IsLowSide
     Properties:
       LogDestinationConfigs:
         - !GetAtt WAFLogGroup.Arn
@@ -613,6 +623,7 @@ Resources:
   # Cloudwatch Metric Filter
   MetricFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: IsLowSide
     Properties:
       FilterName: WAF Rule Action
       FilterPattern: '{ $.action = "*" }'
@@ -628,6 +639,7 @@ Resources:
 
   InsightsRuleClientIpAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
       RuleState: ENABLED
@@ -659,6 +671,7 @@ Resources:
 
   InsightsRuleClientIpBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
       RuleState: ENABLED
@@ -690,6 +703,7 @@ Resources:
 
   InsightsRuleCountryAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-CountryAllowed
       RuleState: ENABLED
@@ -721,6 +735,7 @@ Resources:
 
   InsightsRuleCountryBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-CountryBlocked
       RuleState: ENABLED
@@ -752,6 +767,7 @@ Resources:
 
   InsightsRuleUriAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-UriAllowed
       RuleState: ENABLED
@@ -783,6 +799,7 @@ Resources:
 
   InsightsRuleUriBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-UriBlocked
       RuleState: ENABLED
@@ -814,6 +831,7 @@ Resources:
 
   InsightsRuleTerminatingRuleAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
       RuleState: ENABLED
@@ -845,6 +863,7 @@ Resources:
 
   InsightsRuleTerminatingRuleBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
       RuleState: ENABLED
@@ -876,6 +895,7 @@ Resources:
 
   AlarmBlockRatio:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -924,6 +944,7 @@ Resources:
 
   AlarmClientIpAllowed:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -951,6 +972,7 @@ Resources:
 
   AlarmClientIpBlocked:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -978,6 +1000,7 @@ Resources:
 
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
+    Condition: IsLowSide
     Properties:
       DashboardName: !Ref WAFLogGroup
       DashboardBody: !Sub >
