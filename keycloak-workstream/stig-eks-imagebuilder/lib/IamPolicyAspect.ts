@@ -1,0 +1,1 @@
+../../shared-services/lib/IamPolicyAspect.ts

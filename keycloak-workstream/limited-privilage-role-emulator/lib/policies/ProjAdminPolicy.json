@@ -2,7 +2,6 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Effect": "Allow",
       "Action": [
         "acm:*",
         "acm-pca:*",
@@ -197,24 +196,24 @@
         "wafv2:*",
         "workspaces:*"
       ],
-      "Resource": "*"
+      "Resource": "*",
+      "Effect": "Allow"
     },
     {
-      "Effect": "Allow",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
+        }
+      },
       "Action": ["sts:*", "iam:TagInstanceProfile", "iam:UntagInstanceProfile"],
       "Resource": [
         "arn:{{partition}}:iam::{{account}}:instance-profile/AFC2S*",
         "arn:{{partition}}:iam::{{account}}:role/AFC2S*",
         "arn:{{partition}}:iam::{{account}}:instance-profile/*"
       ],
-      "Condition": {
-        "StringNotEquals": {
-          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
-        }
-      }
+      "Effect": "Allow"
     },
     {
-      "Effect": "Allow",
       "Action": ["iam:PassRole"],
       "Resource": [
         "arn:{{partition}}:iam::*:role/AFC2S*",
@@ -224,31 +223,32 @@
         "arn:{{partition}}:iam::*:role/snowball*",
         "arn:{{partition}}:iam::*:role/workspaces*",
         "arn:{{partition}}:iam::*:role/EMRSERVICE"
-      ]
+      ],
+      "Effect": "Allow"
     },
     {
-      "Effect": "Deny",
       "Action": ["elasticache:Purchase*", "rds:Purchase*", "redshift:Purchase*", "ecs:DeleteAccountSetting"],
-      "Resource": "*"
+      "Resource": "*",
+      "Effect": "Deny"
     },
     {
-      "Effect": "Deny",
       "Action": ["events:*", "s3:*"],
       "Resource": [
         "arn:{{partition}}:events:*:{{account}}:event-bus/amps*",
         "arn:{{partition}}:events:*:{{account}}:rule/amps*",
         "arn:{{partition}}:s3:::amps-*"
-      ]
+      ],
+      "Effect": "Deny"
     },
     {
-      "Effect": "Deny",
-      "NotAction": ["iam:*", "route53:*"],
-      "Resource": "*",
       "Condition": {
         "StringNotEquals": {
           "aws:RequestedRegion": "{{region}}"
         }
-      }
+      },
+      "Resource": "*",
+      "Effect": "Deny",
+      "NotAction": ["iam:*", "route53:*"]
     }
   ]
 }
