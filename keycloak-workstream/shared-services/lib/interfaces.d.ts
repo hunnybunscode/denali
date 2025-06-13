@@ -221,6 +221,12 @@ interface Environment {
   };
 }
 
+interface ConfigurationDocument {
+  environment: Environment;
+  hostedZones?: HostedZone[];
+  clusters?: Cluster[];  
+}
+
 interface HostedZone {
   zoneName: string;
   private: boolean;
@@ -251,13 +257,6 @@ interface Cluster {
   nodeGroups: NodeGroup[];
   tags?: { [key: string]: string };
   hostedZones?: ExtendedHostedZone[];
-}
-
-interface ConfigurationDocument {
-  environment: Environment;
-  hostedZones?: HostedZone[];
-  clusters?: Cluster[];
-  bastions?: Bastion[];
 }
 
 interface NodeGroup {
