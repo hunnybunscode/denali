@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -15,9 +16,6 @@ import boto3  # type: ignore
 import puremagic  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
-from config import approved_filetypes
-from config import exempt_file_types
-from config import mime_mapping
 from config import resource_suffix
 from config import ssm_params
 
@@ -241,14 +239,20 @@ def get_params_values(
     Retrieves the values specified by `ssm_params` dictionary keys,
     updates their values in place, and returns it
     """
-    params = [*ssm_params]
-    logger.info(f"Getting the values for parameters: {params}")
-    response = SSM_CLIENT.get_parameters(Names=params, WithDecryption=with_decryption)
-    invalid_params = response["InvalidParameters"]
-    if invalid_params:
-        logger.warning(f"Invalid parameters: {invalid_params}")
-    for param in response["Parameters"]:
-        ssm_params[param["Name"]] = param["Value"]
+    param_names = [*ssm_params]
+    logger.info(f"Getting the values for parameters: {param_names}")
+    max_limit = 10
+    for i in range(0, len(param_names), max_limit):
+        chunk = param_names[i : i + max_limit]  # noqa E203
+        response = SSM_CLIENT.get_parameters(
+            Names=chunk,
+            WithDecryption=with_decryption,
+        )
+        invalid_params = response["InvalidParameters"]
+        if invalid_params:
+            logger.warning(f"Invalid parameters: {invalid_params}")
+        for param in response["Parameters"]:
+            ssm_params[param["Name"]] = param["Value"]
     logger.info("Successfully retrieved and updated the values for parameters")
     return ssm_params
 
@@ -330,14 +334,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
 
     # If puremagic can't determine the file type
     if file_type == UNKNOWN:
-        dfdl_file_types = (
-            ssm_params[f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"]
-            .replace(".", "")
-            .replace(" ", "")
-            .split(",")
-        )
-
-        if file_ext in exempt_file_types + dfdl_file_types:
+        if file_ext in get_exempt_file_types() + get_dfdl_file_types():
             logger.info(
                 f"File {file_path} has the extension of {file_ext}. Performing AV scan only",  # noqa: E501
             )
@@ -358,7 +355,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
     logger.info(
         f"File type ({file_type}) matches file extension ({file_ext})",
     )
-    if file_type not in approved_filetypes:
+    if file_type not in get_approved_file_types() + get_dfdl_file_types():
         logger.warning(f"File type ({file_type}) is NOT approved")
         tags = create_tags_for_file_validation(
             "FileTypeNotApproved",
@@ -368,7 +365,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
         return False, tags
 
     logger.info(f"File type ({file_type}) is an approved type")
-    if mime_type not in mime_mapping.get(file_type, []):
+    if mime_type not in get_mime_mapping().get(file_type, []):
         logger.warning(f"Mime type ({mime_type}) is NOT approved")
         tags = create_tags_for_file_validation(
             "MimeTypeNotApproved",
@@ -381,6 +378,37 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
     logger.info(f"Successfully validated file: {file_path}")
     tags = create_tags_for_file_validation("None", file_type, mime_type)
     return True, tags
+
+
+def get_approved_file_types() -> list[str]:
+    return (
+        ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"]
+        .replace(".", "")
+        .replace(" ", "")
+        .split(",")
+    )
+
+
+def get_dfdl_file_types() -> list[str]:
+    return (
+        ssm_params[f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"]
+        .replace(".", "")
+        .replace(" ", "")
+        .split(",")
+    )
+
+
+def get_exempt_file_types() -> list[str]:
+    return (
+        ssm_params[f"/pipeline/ExemptFileTypes-{resource_suffix}"]
+        .replace(".", "")
+        .replace(" ", "")
+        .split(",")
+    )
+
+
+def get_mime_mapping() -> dict:
+    return json.loads(ssm_params[f"/pipeline/MimeMapping-{resource_suffix}"])
 
 
 def get_file_ext(file_path: str) -> str:

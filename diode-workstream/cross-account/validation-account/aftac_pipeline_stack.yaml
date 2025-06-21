@@ -45,6 +45,14 @@ Parameters:
     Type: String
     Description: The list of approved file types for DFDL
 
+  ExemptFileTypes:
+    Type: String
+    Description: The list of exempt file types
+
+  MimeMapping:
+    Type: String
+    Description: Mime mapping in JSON
+
   EmailEndPoint:
     Type: String
     Description: The email address to use for SNS notifications
@@ -146,6 +154,7 @@ Parameters:
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
   SendEmailNotifications: !Not [!Equals [!Ref EmailEndPoint, ""]]
+  ExemptFileTypesBlank: !Equals [!Ref ExemptFileTypes, ""]
 
 Resources:
   PipelineKmsKey:
@@ -1444,7 +1453,7 @@ Resources:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /pipeline/ApprovedFileTypes-${ResourceSuffix}
-      Description: Filetypes which are authorized for low to high transfer
+      Description: File types which are authorized for low to high transfer
       Type: StringList
       Value: !Ref ApprovedFileTypes
 
@@ -1452,9 +1461,25 @@ Resources:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /pipeline/DfdlApprovedFileTypes-${ResourceSuffix}
-      Description: Filetypes which are authorized for low to high transfer after DFDL Conversion
+      Description: File types which are authorized for low to high transfer after DFDL Conversion
       Type: StringList
       Value: !Ref DfdlApprovedFileTypes
+
+  ExemptFileTypesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/ExemptFileTypes-${ResourceSuffix}
+      Description: File types that should bypass file type validation
+      Type: StringList
+      Value: !If [ExemptFileTypesBlank, " ", !Ref ExemptFileTypes]
+
+  MimeMappingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/MimeMapping-${ResourceSuffix}
+      Description: Mime mapping in JSON
+      Type: String
+      Value: !Ref MimeMapping
 
   InvalidFilesBucketNameParameter:
     Type: AWS::SSM::Parameter

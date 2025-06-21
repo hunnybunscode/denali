@@ -4,7 +4,6 @@ import logging
 import time
 from logging.handlers import TimedRotatingFileHandler
 
-from config import approved_filetypes
 from config import file_handler_config
 from config import instance_info
 from config import resource_suffix
@@ -49,25 +48,6 @@ def main():
             if time.perf_counter() >= clock + ttl:
                 logger.info("Refreshing SSM parameters")
                 get_params_values(ssm_params)
-                approved_filetypes.clear()
-                approved_filetypes.extend(
-                    [
-                        *(
-                            ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"]
-                            .replace(".", "")
-                            .replace(" ", "")
-                            .split(",")
-                        ),
-                        *(
-                            ssm_params[
-                                f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"
-                            ]
-                            .replace(".", "")
-                            .replace(" ", "")
-                            .split(",")
-                        ),
-                    ],
-                )
                 clock = time.perf_counter()
 
             queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
