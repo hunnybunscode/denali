@@ -30,6 +30,8 @@ Metadata:
           - PipelineStackPipelineAmiId
           - PipelineStackApprovedFileTypes
           - PipelineStackDfdlApprovedFileTypes
+          - PipelineExemptFileTypes
+          - PipelineMimeMapping
           - EmailEndPoint
           - PipelineStackDiodeSimulatorInstanceRole
 
@@ -94,6 +96,10 @@ Metadata:
         default: Approved File Types
       PipelineStackDfdlApprovedFileTypes:
         default: DFDL Approved File Types
+      PipelineExemptFileTypes:
+        default: Exempt File Types
+      PipelineMimeMapping:
+        default: Mime Mapping
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
       EmailEndPoint:
@@ -206,13 +212,34 @@ Parameters:
 
   PipelineStackApprovedFileTypes:
     Type: CommaDelimitedList
-    Description: A comma-separated list of file types allowed through the validation pipeline
+    Description: A comma-separated list of file extensions (without leading dots) allowed through the validation pipeline
     Default: csv, flac, wav, mp4, txt, json, zip
 
   PipelineStackDfdlApprovedFileTypes:
     Type: CommaDelimitedList
-    Description: A comma-separated list of file types allowed through the DFDL validation pipeline
-    Default: infoset, xml
+    Description: A comma-separated list of file extensions (without leading dots) allowed through the DFDL validation pipeline
+    Default: xml
+
+  PipelineExemptFileTypes:
+    Type: CommaDelimitedList
+    Description: A comma-separated list of file extensions (without leading dots) that should bypass file type validation
+    Default: csv
+
+  PipelineMimeMapping:
+    Type: String
+    Description: >
+      MIME type mapping as JSON object, with file extensions (without leading dots) as keys and arrays of MIME types as values.
+      For example, {"txt": ["text/plain"], "json": ["application/json"]}. Recommend using a tool to validate the input as JSON.
+    Default: '{
+      "txt": ["text/plain"],
+      "json": ["application/json"],
+      "xml": ["application/xml"],
+      "flac": ["audio/flac"],
+      "zip": ["application/zip"],
+      "wav": ["audio/wav", "audio/wave", "audio/x-wav"]
+      }'
+    AllowedPattern: ^\s*\{\s*(?:"[^"]*"\s*:\s*\[[^\]]*\]\s*(?:,\s*"[^"]*"\s*:\s*\[[^\]]*\]\s*)*)\s*\}\s*$
+    ConstraintDescription: Must be a valid JSON
 
   EmailEndPoint:
     Type: String
@@ -374,6 +401,8 @@ Resources:
         ApprovedFileTypes: !Join [",", !Ref PipelineStackApprovedFileTypes]
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
+        ExemptFileTypes: !Join [",", !Ref PipelineExemptFileTypes]
+        MimeMapping: !Ref PipelineMimeMapping
         EmailEndPoint: !Ref EmailEndPoint
         AccessLogBucketName: !GetAtt LoggingStack.Outputs.AccessLogBucketName
         IngestKmsKeyArn: !GetAtt IngestStack.Outputs.IngestKmsKeyArn

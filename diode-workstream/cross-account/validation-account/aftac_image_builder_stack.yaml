@@ -133,9 +133,9 @@ Parameters:
       The base image name pattern for image builder output images.
       This pattern is used to identify the correct source AMI.
       The pattern must exactly match part of the AMI name.
-    Default: "VI2E_RHEL8_Agents_Gold"
-    AllowedPattern: "^[a-zA-Z0-9_-]+$"
-    ConstraintDescription: "Pattern must contain only alphanumeric characters, underscores, and hyphens"
+    Default: VI2E_RHEL8_Agents_Gold
+    AllowedPattern: ^[a-zA-Z0-9_-]+$
+    ConstraintDescription: Pattern must contain only alphanumeric characters, underscores, and hyphens
 
   RequiredImageDescriptionPattern:
     Type: CommaDelimitedList
@@ -144,7 +144,7 @@ Parameters:
       These patterns are used to identify the correct source AMI that contains specific
       software components (e.g., ClamAV, Nessus).
     Default: Yum,ClamAV,Nessus
-    ConstraintDescription: "Must be a comma-separated list of patterns"
+    ConstraintDescription: Must be a comma-separated list of patterns
 
   ImageCheckFrequency:
     Type: String
@@ -205,6 +205,101 @@ Conditions:
   IsLowSide: !Not [Condition: IsHighSide]
 
 Resources:
+  ImageBuilderImagePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub image-pipeline-${ResourceSuffix}
+      Status: ENABLED
+      EnhancedImageMetadataEnabled: true # default value is true
+      ImageRecipeArn: !Ref ImageRecipe
+      DistributionConfigurationArn: !Ref ImageBuilderDistroConfig
+      ImageScanningConfiguration:
+        ImageScanningEnabled: false # Enable it if Amazon Inspector is activated
+      ImageTestsConfiguration:
+        ImageTestsEnabled: true
+      InfrastructureConfigurationArn: !Ref InfraConfig
+      # Schedule:
+      #   PipelineExecutionStartCondition: EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE
+      #   ScheduleExpression: cron(0 0 * * ? *) # every day at 12:00 AM UTC
+      # This Role is for the workflow
+      # ExecutionRole: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+      # Workflows:
+      #   - WorkflowArn: !GetAtt BuildWorkflow.Arn
+
+  ImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub image-recipe-${ResourceSuffix}
+      Version: !Ref SemVer
+      # Description: Testing ec2 scanner recipe
+      ParentImage: !Ref ParentImage
+      # WorkingDirectory: String # The default path is `/tmp`
+      Components:
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
+        - ComponentArn: !Ref BuildComponentPrepareImage
+      # BlockDeviceMappings:
+      #   - DeviceName: String
+      #     Ebs:
+      #       DeleteOnTermination: true
+      #       Encrypted: true
+      #       KmsKeyId: alias/aws/ebs # The default AWS managed key
+      #       Iops: 100 # The range is 100-64000
+      #       SnapshotId: String
+      #       VolumeType: gp3 # standard | io1 | io2 | gp2 | gp3 | sc1 | st1
+      #       Throughput: 125 # For gp3 volumes only; the range is 125–1000 MiB/s
+      #       VolumeSize: 30 # The range is 1-16000
+      #     NoDevice: "" # Enter an empty string to remove a mapping from the parent image.
+      #     VirtualName: String # Manages the instance ephemeral devices.
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false # Set this to `true` to remove SSM Agent after the final image
+        # If overriding the user data, add commands to install SSM, unless it is pre-installed on the base image.
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+
+            cat >/etc/environment <<EOF
+            HTTP_PROXY=${ProxyServerAddress}:3128
+            HTTPS_PROXY=${ProxyServerAddress}:3128
+            NO_PROXY=${NoProxyList}
+            http_proxy=${ProxyServerAddress}:3128
+            https_proxy=${ProxyServerAddress}:3128
+            no_proxy=${NoProxyList}
+
+            resource_suffix=${ResourceSuffix}
+            region=${AWS::Region}
+            EOF
+            source /etc/environment
+
+            mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            [Service]
+            EnvironmentFile=/etc/environment
+            PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy
+            EOF
+
+            cat >> /etc/yum.conf <<EOF
+            proxy=$https_proxy
+            EOF
+
+            # Install SSM Agent
+            BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
+            ARCH=$(arch)
+            if [ "$ARCH" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
+            fi
+
+            # Restart SSM Agent
+            systemctl daemon-reload
+            systemctl restart amazon-ssm-agent
+
   BuildComponentPrepareImage:
     Type: AWS::ImageBuilder::Component
     Properties:
@@ -346,102 +441,6 @@ Resources:
   #                 commands:
   #                   - echo "Hello World! Test."
 
-  ImageRecipe:
-    Type: AWS::ImageBuilder::ImageRecipe
-    Properties:
-      Name: !Sub image-recipe-${ResourceSuffix}
-      Version: !Ref SemVer
-      # Description: Testing ec2 scanner recipe
-      ParentImage: !Ref ParentImage
-      # WorkingDirectory: String # The default path is `/tmp`
-      AdditionalInstanceConfiguration:
-        SystemsManagerAgent:
-          UninstallAfterBuild: false # Set this to `true` to remove SSM Agent after the final image
-        # If overriding the user data, add commands to install SSM, unless it is pre-installed on the base image.
-        UserDataOverride:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-
-            cat >/etc/environment <<EOF
-            HTTP_PROXY=${ProxyServerAddress}:3128
-            HTTPS_PROXY=${ProxyServerAddress}:3128
-            NO_PROXY=${NoProxyList}
-            http_proxy=${ProxyServerAddress}:3128
-            https_proxy=${ProxyServerAddress}:3128
-            no_proxy=${NoProxyList}
-
-            resource_suffix=${ResourceSuffix}
-            region=${AWS::Region}
-            EOF
-            source /etc/environment
-
-            mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
-            cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
-            [Service]
-            EnvironmentFile=/etc/environment
-            PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy
-            EOF
-
-            cat >> /etc/yum.conf <<EOF
-            proxy=$https_proxy
-            EOF
-
-            # Install SSM Agent
-            BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
-            ARCH=$(arch)
-            if [ "$ARCH" = "arm64" ]; then
-                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
-            else # x86_64
-                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
-            fi
-
-            # Restart SSM Agent
-            systemctl daemon-reload
-            systemctl restart amazon-ssm-agent
-
-      Components:
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
-        - !If
-          - IsLowSide
-          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
-          - !Ref AWS::NoValue
-        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/amazon-cloudwatch-agent-linux/x.x.x
-        - ComponentArn: !Ref BuildComponentPrepareImage
-      # BlockDeviceMappings:
-      #   - DeviceName: String
-      #     Ebs:
-      #       DeleteOnTermination: true
-      #       Encrypted: true
-      #       KmsKeyId: alias/aws/ebs # The default AWS managed key
-      #       Iops: 100 # The range is 100-64000
-      #       SnapshotId: String
-      #       VolumeType: gp3 # standard | io1 | io2 | gp2 | gp3 | sc1 | st1
-      #       Throughput: 125 # For gp3 volumes only; the range is 125–1000 MiB/s
-      #       VolumeSize: 30 # The range is 1-16000
-      #     NoDevice: "" # Enter an empty string to remove a mapping from the parent image.
-      #     VirtualName: String # Manages the instance ephemeral devices.
-
-  ImageBuilderImagePipeline:
-    Type: AWS::ImageBuilder::ImagePipeline
-    Properties:
-      Name: !Sub image-pipeline-${ResourceSuffix}
-      Status: ENABLED
-      EnhancedImageMetadataEnabled: true # default value is true
-      ImageRecipeArn: !Ref ImageRecipe
-      DistributionConfigurationArn: !Ref ImageBuilderDistroConfig
-      ImageScanningConfiguration:
-        ImageScanningEnabled: false # Enable it if Amazon Inspector is activated
-      ImageTestsConfiguration:
-        ImageTestsEnabled: true
-      InfrastructureConfigurationArn: !Ref InfraConfig
-      # Schedule:
-      #   PipelineExecutionStartCondition: EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE
-      #   ScheduleExpression: cron(0 0 * * ? *) # every day at 12:00 AM UTC
-      # This Role is for the workflow
-      # ExecutionRole: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
-      # Workflows:
-      #   - WorkflowArn: !GetAtt BuildWorkflow.Arn
-
   ImageBuilderDistroConfig:
     Type: AWS::ImageBuilder::DistributionConfiguration
     Properties:
@@ -460,6 +459,29 @@ Resources:
           #   TargetAccountIds:
           #     - String
           Region: !Ref AWS::Region
+
+  InfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub infra-config-${ResourceSuffix}
+      InstanceMetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      InstanceProfileName: !Ref ImageBuilderInfraInstanceProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref ImageBuilderInfraSecurityGroup
+      TerminateInstanceOnFailure: true # For troubleshooting, set it to false
+      InstanceTypes: [m5.large]
+      SnsTopicArn: !Ref ImageBuilderNotificationTopic
+      # KeyPair: String
+      # Logging:
+      #   S3Logs:
+      #     S3BucketName: String
+      #     S3KeyPrefix: String
+      # Placement: Placement
+      # ResourceTags:
+      #   Key: Value
 
   EC2RequiredFilesBucket:
     Type: AWS::S3::Bucket
@@ -511,29 +533,6 @@ Resources:
             Condition:
               NumericLessThan:
                 s3:TlsVersion: 1.2
-
-  InfraConfig:
-    Type: AWS::ImageBuilder::InfrastructureConfiguration
-    Properties:
-      Name: !Sub infra-config-${ResourceSuffix}
-      InstanceMetadataOptions:
-        HttpTokens: required
-        HttpPutResponseHopLimit: 1
-      InstanceProfileName: !Ref ImageBuilderInfraInstanceProfile
-      SubnetId: !Ref SubnetId
-      SecurityGroupIds:
-        - !Ref ImageBuilderInfraSecurityGroup
-      TerminateInstanceOnFailure: true # For troubleshooting, set it to false
-      InstanceTypes: [m5.large]
-      SnsTopicArn: !Ref ImageBuilderNotificationTopic
-      # KeyPair: String
-      # Logging:
-      #   S3Logs:
-      #     S3BucketName: String
-      #     S3KeyPrefix: String
-      # Placement: Placement
-      # ResourceTags:
-      #   Key: Value
 
   ImageBuilderInfraSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -681,15 +680,6 @@ Resources:
           #     ArnEquals:
           #       kms:EncryptionContext:aws:logs:arn:
           #         - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ResourceSuffix}-Lambda
-          # - Sid: Allow service principal to use the key
-          #   Effect: Allow
-          #   Principal:
-          #     Service:
-          #       - events.amazonaws.com
-          #   Action:
-          #     - kms:GenerateDataKey
-          #     - kms:Decrypt
-          #   Resource: "*"
 
   # BuildWorkflow:
   #   Type: AWS::ImageBuilder::Workflow
@@ -830,7 +820,6 @@ Resources:
           IMAGE_NAME_PATTERN: !Ref ImageNamePattern
           REQUIRED_DESCRIPTION_ITEMS:
             !Join [",", !Ref RequiredImageDescriptionPattern]
-
       Code:
         ZipFile: |
           import json
@@ -1002,7 +991,7 @@ Resources:
       RoleName: !Sub ${IamPrefix}-trigger-image-pipeline-with-new-ami-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -1023,7 +1012,7 @@ Resources:
                   - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group::log-stream:*
         - PolicyName: ImageBuilderAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1051,7 +1040,7 @@ Resources:
                   - !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:${AWS::AccountId}:image/*
         - PolicyName: CloudFormationAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1060,27 +1049,24 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
         - PolicyName: S3Access
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action:
-                  - s3:GetObject
+                Action: s3:GetObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}/*
               - Effect: Allow
-                Action:
-                  - s3:ListBucket
+                Action: s3:ListBucket
                 Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}
         - PolicyName: LambdaAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: lambda:UpdateFunctionConfiguration
-                Resource:
-                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:trigger-image-pipeline-with-new-ami-${ResourceSuffix}
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:trigger-image-pipeline-with-new-ami-${ResourceSuffix}
         - PolicyName: KMSAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1089,7 +1075,7 @@ Resources:
                 Resource: !GetAtt ImageBuilderKmsKey.Arn
         - PolicyName: IAMAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1099,7 +1085,7 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-trigger-image-pipeline-with-new-ami-${ResourceSuffix}
         - PolicyName: EC2Access
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1109,18 +1095,18 @@ Resources:
                 Resource: "*"
                 Condition:
                   StringEquals:
-                    "aws:ResourceAccount": !Ref AWS::AccountId
+                    aws:ResourceAccount: !Ref AWS::AccountId
 
   NewAmiImageBuilderTriggerScheduleRule:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub trigger-image-pipeline-with-new-ami-${ResourceSuffix}
-      Description: "Periodically check for new AMIs"
+      Description: Periodically check for new AMIs
       ScheduleExpression: !Ref ImageCheckFrequency
       State: ENABLED
       Targets:
         - Arn: !GetAtt NewAmiImageBuilderTriggerLambda.Arn
-          Id: "NewAmiImageBuilderTrigger"
+          Id: NewAmiImageBuilderTrigger
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -1149,7 +1135,7 @@ Resources:
       RoleName: !Sub ${IamPrefix}-copy-ec2-required-files-role-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -1167,7 +1153,7 @@ Resources:
                 Resource: !GetAtt CopyEC2RequiredFilesLambdaFunctionLogGroup.Arn
         - PolicyName: KMSAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -1176,21 +1162,18 @@ Resources:
                 Resource: !GetAtt ImageBuilderKmsKey.Arn
         - PolicyName: S3AccessPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action:
-                  - s3:ListBucket
+                Action: s3:ListBucket
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}
                   - !Sub arn:${AWS::Partition}:s3:::${EC2RequiredFilesBucket}
               - Effect: Allow
-                Action:
-                  - s3:GetObject
+                Action: s3:GetObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::${TemplateBucketName}/*
               - Effect: Allow
-                Action:
-                  - s3:PutObject
+                Action: s3:PutObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::${EC2RequiredFilesBucket}/*
 
   CopyEC2RequiredFilesCustomResource:
@@ -1347,15 +1330,14 @@ Resources:
                     - AsgName:
                         Fn::ImportValue: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
               - Effect: Allow
-                Action:
-                  - autoscaling:DescribeInstanceRefreshes
+                Action: autoscaling:DescribeInstanceRefreshes
                 Resource: "*"
                 Condition:
                   StringEquals:
-                    "aws:ResourceAccount": !Ref AWS::AccountId
+                    aws:ResourceAccount: !Ref AWS::AccountId
         - PolicyName: SNSAccess
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: sns:Publish
@@ -1379,7 +1361,6 @@ Resources:
           ASG_NAME:
             Fn::ImportValue: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
           NOTIFICATION_TOPIC_ARN: !Ref AsgInstanceRefreshNotificationTopic
-
       Code:
         ZipFile: |
           import boto3
