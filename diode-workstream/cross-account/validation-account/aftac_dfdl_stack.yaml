@@ -1,3 +1,7 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates Daffodil workflow
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -9,7 +13,7 @@ Metadata:
           - ResourceSuffix
 
       - Label:
-          default: Lambda Configuration
+          default: Lambda Code Storage Configuration
         Parameters:
           - LambdaCodeBucket
           - ParserLambdaCodeKey
@@ -18,7 +22,7 @@ Metadata:
           - PrecompilerLambdaCodeKeyVersionId
 
       - Label:
-          default: Networking
+          default: Lambda Networking Configuration
         Parameters:
           - VpcId
           - VpcSubnetIDs
@@ -28,14 +32,14 @@ Metadata:
         Parameters:
           - InputBucket
           - OutputBucket
-          - ArchiveBucket
-          - DeadLetterBucket
-          - SnsErrorTopicArn
+          - ArchiveSuccessfulFiles
+          - MoveFailedFiles
+          - NotifyOnError
           - ContentTypeFileKey
+          - ParserFilterSuffix
           - ContentTypeCacheTtlMinutes
           - DataProcessorCacheTtlMinutes
           - EnableDetailedMetrics
-          - ParserFilterSuffix
 
     ParameterLabels:
       IamPrefix:
@@ -45,7 +49,7 @@ Metadata:
       ResourceSuffix:
         default: Resource Suffix
       LambdaCodeBucket:
-        default: Lambda Code Bucket Name
+        default: Lambda Code Storage Bucket Name
       ParserLambdaCodeKey:
         default: Parser Lambda Key
       ParserLambdaCodeKeyVersionId:
@@ -61,23 +65,23 @@ Metadata:
       InputBucket:
         default: Input Bucket
       OutputBucket:
-        default: Output Bucket (Data Transfer Bucket)
-      ArchiveBucket:
-        default: Archive Bucket
-      DeadLetterBucket:
-        default: Dead Letter Bucket (Invalid Files Bucket)
-      SnsErrorTopicArn:
-        default: Invalid Files Topic ARN
+        default: Output Bucket
+      ArchiveSuccessfulFiles:
+        default: Archive Successful Files
+      MoveFailedFiles:
+        default: Move Failed Files
+      NotifyOnError:
+        default: Notify On Error
       ContentTypeFileKey:
         default: Content Types File S3 Key
+      ParserFilterSuffix:
+        default: Parser Filter S3 Key Suffix
       ContentTypeCacheTtlMinutes:
         default: Content Types Cache TTL (Minutes)
       DataProcessorCacheTtlMinutes:
         default: Data Processors Cache TTL (Minutes)
       EnableDetailedMetrics:
         default: Enable Detailed Performance Metrics
-      ParserFilterSuffix:
-        default: Parser Filter S3 Key Suffix(es)
 
 Parameters:
   IamPrefix:
@@ -101,69 +105,14 @@ Parameters:
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
-  InputBucket:
-    Type: String
-    Description: The name of the Amazon S3 bucket where files to be processed by daffodil will be stored
-
-  OutputBucket:
-    Type: String
-    Description: The name of the Amazon S3 bucket where successful daffodil transformed files will be stored
-
-  VpcSubnetIDs:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: The list of private subnet IDs to use for the daffodil pipeline
-
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: ID of the VPC to put the compute resource in
-
-  SnsErrorTopicArn:
-    Type: String
-    Description: The optional ARN of the SNS topic to send error notifications to
-
-  EnableDetailedMetrics:
-    Type: String
-    Default: "false"
-    AllowedValues:
-      - "true"
-      - "false"
-    Description: Whether or not the more detailed custom CloudFormation metrics are enabled.
-
-  ParserFilterSuffix:
-    Type: String
-    Description: Optional - File suffix filter(s) as a comma-separated-value to apply to the Bucket event listener. If no filter prefix is provided, all files will be sent to the daffodil parser.
-
-  ArchiveBucket:
-    Type: String
-    Description: Optional - The name of the Amazon S3 bucket where original files will be moved to from the Input Bucket after successful daffodil transformation. If no name is supplied, successful transformed files will just be deleted from the Input Bucket.
-
-  DeadLetterBucket:
-    Type: String
-    Description: Optional - The name of the Amazon S3 bucket where failed daffodil transformation will be stored. If no bucket name is provided, failed daffodil transformation files will remain in the Input Bucket
-
-  ContentTypeFileKey:
-    Type: String
-    Default: content-types.yaml
-    Description: Content Type file mapping s3 key, defaults to content-types.yaml
-
-  ContentTypeCacheTtlMinutes:
-    Type: Number
-    Default: 1
-    Description: Content Type cache TTL in minutes
-
-  DataProcessorCacheTtlMinutes:
-    Type: Number
-    Default: 15
-    Description: Data Processor cache TTL in minutes
-
   LambdaCodeBucket:
     Type: String
     Description: The name of the Amazon S3 bucket where Lambda codes are stored
 
   ParserLambdaCodeKey:
     Type: String
-    Default: parser.jar
     Description: The S3 key of the parser code in the code bucket (including prefixes)
+    Default: parser.jar
 
   ParserLambdaCodeKeyVersionId:
     Type: String
@@ -171,19 +120,105 @@ Parameters:
 
   PrecompilerLambdaCodeKey:
     Type: String
-    Default: precompiler.jar
     Description: The S3 key of the precompiler code in the code bucket (including prefixes)
+    Default: precompiler.jar
 
   PrecompilerLambdaCodeKeyVersionId:
     Type: String
     Description: The S3 key version ID of the precompiler code in the code bucket
 
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID of the VPC where Lambda functions will be placed in
+
+  VpcSubnetIDs:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The IDs of private subnets within the above VPC where Lambda functions will be placed in
+
+  InputBucket:
+    Type: String
+    Description: >
+      The name of the S3 bucket where files will be uploaded for DFDL processing.
+      On the low side, it would be the DFDL input bucket created by the pipeline.
+
+  OutputBucket:
+    Type: String
+    Description: >
+      The name of the S3 bucket where files will be uploaded after successful DFDL processing.
+      On the low side, it would be the data transfer bucket created by the pipeline.
+
+  ArchiveSuccessfulFiles:
+    Type: String
+    Description: >
+      Whether to archive files uploaded to Input Bucket, after successful DFDL processing.
+      If "true", an archive bucket will be created to which files that are successfully processed will be moved;
+      if "false", they will be deleted from Input Bucket after successful processing.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  MoveFailedFiles:
+    Type: String
+    Description: >
+      Whether to move files that are uploaded to Input Bucket, after failed DFDL processing.
+      If "true", a dead-letter bucket will be created to which files that fail to be processed will be moved;
+      if "false", they will remain in Input Bucket.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  NotifyOnError:
+    Type: String
+    Description: >
+      Whether to notify when there are errors during DFDL processing.
+      If "true", an SNS topic will be created to which you can subscribe for error notification.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  ContentTypeFileKey:
+    Type: String
+    Description: Content Type file mapping s3 key, defaults to content-types.yaml
+    Default: content-types.yaml
+
+  ParserFilterSuffix:
+    Type: String
+    Description: >
+      File suffix filter to apply to the Input Bucket event listener. If left blank, all files will be sent for DFDL processing.
+      On the low side, it should be blank; on the high side, it should be ".infoset.xml"
+    Default: ""
+    AllowedValues: ["", ".infoset.xml"]
+
+  ContentTypeCacheTtlMinutes:
+    Type: Number
+    Description: Content Type cache TTL in minutes
+    Default: 1
+
+  DataProcessorCacheTtlMinutes:
+    Type: Number
+    Description: Data Processor cache TTL in minutes
+    Default: 15
+
+  EnableDetailedMetrics:
+    Type: String
+    Description: Whether or not the more detailed custom CloudFormation metrics are enabled.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  cArchiveSuccessfulFiles: !Equals [!Ref ArchiveSuccessfulFiles, "true"]
+  cMoveFailedFiles: !Equals [!Ref MoveFailedFiles, "true"]
+  cNotifyOnError: !Equals [!Ref NotifyOnError, "true"]
+
 Resources:
   schemabucketE4BFADA8:
     Type: AWS::S3::Bucket
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3045 # Consider using AWS::S3::BucketPolicy instead of AccessControl
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      AccessControl: Private # Retained to prevent update failure    *** DELETE this for new stacks ***
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -220,6 +255,119 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
+
+  ArchiveBucket:
+    Type: AWS::S3::Bucket
+    Condition: cArchiveSuccessfulFiles
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # LoggingConfiguration:
+      #   DestinationBucketName: BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter90Days
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarker
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+          - Id: AbortIncompleteMultipartUpload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  ArchiveBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: cArchiveSuccessfulFiles
+    Properties:
+      Bucket: !Ref ArchiveBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt ArchiveBucket.Arn
+              - !Sub ${ArchiveBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DeadLetterBucket:
+    Type: AWS::S3::Bucket
+    Condition: cMoveFailedFiles
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # LoggingConfiguration:
+      #   DestinationBucketName: BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter90Days
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarker
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+          - Id: AbortIncompleteMultipartUpload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  DeadLetterBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: cMoveFailedFiles
+    Properties:
+      Bucket: !Ref DeadLetterBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt DeadLetterBucket.Arn
+              - !Sub ${DeadLetterBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DfdlErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: cNotifyOnError
+    Properties:
+      DisplayName: DFDL Error
+      KmsMasterKeyId: alias/aws/sns
 
   inputBucketNotifications891908E2:
     Type: Custom::S3BucketNotifications
@@ -446,13 +594,14 @@ Resources:
       Environment:
         Variables:
           OUTPUT_BUCKET: !Ref OutputBucket
+          ARCHIVE_BUCKET: !If [cArchiveSuccessfulFiles, !Ref ArchiveBucket, ""]
+          DEAD_LETTER_BUCKET: !If [cMoveFailedFiles, !Ref DeadLetterBucket, ""]
           SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
-          DEAD_LETTER_BUCKET: !Ref DeadLetterBucket
           CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
           NAMESPACE: !Ref ResourceSuffix
           ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
-          SNS_ERROR_TOPIC_ARN: !Ref SnsErrorTopicArn
-          ARCHIVE_BUCKET: !Ref ArchiveBucket
+          SNS_ERROR_TOPIC_ARN:
+            !If [cNotifyOnError, !Ref DfdlErrorNotificationTopic, ""]
           CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
           DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
       Code:
