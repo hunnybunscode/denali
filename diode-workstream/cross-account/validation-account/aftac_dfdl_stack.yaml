@@ -6,10 +6,10 @@ Metadata:
         Parameters:
           - IamPrefix
           - PermissionsBoundaryPolicyArn
-          - Namespace
+          - ResourceSuffix
 
       - Label:
-          default: Templates Location
+          default: Lambda Configuration
         Parameters:
           - LambdaCodeBucket
           - ParserLambdaCodeKey
@@ -24,7 +24,7 @@ Metadata:
           - VpcSubnetIDs
 
       - Label:
-          default: Daffodil Stack
+          default: Daffodil Configuration
         Parameters:
           - InputBucket
           - OutputBucket
@@ -42,10 +42,10 @@ Metadata:
         default: IAM Prefix
       PermissionsBoundaryPolicyArn:
         default: Permissions Boundary Policy ARN
-      Namespace:
-        default: Namespace (Resource Suffix)
+      ResourceSuffix:
+        default: Resource Suffix
       LambdaCodeBucket:
-        default: Template Bucket Name
+        default: Lambda Code Bucket Name
       ParserLambdaCodeKey:
         default: Parser Lambda Key
       ParserLambdaCodeKeyVersionId:
@@ -82,21 +82,32 @@ Metadata:
 Parameters:
   IamPrefix:
     Type: String
-    Description: The customer prefix to be used for IAM policies.
-    MinLength: 2
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
 
   PermissionsBoundaryPolicyArn:
     Type: String
-    Description: The arn for permissions boundary.
-    MinLength: 1
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
   InputBucket:
     Type: String
-    Description: The name of the Amazon S3 bucket where files to be processed by daffodil will be stored.
+    Description: The name of the Amazon S3 bucket where files to be processed by daffodil will be stored
 
   OutputBucket:
     Type: String
-    Description: The name of the Amazon S3 bucket where successful daffodil transformed files will be stored.
+    Description: The name of the Amazon S3 bucket where successful daffodil transformed files will be stored
 
   VpcSubnetIDs:
     Type: List<AWS::EC2::Subnet::Id>
@@ -106,14 +117,9 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: ID of the VPC to put the compute resource in
 
-  Namespace:
-    Type: String
-    Description: (Resource Suffix)
-    MinLength: 1
-
   SnsErrorTopicArn:
     Type: String
-    Description: The optional ARN of the SNS topic to send error notifications to.
+    Description: The optional ARN of the SNS topic to send error notifications to
 
   EnableDetailedMetrics:
     Type: String
@@ -152,7 +158,7 @@ Parameters:
 
   LambdaCodeBucket:
     Type: String
-    Description: The name of the Amazon S3 bucket where uploaded code will be stored
+    Description: The name of the Amazon S3 bucket where Lambda codes are stored
 
   ParserLambdaCodeKey:
     Type: String
@@ -176,7 +182,7 @@ Resources:
   DaffodilParserRole4894954B:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${IamPrefix}_DaffodilConversio71828323_${Namespace}
+      RoleName: !Sub ${IamPrefix}_DaffodilConversio71828323_${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -188,41 +194,45 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-        - !Ref DaffodilParserPolicy84C74BF6
-
-  DaffodilParserPolicy84C74BF6:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      ManagedPolicyName: !Sub ${IamPrefix}_DaffodilConversionStack-DaffodilParserPolicy_${Namespace}
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Action:
-              - s3:AbortMultipartUpload
-              - s3:GetObject
-              - s3:GetObjectTagging
-              - s3:PutObject
-              - s3:PutObjectTagging
-              - s3:DeleteObject
-              - s3:ListBucket
-            Resource: !Sub arn:${AWS::Partition}:s3:::*
-          - Effect: Allow
-            Action:
-              - kms:Decrypt
-              - kms:GenerateDataKey*
-            Resource: "*"
-          - Effect: Allow
-            Action: sns:Publish
-            Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: "*"
+        - PolicyName: SNS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
 
   inputBucketNotifications891908E2:
     Type: Custom::S3BucketNotifications
-    DependsOn:
-      - inputBucketAllowBucketNotificationsToDaffodilConversionStackDfdlParser4758FC17B8FFC5D8
+    DependsOn: inputBucketAllowBucketNotificationsToDaffodilConversionStackDfdlParser4758FC17B8FFC5D8
     Properties:
       ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
       BucketName: !Ref InputBucket
+      Managed: false
       NotificationConfiguration:
         LambdaFunctionConfigurations:
           - Events:
@@ -233,14 +243,13 @@ Resources:
                   - Name: suffix
                     Value: !Ref ParserFilterSuffix
             LambdaFunctionArn: !GetAtt DfdlParser3923117A.Arn
-      Managed: false
 
   inputBucketAllowBucketNotificationsToDaffodilConversionStackDfdlParser4758FC17B8FFC5D8:
     Type: AWS::Lambda::Permission
     Properties:
+      Principal: s3.amazonaws.com
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt DfdlParser3923117A.Arn
-      Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
 
@@ -277,21 +286,22 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Deny
-            Principal:
-              AWS: "*"
+            Principal: "*"
             Action: s3:*
             Resource:
               - !GetAtt schemabucketE4BFADA8.Arn
               - !Sub ${schemabucketE4BFADA8.Arn}/*
             Condition:
               Bool:
-                aws:SecureTransport: "false"
+                aws:SecureTransport: false
 
   schemabucketNotificationsADDEB1B1:
     Type: Custom::S3BucketNotifications
+    DependsOn: schemabucketAllowBucketNotificationsToDaffodilConversionStackprecompiler6149E4B7EE146963
     Properties:
       ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
       BucketName: !Ref schemabucketE4BFADA8
+      Managed: true
       NotificationConfiguration:
         LambdaFunctionConfigurations:
           - Events:
@@ -302,16 +312,13 @@ Resources:
                   - Name: suffix
                     Value: .dfdl.xsd
             LambdaFunctionArn: !GetAtt precompilerF219B339.Arn
-      Managed: true
-    DependsOn:
-      - schemabucketAllowBucketNotificationsToDaffodilConversionStackprecompiler6149E4B7EE146963
 
   schemabucketAllowBucketNotificationsToDaffodilConversionStackprecompiler6149E4B7EE146963:
     Type: AWS::Lambda::Permission
     Properties:
+      Principal: s3.amazonaws.com
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt precompilerF219B339.Arn
-      Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt schemabucketE4BFADA8.Arn
 
@@ -319,20 +326,20 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security Group for Daffodil Lambda instances
+      VpcId: !Ref VpcId
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow HTTPS traffic out to everywhere
           FromPort: 443
           IpProtocol: tcp
           ToPort: 443
-      VpcId: !Ref VpcId
 
   DfdlParserLogGroupDCB20E49:
     Type: AWS::Logs::LogGroup
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      RetentionInDays: 7
+      RetentionInDays: 90
 
   DfdlParser3923117A:
     Type: AWS::Lambda::Function
@@ -347,7 +354,7 @@ Resources:
           SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
           DEAD_LETTER_BUCKET: !Ref DeadLetterBucket
           CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
-          NAMESPACE: !Ref Namespace
+          NAMESPACE: !Ref ResourceSuffix
           ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
           SNS_ERROR_TOPIC_ARN: !Ref SnsErrorTopicArn
           ARCHIVE_BUCKET: !Ref ArchiveBucket
@@ -368,7 +375,7 @@ Resources:
   BucketNotificationsHandler050a0587b7544547bf325f094a3db834RoleB6FB88EC:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${IamPrefix}_DaffodilConversio55614413_${Namespace}
+      RoleName: !Sub ${IamPrefix}_DaffodilConversio55614413_${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -385,10 +392,9 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action: s3:PutBucketNotification
-                Resource: "*"
-              - Effect: Allow
-                Action: s3:GetBucketNotification
+                Action:
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
                 Resource: "*"
 
   BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691:
@@ -397,7 +403,7 @@ Resources:
       Description: AWS CloudFormation handler for "Custom::S3BucketNotifications" resources (@aws-cdk/aws-s3)
       Handler: index.handler
       Role: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db834RoleB6FB88EC.Arn
-      Runtime: python3.9
+      Runtime: python3.12
       Timeout: 300
       Code:
         ZipFile: |
@@ -496,7 +502,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      RetentionInDays: 7
+      RetentionInDays: 90
 
   precompilerF219B339:
     Type: AWS::Lambda::Function
