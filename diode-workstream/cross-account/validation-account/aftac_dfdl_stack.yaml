@@ -690,6 +690,13 @@ Resources:
                   - s3:DeleteObject
                   - s3:ListBucket
                 Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !If
+                      - cInputOutputBucketsInSameAccount
+                      - !Ref AWS::AccountId
+                      - - !Ref AWS::AccountId
+                        - !Ref InputOutputBucketsAccountId
         - PolicyName: KMS_Policy
           PolicyDocument:
             Version: 2012-10-17
@@ -699,13 +706,16 @@ Resources:
                   - kms:Decrypt
                   - kms:GenerateDataKey*
                 Resource: "*"
-        - PolicyName: SNS_Policy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: sns:Publish
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+        - !If
+          - cNotifyOnError
+          - PolicyName: SNS_Policy
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                - Effect: Allow
+                  Action: sns:Publish
+                  Resource: !Ref DfdlErrorNotificationTopic
+          - !Ref AWS::NoValue
 
   DfdlLambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
