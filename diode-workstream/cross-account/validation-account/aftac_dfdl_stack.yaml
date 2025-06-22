@@ -179,94 +179,11 @@ Parameters:
     Description: The S3 key version ID of the precompiler code in the code bucket
 
 Resources:
-  DaffodilParserRole4894954B:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${IamPrefix}_DaffodilConversio71828323_${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: S3_Policy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:AbortMultipartUpload
-                  - s3:GetObject
-                  - s3:GetObjectTagging
-                  - s3:PutObject
-                  - s3:PutObjectTagging
-                  - s3:DeleteObject
-                  - s3:ListBucket
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-        - PolicyName: KMS_Policy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - kms:Decrypt
-                  - kms:GenerateDataKey*
-                Resource: "*"
-        - PolicyName: SNS_Policy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: sns:Publish
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
-
-  inputBucketNotifications891908E2:
-    Type: Custom::S3BucketNotifications
-    DependsOn: inputBucketAllowBucketNotificationsToDaffodilConversionStackDfdlParser4758FC17B8FFC5D8
-    Properties:
-      ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
-      BucketName: !Ref InputBucket
-      Managed: false
-      NotificationConfiguration:
-        LambdaFunctionConfigurations:
-          - Events:
-              - s3:ObjectCreated:*
-            Filter:
-              Key:
-                FilterRules:
-                  - Name: suffix
-                    Value: !Ref ParserFilterSuffix
-            LambdaFunctionArn: !GetAtt DfdlParser3923117A.Arn
-
-  inputBucketAllowBucketNotificationsToDaffodilConversionStackDfdlParser4758FC17B8FFC5D8:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Principal: s3.amazonaws.com
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt DfdlParser3923117A.Arn
-      SourceAccount: !Ref AWS::AccountId
-      SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
-
   schemabucketE4BFADA8:
     Type: AWS::S3::Bucket
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
-      LifecycleConfiguration:
-        Rules:
-          - AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: 1
-            Status: Enabled
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -277,8 +194,17 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+            Status: Enabled
 
-  schemabucketPolicyE65C0195:
+  SchemaBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref schemabucketE4BFADA8
@@ -295,9 +221,36 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
+  inputBucketNotifications891908E2:
+    Type: Custom::S3BucketNotifications
+    DependsOn: InputBucketNotificationToParserFunction
+    Properties:
+      ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
+      BucketName: !Ref InputBucket
+      Managed: false
+      NotificationConfiguration:
+        LambdaFunctionConfigurations:
+          - Events:
+              - s3:ObjectCreated:*
+            Filter:
+              Key:
+                FilterRules:
+                  - Name: suffix
+                    Value: !Ref ParserFilterSuffix
+            LambdaFunctionArn: !GetAtt DfdlParser3923117A.Arn
+
+  InputBucketNotificationToParserFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt DfdlParser3923117A.Arn
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
+
   schemabucketNotificationsADDEB1B1:
     Type: Custom::S3BucketNotifications
-    DependsOn: schemabucketAllowBucketNotificationsToDaffodilConversionStackprecompiler6149E4B7EE146963
+    DependsOn: SchemaBucketNotificationToPrecompilerFunction
     Properties:
       ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
       BucketName: !Ref schemabucketE4BFADA8
@@ -313,7 +266,7 @@ Resources:
                     Value: .dfdl.xsd
             LambdaFunctionArn: !GetAtt precompilerF219B339.Arn
 
-  schemabucketAllowBucketNotificationsToDaffodilConversionStackprecompiler6149E4B7EE146963:
+  SchemaBucketNotificationToPrecompilerFunction:
     Type: AWS::Lambda::Permission
     Properties:
       Principal: s3.amazonaws.com
@@ -322,87 +275,12 @@ Resources:
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt schemabucketE4BFADA8.Arn
 
-  DfdlLambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for Daffodil Lambda instances
-      VpcId: !Ref VpcId
-      SecurityGroupEgress:
-        - CidrIp: 0.0.0.0/0
-          Description: Allow HTTPS traffic out to everywhere
-          FromPort: 443
-          IpProtocol: tcp
-          ToPort: 443
-
-  DfdlParserLogGroupDCB20E49:
-    Type: AWS::Logs::LogGroup
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
-    Properties:
-      RetentionInDays: 90
-
-  DfdlParser3923117A:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref ParserLambdaCodeKey
-        S3ObjectVersion: !Ref ParserLambdaCodeKeyVersionId
-      Environment:
-        Variables:
-          OUTPUT_BUCKET: !Ref OutputBucket
-          SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
-          DEAD_LETTER_BUCKET: !Ref DeadLetterBucket
-          CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
-          NAMESPACE: !Ref ResourceSuffix
-          ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
-          SNS_ERROR_TOPIC_ARN: !Ref SnsErrorTopicArn
-          ARCHIVE_BUCKET: !Ref ArchiveBucket
-          CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
-          DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
-      Handler: daffodil.conversion.App
-      LoggingConfig:
-        LogGroup: !Ref DfdlParserLogGroupDCB20E49
-      MemorySize: 5120
-      Role: !GetAtt DaffodilParserRole4894954B.Arn
-      Runtime: java11
-      Timeout: 30
-      VpcConfig:
-        SecurityGroupIds:
-          - !GetAtt DfdlLambdaSecurityGroup.GroupId
-        SubnetIds: !Ref VpcSubnetIDs
-
-  BucketNotificationsHandler050a0587b7544547bf325f094a3db834RoleB6FB88EC:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${IamPrefix}_DaffodilConversio55614413_${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Action: sts:AssumeRole
-            Principal:
-              Service: lambda.amazonaws.com
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: DaffodilConversionStack-BucketNotificationsHandler
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:PutBucketNotification
-                  - s3:GetBucketNotification
-                Resource: "*"
-
   BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691:
     Type: AWS::Lambda::Function
     Properties:
-      Description: AWS CloudFormation handler for "Custom::S3BucketNotifications" resources (@aws-cdk/aws-s3)
+      Description: AWS CloudFormation handler for "Custom::S3BucketNotifications" resources
       Handler: index.handler
-      Role: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db834RoleB6FB88EC.Arn
+      Role: !GetAtt BucketNotificationsHandlerRole.Arn
       Runtime: python3.12
       Timeout: 300
       Code:
@@ -497,6 +375,53 @@ Resources:
             except Exception as e:
                 print("send(..) failed executing request.urlopen(..): " + str(e))
 
+  BucketNotificationsHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-BucketNotificationHandlerRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
+                Resource: "*"
+
+  precompilerF219B339:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt DaffodilExecutionRole.Arn
+      MemorySize: 1024
+      Runtime: java11
+      Timeout: 30
+      Handler: daffodil.precompile.App
+      LoggingConfig:
+        LogGroup: !Ref DfdlPrecompilerLogGroupEEE29A0D
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt DfdlLambdaSecurityGroup.GroupId
+        SubnetIds: !Ref VpcSubnetIDs
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref PrecompilerLambdaCodeKey
+        S3ObjectVersion: !Ref PrecompilerLambdaCodeKeyVersionId
+
   DfdlPrecompilerLogGroupEEE29A0D:
     Type: AWS::Logs::LogGroup
     UpdateReplacePolicy: Delete
@@ -504,27 +429,105 @@ Resources:
     Properties:
       RetentionInDays: 90
 
-  precompilerF219B339:
+  DfdlParser3923117A:
     Type: AWS::Lambda::Function
     Properties:
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: !Ref PrecompilerLambdaCodeKey
-        S3ObjectVersion: !Ref PrecompilerLambdaCodeKeyVersionId
-      Handler: daffodil.precompile.App
-      LoggingConfig:
-        LogGroup: !Ref DfdlPrecompilerLogGroupEEE29A0D
-      MemorySize: 1024
-      Role: !GetAtt DaffodilParserRole4894954B.Arn
+      Role: !GetAtt DaffodilExecutionRole.Arn
+      MemorySize: 5120
       Runtime: java11
       Timeout: 30
+      Handler: daffodil.conversion.App
+      LoggingConfig:
+        LogGroup: !Ref DfdlParserLogGroupDCB20E49
       VpcConfig:
         SecurityGroupIds:
           - !GetAtt DfdlLambdaSecurityGroup.GroupId
         SubnetIds: !Ref VpcSubnetIDs
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: !Ref OutputBucket
+          SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
+          DEAD_LETTER_BUCKET: !Ref DeadLetterBucket
+          CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
+          NAMESPACE: !Ref ResourceSuffix
+          ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
+          SNS_ERROR_TOPIC_ARN: !Ref SnsErrorTopicArn
+          ARCHIVE_BUCKET: !Ref ArchiveBucket
+          CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
+          DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref ParserLambdaCodeKey
+        S3ObjectVersion: !Ref ParserLambdaCodeKeyVersionId
+
+  DfdlParserLogGroupDCB20E49:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 90
+
+  DaffodilExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-DaffodilExecutionRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource: "*"
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: "*"
+        - PolicyName: SNS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+
+  DfdlLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Daffodil Lambda instances
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS traffic out to everywhere
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
 
 Outputs:
   DaffodilParserRoleArn:
-    Value: !GetAtt DaffodilParserRole4894954B.Arn
+    Value: !GetAtt DaffodilExecutionRole.Arn
   SchemaBucket:
     Value: !Ref schemabucketE4BFADA8
