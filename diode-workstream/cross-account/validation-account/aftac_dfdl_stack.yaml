@@ -1,6 +1,23 @@
 AWSTemplateFormatVersion: 2010-09-09
 
-Description: Creates Daffodil workflow
+Description: >
+  How to set up cross-account permissions:
+  1) Input Bucket:
+    a) Add a bucket event notification for ObjectCreated events for objects with the suffix of .infoset.xml.
+    Select Lambda function as the destination and paste the Parser function ARN from Outputs.
+    b) Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
+      "s3:GetObject",
+      "s3:GetObjectTagging",
+      "s3:DeleteObject",
+      "s3:ListBucket"
+  2) Output Bucket:
+    Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
+      "s3:AbortMultipartUpload",
+      "s3:PutObject",
+      "s3:PutObjectTagging",
+      "s3:ListBucket"
+  3) If either bucket is using a customer-managed KMS key(s), the key policy should also allow the Parser function's
+  execution role to use the key.
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -32,11 +49,12 @@ Metadata:
         Parameters:
           - InputBucket
           - OutputBucket
+          - InputOutputBucketsAccountId
+          - ParserFilterSuffix
           - ArchiveSuccessfulFiles
           - MoveFailedFiles
           - NotifyOnError
           - ContentTypeFileKey
-          - ParserFilterSuffix
           - ContentTypeCacheTtlMinutes
           - DataProcessorCacheTtlMinutes
           - EnableDetailedMetrics
@@ -66,6 +84,10 @@ Metadata:
         default: Input Bucket
       OutputBucket:
         default: Output Bucket
+      InputOutputBucketsAccountId:
+        default: Account ID for Input and Output Buckets
+      ParserFilterSuffix:
+        default: Parser Filter S3 Key Suffix
       ArchiveSuccessfulFiles:
         default: Archive Successful Files
       MoveFailedFiles:
@@ -74,8 +96,6 @@ Metadata:
         default: Notify On Error
       ContentTypeFileKey:
         default: Content Types File S3 Key
-      ParserFilterSuffix:
-        default: Parser Filter S3 Key Suffix
       ContentTypeCacheTtlMinutes:
         default: Content Types Cache TTL (Minutes)
       DataProcessorCacheTtlMinutes:
@@ -147,6 +167,24 @@ Parameters:
       The name of the S3 bucket where files will be uploaded after successful DFDL processing.
       On the low side, it would be the data transfer bucket created by the pipeline.
 
+  InputOutputBucketsAccountId:
+    Type: String
+    Description: >
+      The ID of AWS account that owns the Input and Output Buckets for cross-account access.
+      Leave blank if they are in the same account as this stack.
+      If the buckets are in a different account, see the stack description on what to do in the buckets owning account.
+    AllowedPattern: ^$|^\d{12}$
+    ConstraintDescription: Must be either blank or a valid 12-digit AWS account ID
+
+  ParserFilterSuffix:
+    Type: String
+    Description: >
+      File suffix filter to apply to the Input Bucket event listener. If left blank, all files will be sent for DFDL processing.
+      On the low side, it should be blank; on the high side, it should be ".infoset.xml".
+      Note: Ignored for cross-account buckets (when InputOutputBucketsAccountId is specified).
+    Default: ""
+    AllowedValues: ["", ".infoset.xml"]
+
   ArchiveSuccessfulFiles:
     Type: String
     Description: >
@@ -178,14 +216,6 @@ Parameters:
     Description: Content Type file mapping s3 key, defaults to content-types.yaml
     Default: content-types.yaml
 
-  ParserFilterSuffix:
-    Type: String
-    Description: >
-      File suffix filter to apply to the Input Bucket event listener. If left blank, all files will be sent for DFDL processing.
-      On the low side, it should be blank; on the high side, it should be ".infoset.xml"
-    Default: ""
-    AllowedValues: ["", ".infoset.xml"]
-
   ContentTypeCacheTtlMinutes:
     Type: Number
     Description: Content Type cache TTL in minutes
@@ -206,6 +236,16 @@ Conditions:
   cArchiveSuccessfulFiles: !Equals [!Ref ArchiveSuccessfulFiles, "true"]
   cMoveFailedFiles: !Equals [!Ref MoveFailedFiles, "true"]
   cNotifyOnError: !Equals [!Ref NotifyOnError, "true"]
+  cInputOutputBucketsInSameAccount:
+    !Equals [!Ref InputOutputBucketsAccountId, ""]
+
+Rules:
+  AccountIdBlankOrDifferent:
+    RuleCondition: !Not [!Equals [!Ref InputOutputBucketsAccountId, ""]]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref InputOutputBucketsAccountId, !Ref "AWS::AccountId"]
+        AssertDescription: Input Output Buckets Account ID must be either blank or different from the current account ID
 
 Resources:
   schemabucketE4BFADA8:
@@ -371,6 +411,7 @@ Resources:
 
   inputBucketNotifications891908E2:
     Type: Custom::S3BucketNotifications
+    Condition: cInputOutputBucketsInSameAccount
     DependsOn: InputBucketNotificationToParserFunction
     Properties:
       ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
@@ -393,7 +434,10 @@ Resources:
       Principal: s3.amazonaws.com
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt DfdlParser3923117A.Arn
-      SourceAccount: !Ref AWS::AccountId
+      SourceAccount: !If
+        - cInputOutputBucketsInSameAccount
+        - !Ref AWS::AccountId
+        - !Ref InputOutputBucketsAccountId
       SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
 
   schemabucketNotificationsADDEB1B1:
@@ -680,3 +724,5 @@ Outputs:
     Value: !GetAtt DaffodilExecutionRole.Arn
   SchemaBucket:
     Value: !Ref schemabucketE4BFADA8
+  DfdlParserFunctionArn:
+    Value: !GetAtt DfdlParser3923117A.Arn
