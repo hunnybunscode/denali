@@ -473,7 +473,7 @@ Resources:
       Description: AWS CloudFormation handler for "Custom::S3BucketNotifications" resources
       Handler: index.handler
       Role: !GetAtt BucketNotificationsHandlerRole.Arn
-      Runtime: python3.12
+      Runtime: python3.11
       Timeout: 300
       Code:
         ZipFile: |
