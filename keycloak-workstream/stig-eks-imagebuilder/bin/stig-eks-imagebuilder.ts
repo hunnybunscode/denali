@@ -13,7 +13,7 @@
 
 ///<reference path="../lib/interfaces.d.ts" />
 
-import { App, Aspects, Tags } from "aws-cdk-lib";
+import { App, Aspects, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
 import { StigEksImageBuilderStack } from "../lib/stig-eks-imagebuilder-stack";
 import * as path from "path";
 import * as fs from "fs";
@@ -40,14 +40,14 @@ for (const [key, value] of Object.entries(tags)) {
   });
 }
 
-let doc: Configuration;
+let doc: ConfigurationDocument;
 
 try {
   const environmentName = env.ENVIRONMENT ?? "dev";
   console.info(`Loading environment variables for environment: ${environmentName}`);
   doc = yaml.load(
     fs.readFileSync(path.normalize(path.join(__dirname, `../env/${environmentName}/configuration.yaml`)), "utf8")
-  ) as Configuration;
+  ) as ConfigurationDocument;
 } catch (e) {
   console.error(e);
   throw e;
@@ -64,6 +64,9 @@ const environment = {
     region: doc.environment.region ?? env!.CDK_DEFAULT_REGION,
   },
   ...doc,
+  synthesizer: doc.environment.synthesizeOverride
+    ? new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
+    : undefined,
 };
 
 new StigEksImageBuilderStack(app, "StigEksImagebuilderStack", environment);

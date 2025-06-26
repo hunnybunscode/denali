@@ -26,7 +26,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
 
-export interface StigEksImageBuilderStackProps extends StackProps, Configuration {}
+export interface StigEksImageBuilderStackProps extends StackProps, ConfigurationDocument {}
 
 const projectRootDir = path.resolve(__dirname, "..");
 
