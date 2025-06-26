@@ -20,6 +20,7 @@ import * as fs from "fs";
 import * as yaml from "js-yaml";
 import IamRoleAspect from "../lib/IamRoleAspect";
 import IamPolicyAspect from "../lib/IamPolicyAspect";
+import IamInstanceProfileAspect from "../lib/IamInstanceProfileAspect";
 import LambdaEnvAspect from "../lib/LambdaEnvAspect";
 
 const { env } = process;
@@ -75,6 +76,12 @@ Aspects.of(app).add(
   new IamRoleAspect({
     namePrefix: doc.environment?.iam?.prefix,
     permissionBoundaryArn: doc.environment?.iam?.permissionBoundaryArn,
+    verbose: true,
+  })
+);
+Aspects.of(app).add(
+  new IamInstanceProfileAspect({
+    namePrefix: doc.environment?.iam?.prefix,
     verbose: true,
   })
 );

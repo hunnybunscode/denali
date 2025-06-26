@@ -96,7 +96,7 @@ export default class IamRoleAspect implements IAspect {
 
               const newLastLetter = String.fromCharCode(letterCode + 65);
               newRoleName = `${newRoleName.slice(0, -1)}${newLastLetter}`;
-              console.log(`testing new role name: ${newRoleName}`);
+              console.debug(`Testing new role name: ${newRoleName}`);
             } while (this.roleNameCache.includes(newRoleName));
           }
 
