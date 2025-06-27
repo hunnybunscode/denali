@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as yaml from "js-yaml";
 import { SharedServicesStack } from "../lib/shared-services-stack";
 import IamRoleAspect from "../lib/IamRoleAspect";
+import IamInstanceProfileAspect from "../lib/IamInstanceProfileAspect";
 import IamPolicyAspect from "../lib/IamPolicyAspect";
 import LambdaEnvAspect from "../lib/LambdaEnvAspect";
 
@@ -74,6 +75,13 @@ Aspects.of(app).add(
 
 Aspects.of(app).add(
   new IamPolicyAspect({
+    namePrefix: doc.environment?.iam?.prefix,
+    verbose: true,
+  })
+);
+
+Aspects.of(app).add(
+  new IamInstanceProfileAspect({
     namePrefix: doc.environment?.iam?.prefix,
     verbose: true,
   })
