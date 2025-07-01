@@ -79,6 +79,7 @@ Aspects.of(app).add(
     verbose: true,
   })
 );
+
 Aspects.of(app).add(
   new IamInstanceProfileAspect({
     namePrefix: doc.environment?.iam?.prefix,
@@ -93,11 +94,22 @@ Aspects.of(app).add(
   })
 );
 
+const useProxy = doc.environment.proxy ? true : false;
+
 Aspects.of(app).add(
   new LambdaEnvAspect({
     environmentVariables: {
-      REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-      NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      ...{
+        REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+        NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      },
+      ...(useProxy
+        ? {
+            HTTP_PROXY: doc.environment.proxy?.httpProxy,
+            HTTPS_PROXY: doc.environment.proxy?.httpsProxy,
+            NO_PROXY: doc.environment.proxy?.noProxy,
+          }
+        : {}),
     },
     verbose: true,
   })

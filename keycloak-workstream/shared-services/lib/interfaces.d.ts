@@ -1,3 +1,12 @@
+interface ConfigurationDocument {
+  environment: Environment;
+  hostedZones?: HostedZone[];
+  clusters?: Cluster[];
+
+  helm?: Helm;
+  docker?: Docker;
+}
+
 interface Environment {
   readonly name: string;
   readonly region?: string;
@@ -221,12 +230,6 @@ interface Environment {
   };
 }
 
-interface ConfigurationDocument {
-  environment: Environment;
-  hostedZones?: HostedZone[];
-  clusters?: Cluster[];  
-}
-
 interface HostedZone {
   zoneName: string;
   private: boolean;
@@ -243,7 +246,16 @@ type ExtendedHostedZone = HostedZone & { id?: string };
 interface Cluster {
   name: string;
   version?: "1.27" | "1.28" | "1.29" | "1.30";
+  /**
+   * Enforce cluster endpoint access
+   * @default false
+   */
   private?: boolean;
+  isolated?: boolean;
+  /**
+   * Set if the cluster has internet access
+   * @default false
+   */
   vpc: {
     id?: string;
     cidr?: string;
@@ -296,4 +308,24 @@ interface Bastion {
     type: string;
   };
   tags?: { [key: string]: string };
+}
+
+interface Image {
+  repository: string;
+  tag: string;
+}
+
+interface Docker {
+  images: Image[];
+}
+
+interface Helm {
+  charts: HelmChart[];
+}
+
+interface HelmChart {
+  repositoryUrl: string;
+  chartName: string;
+  version: string;
+  images: Image[];
 }

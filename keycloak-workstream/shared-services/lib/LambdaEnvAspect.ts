@@ -2,7 +2,7 @@ import { AspectOptions, CfnResource, IAspect, Stack, aws_lambda as lambda } from
 import { IConstruct } from "constructs";
 
 export interface LambdaEnvAspectOptions extends AspectOptions {
-  environmentVariables?: { [key: string]: string };
+  environmentVariables?: { [key: string]: string | string[] | undefined };
   verbose?: boolean;
 }
 
@@ -21,7 +21,10 @@ export default class LambdaEnvAspect implements IAspect {
 
       if (resolved?.variables) {
         if (this.options.environmentVariables) {
-          node.addPropertyOverride("Environment.Variables", { ...resolved.variables, ...this.options.environmentVariables });
+          node.addPropertyOverride("Environment.Variables", {
+            ...resolved.variables,
+            ...this.options.environmentVariables,
+          });
         }
       } else {
         if (this.options.environmentVariables) {

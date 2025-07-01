@@ -170,6 +170,7 @@ export class EKSClustersConstruct extends Construct {
       nodeGroups,
       hostedZones,
       private: isPrivateCluster,
+      isolated: isClusterIsolated,
     } = clusterMetadata;
 
     // Read the enx-max-pod.txt and generate a hash table of instance limits
@@ -186,12 +187,15 @@ export class EKSClustersConstruct extends Construct {
         return acc;
       }, {} as { [key: string]: string });
 
+    console.info(`Cluster Isolation Mode : ${(vpcData.isolated && isClusterIsolated) ?? false}`);
+
     const vpc = ec2.Vpc.fromLookup(this, `VPC-${clusterName}`, {
       vpcId: vpcData.id,
     });
 
     const clusterSubnetFilter = {
-      subnetType: vpcData.isolated ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
+      subnetType:
+        vpcData.isolated && isClusterIsolated ? ec2.SubnetType.PRIVATE_ISOLATED : ec2.SubnetType.PRIVATE_WITH_EGRESS,
       subnetFilters: [ec2.SubnetFilter.byIds((vpcData.subnets ?? []).map(subnet => subnet.id))],
     };
 
@@ -217,6 +221,8 @@ export class EKSClustersConstruct extends Construct {
       return key;
     });
 
+    const { helm, docker } = this.props;
+
     const blueprintsAddons: blueprints.ClusterAddOn[] = [
       new blueprints.addons.VpcCniAddOn({
         eniConfigLabelDef: "topology.kubernetes.io/zone",
@@ -230,15 +236,192 @@ export class EKSClustersConstruct extends Construct {
       }),
       new blueprints.addons.CoreDnsAddOn(),
       new blueprints.addons.KubeProxyAddOn(),
-      new blueprints.addons.MetricsServerAddOn(),
-      new blueprints.addons.AwsLoadBalancerControllerAddOn(),
-      new blueprints.addons.CertManagerAddOn(),
-      new blueprints.addons.ClusterAutoScalerAddOn(),
       new blueprints.addons.CloudWatchInsights({
         ebsPerformanceLogs: true,
       }),
-      new blueprints.SecretsStoreAddOn(),
     ];
+
+    // Add each addons based on options
+    /**
+     * Metric Server
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "metrics-server");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+        const values: blueprints.Values = {
+          image: {
+            repository: images.find(image => image.repository.includes("metrics-server"))?.repository,
+            tag: images.find(image => image.repository.includes("metrics-server"))?.tag,
+          },
+          addonResizer: {
+            image: {
+              repository: images.find(image => image.repository.includes("addon-resizer"))?.repository,
+              tag: images.find(image => image.repository.includes("addon-resizer"))?.tag,
+            },
+          },
+        };
+
+        blueprintsAddons.push(
+          new blueprints.addons.MetricsServerAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+          })
+        );
+      } else {
+        blueprintsAddons.push(new blueprints.addons.MetricsServerAddOn());
+      }
+    }
+
+    /**
+     * AWS Load Balancer Controller
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "aws-load-balancer-controller");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+        const values: blueprints.Values = {
+          image: {
+            repository: images.find(image => image.repository.includes("aws-load-balancer-controller"))?.repository,
+            tag: images.find(image => image.repository.includes("aws-load-balancer-controller"))?.tag,
+          },
+          defaultSSLPolicy: "ELBSecurityPolicy-TLS13-1-2-FIPS-2023-04",
+        };
+
+        if (isClusterIsolated) {
+          values["enableShield"] = false;
+          values["enableWaf"] = false;
+          values["enableWafv2"] = false;
+        }
+
+        blueprintsAddons.push(
+          new blueprints.addons.AwsLoadBalancerControllerAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+          })
+        );
+      } else {
+        blueprintsAddons.push(new blueprints.addons.AwsLoadBalancerControllerAddOn());
+      }
+    }
+
+    /**
+     * Cert Manager
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "cert-manager");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+        const values: blueprints.Values = {
+          image: {
+            repository: images.find(image => image.repository.includes("cert-manager-controller"))?.repository,
+            tag: images.find(image => image.repository.includes("cert-manager-controller"))?.tag,
+          },
+          cainjector: {
+            image: {
+              repository: images.find(image => image.repository.includes("cert-manager-cainjector"))?.repository,
+              tag: images.find(image => image.repository.includes("cert-manager-cainjector"))?.tag,
+            },
+          },
+          webhook: {
+            image: {
+              repository: images.find(image => image.repository.includes("cert-manager-webhook"))?.repository,
+              tag: images.find(image => image.repository.includes("cert-manager-webhook"))?.tag,
+            },
+          },
+          startupapicheck: {
+            image: {
+              repository: images.find(image => image.repository.includes("cert-manager-startupapicheck"))?.repository,
+              tag: images.find(image => image.repository.includes("cert-manager-startupapicheck"))?.tag,
+            },
+          },
+        };
+
+        blueprintsAddons.push(
+          new blueprints.addons.CertManagerAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+          })
+        );
+      } else {
+        blueprintsAddons.push(new blueprints.addons.CertManagerAddOn());
+      }
+    }
+
+    /**
+     * Cluster Autoscaler
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "cluster-autoscaler");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+        const values: blueprints.Values = {
+          image: {
+            repository: images.find(image => image.repository.includes("cluster-autoscaler"))?.repository,
+            tag: images.find(image => image.repository.includes("cluster-autoscaler"))?.tag,
+          },
+        };
+
+        if (isClusterIsolated) {
+          values["customArgs"] = ["--aws-use-static-instance-list=true"];
+        }
+
+        blueprintsAddons.push(
+          new blueprints.addons.ClusterAutoScalerAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+          })
+        );
+      } else {
+        blueprintsAddons.push(new blueprints.addons.ClusterAutoScalerAddOn());
+      }
+    }
+
+    /**
+     * Kubernetes Secrets Store CSI Driver
+     */
+    // {
+    //   const chart = helm?.charts.find(chart => chart.chartName === "secrets-store-csi-driver");
+    //   if (chart) {
+    //     const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+    //     const values: blueprints.Values = {
+    //       linux: {
+    //         image: {
+    //           repository: images.find(image => image.repository.includes("driver"))?.repository,
+    //           tag: images.find(image => image.repository.includes("driver"))?.tag,
+    //         },
+    //         crds: {
+    //           image: {
+    //             repository: images.find(image => image.repository.includes("driver-crds"))?.repository,
+    //             tag: images.find(image => image.repository.includes("driver-crds"))?.tag,
+    //           },
+    //         },
+    //         registrarImage: {
+    //           repository: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.repository,
+    //           tag: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.tag,
+    //         },
+    //         livenessProbeImage: {
+    //           repository: images.find(image => image.repository.includes("livenessprobe"))?.repository,
+    //           tag: images.find(image => image.repository.includes("livenessprobe"))?.tag,
+    //         },
+    //       },
+    //     };
+
+    //     blueprintsAddons.push(
+    //       new blueprints.addons.SecretsStoreAddOn({
+    //         repository: chartRepository,
+    //         version: chartVersion,
+    //         values,
+    //       })
+    //     );
+    //   } else {
+    //     blueprintsAddons.push(new blueprints.addons.SecretsStoreAddOn());
+    //   }
+    // }
 
     const managedNodeGroupRole = blueprints.getResource(({ scope }) => {
       const role = new iam.Role(scope, `${clusterName}-managed-nodeGroup-role`, {
@@ -441,11 +624,34 @@ export class EKSClustersConstruct extends Construct {
       return role;
     });
 
+    // Add an additional security group to the cluster
+    const clusterSecurityGroup = blueprints.getResource(({ scope }) => {
+      const securityGroup = new ec2.SecurityGroup(scope, `eks-${clusterName}-security-group`, {
+        vpc: vpc,
+        securityGroupName: `eks-cluster-sg-${clusterName}-security-group`,
+        description: `EKS Control Plane Security Group for EKS Cluster: ${clusterName}`,
+        allowAllOutbound: true,
+      });
+
+      securityGroup.addIngressRule(
+        securityGroup,
+        ec2.Port.HTTPS,
+        "Grant Inbound access to anyone who has this security group"
+      );
+
+      Tags.of(securityGroup).add("eks:cluster-name", clusterName);
+      Tags.of(securityGroup).add("Name", `sg-eks-cluster-${clusterName}`);
+
+      return securityGroup;
+    });
+
     const clusterProvider = new blueprints.GenericClusterProvider({
       version: clusterVersion ? eks.KubernetesVersion.of(clusterVersion) : eks.KubernetesVersion.V1_30,
       endpointAccess: isPrivateCluster ? eks.EndpointAccess.PRIVATE : eks.EndpointAccess.PUBLIC_AND_PRIVATE,
+      privateCluster: isPrivateCluster ?? false,
+      isolatedCluster: isClusterIsolated ?? false,
       clusterName,
-      isolatedCluster: isPrivateCluster ?? false,
+      authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
       vpcSubnets: [clusterSubnetFilter],
       mastersRole: clusterMasterRole,
       role: clusterRole,
@@ -458,7 +664,8 @@ export class EKSClustersConstruct extends Construct {
         eks.ClusterLoggingTypes.CONTROLLER_MANAGER,
         eks.ClusterLoggingTypes.SCHEDULER,
       ],
-      placeClusterHandlerInVpc: false,
+      placeClusterHandlerInVpc: (isClusterIsolated || isPrivateCluster) ?? false,
+      securityGroup: clusterSecurityGroup,
       tags,
     });
 
@@ -469,9 +676,12 @@ export class EKSClustersConstruct extends Construct {
       const privateHostedZones = hostedZones.filter(hostedZones => hostedZones.private);
       const publicHostedZones = hostedZones.filter(hostedZones => !hostedZones.private);
 
-      const externalDnsConfig: blueprints.addons.ExternalDnsProps = {
+      let externalDnsConfig: blueprints.addons.ExternalDnsProps = {
         hostedZoneResources: hostedZones.map(({ zoneName }) => zoneName),
         values: {
+          provider: {
+            name: "aws",
+          },
           logLevel: "debug",
           policy: "sync",
         },
@@ -481,7 +691,6 @@ export class EKSClustersConstruct extends Construct {
         externalDnsConfig.values = {
           ...externalDnsConfig.values,
           ...{
-            // extraArgs: ["--aws-prefer-cname", "--aws-zone-type=private"],
             extraArgs: ["--aws-zone-type=private"],
             txtPrefix: "txt-",
           },
@@ -492,6 +701,37 @@ export class EKSClustersConstruct extends Construct {
         console.warn("Unsupported Capability for external-dns ...");
         console.warn("Cannot have both private and public hosted zones in the same cluster");
         console.warn("Only private hosted zones are prioritized");
+      }
+
+      /**
+       * External DNS
+       */
+      {
+        const chart = helm?.charts.find(chart => chart.chartName === "external-dns");
+        if (chart) {
+          const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+
+          if (isClusterIsolated) {
+          }
+
+          Object.assign(externalDnsConfig, {
+            repository: chartRepository,
+            version: chartVersion,
+            values: {
+              ...externalDnsConfig.values,
+              image: {
+                repository: images.find(image => image.repository.includes("external-dns"))?.repository,
+                tag: images.find(image => image.repository.includes("external-dns"))?.tag,
+              },
+              // provider: {
+              //   webhook: {
+              //     repository: images.find(image => image.repository.includes("webhook"))?.repository,
+              //     tag: images.find(image => image.repository.includes("webhook"))?.tag,
+              //   },
+              // },
+            },
+          });
+        }
       }
 
       blueprintsAddons.push(new blueprints.addons.ExternalDnsAddOn(externalDnsConfig));
@@ -525,6 +765,32 @@ export class EKSClustersConstruct extends Construct {
       });
     }
 
+    /**4
+     * Nginx Ingress Controller
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "nginx-ingress");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+
+        const nginxControllerConfig: blueprints.addons.NginxAddOnProps = {
+          repository: chartRepository,
+          version: chartVersion,
+          internetFacing: !isClusterIsolated,
+          values: {
+            controller: {
+              image: {
+                repository: images.find(image => image.repository.includes("nginx-ingress"))?.repository,
+                tag: images.find(image => image.repository.includes("nginx-ingress"))?.tag,
+              },
+            },
+          },
+        };
+
+        blueprintsAddons.push(new blueprints.addons.NginxAddOn(nginxControllerConfig));
+      }
+    }
+
     if (this.props.environment.proxy) {
       const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
 
@@ -550,30 +816,81 @@ export class EKSClustersConstruct extends Construct {
       console.warn("Adding Proxy Patch");
     }
 
+    const dynamicAddons: blueprints.ClusterAddOn[] = [
+      new blueprints.addons.EbsCsiDriverAddOn({
+        version: "auto",
+        storageClass: undefined,
+        kmsKeys: [clusterDataKey],
+      }),
+      new StorageClassDefaultAddon({
+        storageClassPaths: globSync(`**/*.{yaml,yml}`, {
+          cwd: path.resolve(__dirname, "..", "k8s/base/classes/storage"),
+          absolute: true,
+          ignore: ["*.disabled.{yaml,yml}", "kustomization.{yaml,yml}"],
+        }),
+        kmsKey: clusterDataKey,
+      }),
+    ];
+
+    /**
+     * Elastic File System CSI Driver
+     */
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "aws-efs-csi-driver");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+
+        const values: blueprints.Values = {
+          image: {
+            repository: images.find(image => image.repository.includes("aws-efs-csi-driver"))?.repository,
+            tag: images.find(image => image.repository.includes("aws-efs-csi-driver"))?.tag,
+          },
+          sidecars: {
+            livenessProbe: {
+              image: {
+                repository: images.find(image => image.repository.includes("livenessprobe"))?.repository,
+                tag: images.find(image => image.repository.includes("livenessprobe"))?.tag,
+              },
+            },
+            nodeDriverRegistrar: {
+              image: {
+                repository: images.find(image => image.repository.includes("node-driver-registrar"))?.repository,
+                tag: images.find(image => image.repository.includes("node-driver-registrar"))?.tag,
+              },
+            },
+            csiProvisioner: {
+              image: {
+                repository: images.find(image => image.repository.includes("external-provisioner"))?.repository,
+                tag: images.find(image => image.repository.includes("external-provisioner"))?.tag,
+              },
+            },
+          },
+          useFIPS: false,
+        };
+
+        blueprintsAddons.push(
+          new blueprints.addons.EfsCsiDriverAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+            kmsKeys: [clusterDataKey],
+          })
+        );
+      } else {
+        blueprintsAddons.push(
+          new blueprints.addons.EfsCsiDriverAddOn({
+            kmsKeys: [clusterDataKey],
+          })
+        );
+      }
+    }
+
     const clusterStack = eksBuilder
       .clusterProvider(clusterProvider)
       .region(environment?.region)
       .account(environment?.account)
       .resourceProvider(blueprints.GlobalResources.Vpc, new blueprints.DirectVpcProvider(vpc))
-      .addOns(
-        ...blueprintsAddons,
-        new blueprints.addons.EbsCsiDriverAddOn({
-          version: "auto",
-          storageClass: undefined,
-          kmsKeys: [clusterDataKey],
-        }),
-        new StorageClassDefaultAddon({
-          storageClassPaths: globSync(`**/*.{yaml,yml}`, {
-            cwd: path.resolve(__dirname, "..", "k8s/base/classes/storage"),
-            absolute: true,
-            ignore: ["*.disabled.{yaml,yml}", "kustomization.{yaml,yml}"],
-          }),
-          kmsKey: clusterDataKey,
-        }),
-        new blueprints.EfsCsiDriverAddOn({
-          kmsKeys: [clusterDataKey],
-        })
-      )
+      .addOns(...blueprintsAddons, ...dynamicAddons)
       .useDefaultSecretEncryption(false)
       .build(this, `cluster-${clusterName}-stack`, {
         description: `Stack to create EKS Cluster: ${clusterName}`,
