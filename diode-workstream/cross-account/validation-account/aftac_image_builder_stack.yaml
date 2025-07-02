@@ -362,10 +362,14 @@ Resources:
                           echo "All required packages are already installed"
                       fi
 
-                      if [ "$partition" = "aws-iso-b" ]; then
+                      if [ "$partition" = "aws-iso-b" ] || [ "$partition" = "aws-iso" ]; then
+                          if [ "$partition" = "aws-iso-b" ]; then
+                              aws_region=lck
+                          else
+                              aws_region=dca
                           ARCH=$(uname -m)
                           echo "Downloading awscliv2.zip..."
-                          curl -o awscliv2.zip https://aws-sdk-common-infra-lck-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/$ARCH/awscli-exe-linux-$ARCH.zip
+                          curl -o awscliv2.zip https://aws-sdk-common-infra-"$aws_region"-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/"$ARCH"/awscli-exe-linux-"$ARCH".zip
                           echo "Unzipping awscliv2.zip..."
                           unzip -q -o awscliv2.zip
                           BINARY=/usr/local/aws-cli/v2/current/bin/aws
@@ -378,8 +382,6 @@ Resources:
                           fi
                           aws --version
                           rm -rf aws awscliv2.zip
-                      # elif [ "$partition" = "aws-iso" ]; then
-                      # Need to find out the S3 bucket that houses awscli in this partition
                       fi
 
                       # All the required wheel files can be downloaded by running the following command:
