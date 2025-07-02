@@ -1495,7 +1495,7 @@ Resources:
       Name: !Sub /pipeline/InvalidFilesTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which fail content-type validation are published to.
       Type: String
-      Value: !GetAtt InvalidFilesTopic.TopicArn
+      Value: !Ref InvalidFilesTopic
 
   DataTransferIngestBucketNameParameter:
     Type: AWS::SSM::Parameter
@@ -1527,7 +1527,7 @@ Resources:
       Name: !Sub /pipeline/QuarantineTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which are deemed to potentially contain malware are published to.
       Type: String
-      Value: !GetAtt InfectedFileTopic.TopicArn
+      Value: !Ref InfectedFileTopic
 
   QueueMonitorTopic:
     Type: AWS::SNS::Topic
