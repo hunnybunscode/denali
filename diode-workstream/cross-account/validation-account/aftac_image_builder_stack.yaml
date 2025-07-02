@@ -351,8 +351,8 @@ Resources:
                           fi
                           rm -rf /etc/yum.repos.d/r* /etc/yum.repos.d/e*
                           # This sets the environment variable for the custom CA bundle
-                          $(grep -h "export AWS_CA_BUNDLE=" /etc/profile.d/*.sh 2>/dev/null | head -n 1)
-
+                          export_ca_bundle=$(grep -h "export AWS_CA_BUNDLE=" /etc/profile.d/*.sh 2>/dev/null | head -n 1)
+                          $export_ca_bundle
                       fi
 
                       if [ -n "$PACKAGES_TO_INSTALL" ]; then
@@ -362,10 +362,14 @@ Resources:
                           echo "All required packages are already installed"
                       fi
 
-                      if [ "$partition" = "aws-iso-b" ]; then
+                      if [ "$partition" = "aws-iso-b" ] || [ "$partition" = "aws-iso" ]; then
+                          if [ "$partition" = "aws-iso-b" ]; then
+                              aws_region=lck
+                          else
+                              aws_region=dca
                           ARCH=$(uname -m)
                           echo "Downloading awscliv2.zip..."
-                          curl -o awscliv2.zip https://aws-sdk-common-infra-lck-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/$ARCH/awscli-exe-linux-$ARCH.zip
+                          curl -o awscliv2.zip https://aws-sdk-common-infra-"$aws_region"-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/"$ARCH"/awscli-exe-linux-"$ARCH".zip
                           echo "Unzipping awscliv2.zip..."
                           unzip -q -o awscliv2.zip
                           BINARY=/usr/local/aws-cli/v2/current/bin/aws
@@ -378,8 +382,6 @@ Resources:
                           fi
                           aws --version
                           rm -rf aws awscliv2.zip
-                      # elif [ "$partition" = "aws-iso" ]; then
-                      # Need to find out the S3 bucket that houses awscli in this partition
                       fi
 
                       # All the required wheel files can be downloaded by running the following command:
@@ -414,9 +416,13 @@ Resources:
                       systemctl is-active --quiet amazon-cloudwatch-agent
 
                       echo "Enabling SQS Poller Service..."
-                      # Replaces the placeholder ("") with actual environment variables
-                      sed -i 's/""/resource_suffix=${ResourceSuffix} region=${AWS::Region}/g' /usr/bin/validation-pipeline/sqs_poller.service
-                      mv /usr/bin/validation-pipeline/sqs_poller.service /etc/systemd/system/sqs_poller.service
+                      sqs_poller_service_file=/usr/bin/validation-pipeline/sqs_poller.service
+
+                      # Populate environment variables for the sqs_poller service
+                      ca_bundle=$(echo "$export_ca_bundle" | sed 's|^export ||')
+                      sed -i "s|Environment=.*|Environment=resource_suffix=${ResourceSuffix} region=${AWS::Region} "$ca_bundle"|g" "$sqs_poller_service_file"
+
+                      mv "$sqs_poller_service_file" /etc/systemd/system/sqs_poller.service
                       systemctl enable --now sqs_poller.service
                       systemctl is-active --quiet sqs_poller.service
 
