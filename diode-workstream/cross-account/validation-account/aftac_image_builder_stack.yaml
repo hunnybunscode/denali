@@ -367,6 +367,7 @@ Resources:
                               aws_region=lck
                           else
                               aws_region=dca
+                          fi
                           ARCH=$(uname -m)
                           echo "Downloading awscliv2.zip..."
                           curl -o awscliv2.zip https://aws-sdk-common-infra-"$aws_region"-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/"$ARCH"/awscli-exe-linux-"$ARCH".zip
