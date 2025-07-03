@@ -1,6 +1,6 @@
 environment:
   name: dev
-  region: us-west-1
+  region: &region us-west-1
   account: "908027385618"
   iam:
     prefix: AFC2S
@@ -10,7 +10,7 @@ environment:
     httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
     noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
 
-.pipelineVersion: &pipeline-version 1.0.243
+.pipelineVersion: &pipeline-version 1.0.246
 
 .storage: &storage
   type: gp3
@@ -61,10 +61,10 @@ pipelines:
             value:
               - "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/AllowEKSOperationalStatus.yml
-      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
@@ -89,12 +89,14 @@ pipelines:
       - name: aws-cli-version-2-linux
         version: x.x.x
         platform: linux
-      - name: lib/component/install-eks-install.yml
+      - name: lib/component/eks/rhel/install-eks-install.yml
         version: *pipeline-version
         platform: linux
         parameters:
           - name: HomePath
             value: /tmp/workspace
+          - name: AWSRegion
+            value: *region
       - name: stig-build-linux-high
         version: x.x.x
         platform: linux
@@ -105,11 +107,11 @@ pipelines:
             value:
               - "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/allow-software-access.yml
-      - lib/component/AllowEKSOperationalStatus.yml
-      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/eks/allow-software-access.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
@@ -134,12 +136,14 @@ pipelines:
       - name: aws-cli-version-2-linux
         version: x.x.x
         platform: linux
-      - name: lib/component/install-eks-install.yml
+      - name: lib/component/eks/rhel/install-eks-install.yml
         version: *pipeline-version
         platform: linux
         parameters:
           - name: HomePath
             value: /tmp/workspace
+          - name: AWSRegion
+            value: *region
       - name: stig-build-linux-high
         version: x.x.x
         platform: linux
@@ -149,11 +153,11 @@ pipelines:
           - name: SetDoDConsentBanner
             value: "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/allow-software-access.yml
-      - lib/component/AllowEKSOperationalStatus.yml
-      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/eks/allow-software-access.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
 
   - name: amazon-node-rhel9-x86_64-standard-stig-high
     description: "Optimized Image with STIG High"
@@ -186,9 +190,9 @@ pipelines:
             value: "Yes"
           - name: SetDoDConsentBanner
             value: "Yes"
-      - lib/component/allow-software-access.yml
+      - lib/component/eks/allow-software-access.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
@@ -213,15 +217,17 @@ pipelines:
       - name: aws-cli-version-2-linux
         version: x.x.x
         platform: linux
-      - name: lib/component/install-eks-install.yml
+      - name: lib/component/eks/rhel/install-eks-install.yml
         version: *pipeline-version
         platform: linux
         parameters:
           - name: HomePath
             value: /tmp/workspace
-      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+          - name: AWSRegion
+            value: *region
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
 
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
@@ -246,12 +252,14 @@ pipelines:
       - name: aws-cli-version-2-linux
         version: x.x.x
         platform: linux
-      - name: lib/component/install-eks-install.yml
+      - name: lib/component/eks/rhel/install-eks-install.yml
         version: *pipeline-version
         platform: linux
         parameters:
           - name: HomePath
             value: /tmp/workspace
-      - lib/component/AllowEKSOperationalStatus-RHEL.yml
+          - name: AWSRegion
+            value: *region
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
-      - lib/component/cleanup-RHEL.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
