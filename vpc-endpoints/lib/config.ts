@@ -3,13 +3,28 @@ import * as yaml from 'js-yaml';
 import * as path from 'path';
 
 export interface Config {
-  vpcId: string;
-  account: string;
-  region: string;
+  environment: {
+    name: string;
+    region: string;
+    account: string;
+  };
+  vpc: {
+    id: string;
+  };
+  vpcEndpoints: {
+    gatewayEndpoints: {
+      dynamodb: {
+        enabled: boolean;
+      };
+      s3: {
+        enabled: boolean;
+      };
+    };
+  };
 }
 
 export function loadConfig(env: string = 'dev'): Config {
-  const configPath = path.join(__dirname, '..', 'config', `${env}.yaml`);
+  const configPath = path.join(__dirname, '..', 'shared-services', 'env', env, 'configuration.yaml');
   const fileContents = fs.readFileSync(configPath, 'utf8');
   return yaml.load(fileContents) as Config;
 }

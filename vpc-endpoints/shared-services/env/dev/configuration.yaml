@@ -1,0 +1,14 @@
+environment:
+  name: dev
+  region: us-east-1
+  account: "776732943381"
+
+vpc:
+  id: vpc-037578bc40b4ca79f
+
+vpcEndpoints:
+  gatewayEndpoints:
+    dynamodb:
+      enabled: true
+    s3:
+      enabled: true

@@ -3,17 +3,16 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Tags } from 'aws-cdk-lib';
 
 export class VpcEndpointsConstruct extends Construct {
-  constructor(scope: Construct, id: string, vpc: ec2.IVpc) {
+  constructor(scope: Construct, id: string, vpc: ec2.IVpc, config: any) {
     super(scope, id);
 
-    this.createVpcEndpoints(vpc);
+    this.createVpcEndpoints(vpc, config);
     
-    // Add construct-level tags
     Tags.of(this).add('Component', 'VpcEndpoints');
     Tags.of(this).add('Version', '1.1');
   }
 
-  private createVpcEndpoints(vpc: ec2.IVpc) {
+  private createVpcEndpoints(vpc: ec2.IVpc, config: any) {
     const securityGroup = new ec2.SecurityGroup(this, "vpc-endpoint-security-group", {
       vpc,
       allowAllOutbound: true,
@@ -70,16 +69,20 @@ export class VpcEndpointsConstruct extends Construct {
     ];
 
     vpcGatewayEndpointServices.forEach((service) => {
-      const endpoint = new ec2.GatewayVpcEndpoint(this, `VpcEndpoint-${service.name}`, {
-        vpc,
-        service: service.service,
-      });
+      const isEnabled = config.vpcEndpoints.gatewayEndpoints[service.name]?.enabled;
       
-      const cfnEndpoint = endpoint.node.defaultChild as ec2.CfnVPCEndpoint;
-      cfnEndpoint.addPropertyOverride('Tags', [{
-        Key: 'Name',
-        Value: `VpcEndpoint-${service.name}`
-      }]);
+      if (isEnabled) {
+        const endpoint = new ec2.GatewayVpcEndpoint(this, `VpcEndpoint-${service.name}`, {
+          vpc,
+          service: service.service,
+        });
+        
+        const cfnEndpoint = endpoint.node.defaultChild as ec2.CfnVPCEndpoint;
+        cfnEndpoint.addPropertyOverride('Tags', [{
+          Key: 'Name',
+          Value: `VpcEndpoint-${service.name}`
+        }]);
+      }
     });
   }
 }

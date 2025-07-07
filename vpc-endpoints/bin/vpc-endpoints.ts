@@ -5,13 +5,13 @@ import { VpcEndpointsStack } from '../lib/vpc-endpoints-stack';
 import { loadConfig } from '../lib/config';
 
 const app = new cdk.App();
-const env = app.node.tryGetContext('env') || 'dev';
+const env = process.env.ENVIRONMENT || 'dev';
 const config = loadConfig(env);
 
 new VpcEndpointsStack(app, 'VpcEndpointsStack', {
-  vpcId: config.vpcId,
+  config,
   env: {
-    account: config.account,
-    region: config.region,
+    account: config.environment.account,
+    region: config.environment.region,
   },
 });
