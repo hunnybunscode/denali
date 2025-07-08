@@ -2,9 +2,10 @@ import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Tags } from 'aws-cdk-lib';
 import * as packageJson from '../package.json';
+import { Config } from './config';
 
 export class VpcEndpointsConstruct extends Construct {
-  constructor(scope: Construct, id: string, vpc: ec2.IVpc, config: any) {
+  constructor(scope: Construct, id: string, vpc: ec2.IVpc, config: Config) {
     super(scope, id);
 
     this.createVpcEndpoints(vpc, config);
@@ -13,7 +14,7 @@ export class VpcEndpointsConstruct extends Construct {
     Tags.of(this).add('Version', packageJson.version);
   }
 
-  private createVpcEndpoints(vpc: ec2.IVpc, config: any) {
+  private createVpcEndpoints(vpc: ec2.IVpc, config: Config) {
     const securityGroup = new ec2.SecurityGroup(this, "vpc-endpoint-security-group", {
       vpc,
       allowAllOutbound: true,
@@ -70,7 +71,8 @@ export class VpcEndpointsConstruct extends Construct {
     ];
 
     vpcGatewayEndpointServices.forEach((service) => {
-      const isEnabled = config.vpcEndpoints.gatewayEndpoints.enabled.includes(service.name);
+      const isEnabled = config.vpcEndpoints.gatewayEndpoints.enabled && 
+                         config.vpcEndpoints.gatewayEndpoints.services.includes(service.name);
       
       if (isEnabled) {
         const endpoint = new ec2.GatewayVpcEndpoint(this, `VpcEndpoint-${service.name}`, {

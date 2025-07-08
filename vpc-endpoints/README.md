@@ -4,7 +4,7 @@ This CDK project creates VPC endpoints for AWS services in an existing VPC.
 
 ## Configuration
 
-Sample `shared-services/env/dev/configuration.yaml`:
+Minimal `shared-services/env/dev/configuration.yaml` (only VPC ID required):
 
 ```yaml
 environment:
@@ -13,20 +13,7 @@ environment:
   account: "776732943381"
 
 vpc:
-  id: vpc-037578bc40b4ca79f
-  cidr: 10.1.2.0/24
-  availabilityZones:
-    - us-east-1a
-    - us-east-1b
-    - us-east-1c
-  privateSubnetIds:
-    - subnet-0c3f97197fc2bc128
-    - subnet-0d097bc1805dabf90
-    - subnet-08373d5820b871744
-  privateSubnetRouteTableIds:
-    - rtb-0901f6b8e75675ff1
-    - rtb-0901f6b8e75675ff1
-    - rtb-0901f6b8e75675ff1
+  id: vpc-037578bc40b4ca79f  # Only this is required!
 
 vpcEndpoints:
   gatewayEndpoints:
@@ -34,6 +21,8 @@ vpcEndpoints:
       - dynamodb
       - s3
 ```
+
+**Note:** VPC CIDR and availability zones are automatically populated during build.
 
 ## Setup
 
@@ -44,10 +33,11 @@ npm run build
 
 ## Deploy
 
-Update the VPC ID in `shared-services/env/dev/configuration.yaml`, then deploy:
+Update the VPC ID in `shared-services/env/dev/configuration.yaml`, then:
 
 ```bash
-npx cdk deploy
+npm run build    # Populates VPC config + compiles
+npx cdk deploy   # Deploys stack
 ```
 
 For different environments:
@@ -66,6 +56,16 @@ With custom CDK toolkit:
 ```bash
 CUSTOM_TOOLKIT=MyCompany-CDK-Toolkit npx cdk deploy
 ```
+
+## Destroy
+
+To remove all VPC endpoints and clean up resources:
+
+```bash
+npx cdk destroy
+```
+
+**Note:** Destroy works even if VPC configuration is incomplete, making cleanup always possible.
 
 ## Prerequisites
 

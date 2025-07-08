@@ -8,16 +8,22 @@ export interface Config {
     region: string;
     account: string;
   };
+  cdk?: {
+    toolkitStackName?: string;
+  };
   vpc: {
     id: string;
-    cidr: string;
-    availabilityZones: string[];
-    privateSubnetIds: string[];
-    privateSubnetRouteTableIds: string[];
+    cidr?: string;
+    availabilityZones?: string[];
+    privateSubnetIds?: string[];
+    publicSubnetIds?: string[];
+    privateSubnetRouteTableIds?: string[];
+    publicSubnetRouteTableIds?: string[];
   };
   vpcEndpoints: {
     gatewayEndpoints: {
-      enabled: string[];
+      enabled: boolean;
+      services: string[];
     };
   };
 }
