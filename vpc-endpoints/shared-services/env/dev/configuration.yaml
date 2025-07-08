@@ -1,26 +1,40 @@
+# =============================================================================
+# MANUAL CONFIGURATION - Update these values for your environment
+# =============================================================================
+
 environment:
-  name: dev
-  region: us-east-1
-  account: "776732943381"
+  name: dev                    # MANUAL: Environment name (dev/staging/prod)
+  region: us-east-1           # MANUAL: AWS region
+  account: '776732943381'     # MANUAL: AWS account ID
 
 vpc:
-  id: vpc-037578bc40b4ca79f
-  cidr: 10.1.2.0/24
-  availabilityZones:
+  id: vpc-037578bc40b4ca79f   # MANUAL: Your VPC ID (required)
+  
+  # =============================================================================
+  # AUTO-POPULATED - These are automatically filled by 'npm run build'
+  # =============================================================================
+  cidr: 10.1.2.0/24           # AUTO: VPC CIDR block (from AWS API)
+  availabilityZones:          # AUTO: Available AZs in VPC (from AWS API)
     - us-east-1a
     - us-east-1b
     - us-east-1c
-  privateSubnetIds:
-    - subnet-0c3f97197fc2bc128
-    - subnet-0d097bc1805dabf90
+  privateSubnetIds:           # AUTO: Private subnet IDs (from AWS API)
     - subnet-08373d5820b871744
-  privateSubnetRouteTableIds:
+    - subnet-0d097bc1805dabf90
+    - subnet-0c3f97197fc2bc128
+  privateSubnetRouteTableIds: # AUTO: Private subnet route table IDs (from AWS API)
     - rtb-0901f6b8e75675ff1
     - rtb-0901f6b8e75675ff1
     - rtb-0901f6b8e75675ff1
+  publicSubnetIds:                 []         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)
+
+# =============================================================================
+# MANUAL CONFIGURATION - Customize VPC endpoints
+# =============================================================================
 
 vpcEndpoints:
-  gatewayEndpoints:
-    enabled:
-      - dynamodb
-      - s3
+  gatewayEndpoints:           # MANUAL: Enable/disable gateway endpoints
+    enabled: true             # MANUAL: Set to true/false to enable/disable ALL gateway endpoints
+    services:                 # Available gateway endpoints:
+      - dynamodb              #   - DynamoDB endpoint
+      - s3                    #   - S3 endpoint

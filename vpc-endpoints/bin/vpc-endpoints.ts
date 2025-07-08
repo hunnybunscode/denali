@@ -27,10 +27,10 @@ const stack = new VpcEndpointsStack(app, 'VpcEndpointsStack', {
     account: config.environment.account,
     region: config.environment.region,
   },
-  ...(process.env.CUSTOM_TOOLKIT && {
+  ...(config.cdk?.toolkitStackName && {
     synthesizer: new cdk.DefaultStackSynthesizer({
-      bootstrapStackVersionSsmParameter: `/cdk-bootstrap/${process.env.CUSTOM_TOOLKIT}/version`,
-      fileAssetsBucketName: `${process.env.CUSTOM_TOOLKIT}-assets-\${AWS::AccountId}-\${AWS::Region}`,
+      bootstrapStackVersionSsmParameter: `/cdk-bootstrap/${config.cdk.toolkitStackName}/version`,
+      fileAssetsBucketName: `${config.cdk.toolkitStackName}-assets-\${AWS::AccountId}-\${AWS::Region}`,
       bucketPrefix: '',
     })
   }),
