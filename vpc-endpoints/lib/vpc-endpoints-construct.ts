@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Tags } from 'aws-cdk-lib';
+import * as packageJson from '../package.json';
 
 export class VpcEndpointsConstruct extends Construct {
   constructor(scope: Construct, id: string, vpc: ec2.IVpc, config: any) {
@@ -9,7 +10,7 @@ export class VpcEndpointsConstruct extends Construct {
     this.createVpcEndpoints(vpc, config);
     
     Tags.of(this).add('Component', 'VpcEndpoints');
-    Tags.of(this).add('Version', '1.2');
+    Tags.of(this).add('Version', packageJson.version);
   }
 
   private createVpcEndpoints(vpc: ec2.IVpc, config: any) {
