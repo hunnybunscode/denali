@@ -10,15 +10,14 @@ export interface Config {
   };
   vpc: {
     id: string;
+    cidr: string;
+    availabilityZones: string[];
+    privateSubnetIds: string[];
+    privateSubnetRouteTableIds: string[];
   };
   vpcEndpoints: {
     gatewayEndpoints: {
-      dynamodb: {
-        enabled: boolean;
-      };
-      s3: {
-        enabled: boolean;
-      };
+      enabled: string[];
     };
   };
 }

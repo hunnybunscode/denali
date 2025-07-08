@@ -9,7 +9,7 @@ export class VpcEndpointsConstruct extends Construct {
     this.createVpcEndpoints(vpc, config);
     
     Tags.of(this).add('Component', 'VpcEndpoints');
-    Tags.of(this).add('Version', '1.1');
+    Tags.of(this).add('Version', '1.2');
   }
 
   private createVpcEndpoints(vpc: ec2.IVpc, config: any) {
@@ -69,7 +69,7 @@ export class VpcEndpointsConstruct extends Construct {
     ];
 
     vpcGatewayEndpointServices.forEach((service) => {
-      const isEnabled = config.vpcEndpoints.gatewayEndpoints[service.name]?.enabled;
+      const isEnabled = config.vpcEndpoints.gatewayEndpoints.enabled.includes(service.name);
       
       if (isEnabled) {
         const endpoint = new ec2.GatewayVpcEndpoint(this, `VpcEndpoint-${service.name}`, {
