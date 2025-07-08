@@ -2,6 +2,39 @@
 
 This CDK project creates VPC endpoints for AWS services in an existing VPC.
 
+## Configuration
+
+Sample `shared-services/env/dev/configuration.yaml`:
+
+```yaml
+environment:
+  name: dev
+  region: us-east-1
+  account: "776732943381"
+
+vpc:
+  id: vpc-037578bc40b4ca79f
+  cidr: 10.1.2.0/24
+  availabilityZones:
+    - us-east-1a
+    - us-east-1b
+    - us-east-1c
+  privateSubnetIds:
+    - subnet-0c3f97197fc2bc128
+    - subnet-0d097bc1805dabf90
+    - subnet-08373d5820b871744
+  privateSubnetRouteTableIds:
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
+
+vpcEndpoints:
+  gatewayEndpoints:
+    enabled:
+      - dynamodb
+      - s3
+```
+
 ## Setup
 
 ```bash
@@ -11,7 +44,7 @@ npm run build
 
 ## Deploy
 
-Update the VPC ID in `config/dev.yaml`, then deploy:
+Update the VPC ID in `shared-services/env/dev/configuration.yaml`, then deploy:
 
 ```bash
 npx cdk deploy
@@ -20,8 +53,64 @@ npx cdk deploy
 For different environments:
 
 ```bash
-npx cdk deploy --context env=prod
+# One-time environment variable
+ENVIRONMENT=dev npx cdk deploy
+
+# Or export for multiple commands
+export ENVIRONMENT=dev
+npx cdk deploy
 ```
+
+With custom CDK toolkit:
+
+```bash
+CUSTOM_TOOLKIT=MyCompany-CDK-Toolkit npx cdk deploy
+```
+
+## Prerequisites
+
+- Existing VPC with private subnets
+- AWS CLI configured with appropriate permissions
+- Node.js 18+ installed
+- CDK CLI installed: `npm install -g aws-cdk`
+
+## Getting VPC Information
+
+To find your VPC details for configuration:
+
+```bash
+# Get VPC ID and CIDR
+aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,CidrBlock]' --output table
+
+# Get private subnet IDs
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=YOUR_VPC_ID" "Name=map-public-ip-on-launch,Values=false" --query 'Subnets[*].SubnetId' --output text
+
+# Get route table IDs
+aws ec2 describe-route-tables --filters "Name=vpc-id,Values=YOUR_VPC_ID" --query 'RouteTables[*].RouteTableId' --output text
+```
+
+## What Gets Created
+
+This stack creates:
+- **25 Interface VPC Endpoints** for AWS services (Lambda, S3, EC2, etc.)
+- **2 Gateway VPC Endpoints** (DynamoDB, S3) - configurable
+- **Security Group** allowing HTTPS traffic from VPC CIDR
+- **Proper naming tags** for all endpoints
+
+## Troubleshooting
+
+**Common Issues:**
+
+1. **"VPC not found"** - Verify VPC ID in configuration
+2. **"Subnet not found"** - Ensure subnet IDs are correct and in the specified VPC
+3. **"Route table not found"** - Check route table IDs match your VPC
+4. **"Number of subnets must be multiple of AZs"** - Ensure subnet count matches AZ count
+
+## Cost Considerations
+
+- Interface endpoints: ~$7.20/month per endpoint
+- Gateway endpoints: Free (data processing charges apply)
+- Total estimated cost: ~$180/month for all interface endpoints
 
 ## Usage
 
@@ -31,5 +120,5 @@ The `VpcEndpointsConstruct` can be imported and used in other stacks:
 import { VpcEndpointsConstruct } from './lib/vpc-endpoints-construct';
 
 // In your stack
-new VpcEndpointsConstruct(this, 'VpcEndpoints', existingVpc);
+new VpcEndpointsConstruct(this, 'VpcEndpoints', existingVpc, config);
 ```

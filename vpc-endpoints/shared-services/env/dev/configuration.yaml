@@ -5,10 +5,22 @@ environment:
 
 vpc:
   id: vpc-037578bc40b4ca79f
+  cidr: 10.1.2.0/24
+  availabilityZones:
+    - us-east-1a
+    - us-east-1b
+    - us-east-1c
+  privateSubnetIds:
+    - subnet-0c3f97197fc2bc128
+    - subnet-0d097bc1805dabf90
+    - subnet-08373d5820b871744
+  privateSubnetRouteTableIds:
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
 
 vpcEndpoints:
   gatewayEndpoints:
-    dynamodb:
-      enabled: true
-    s3:
-      enabled: true
+    enabled:
+      - dynamodb
+      - s3
