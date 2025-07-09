@@ -9,20 +9,42 @@ from aws_cdk import (
     Stack
 )
 from constructs import Construct
-from aws_cdk.aws_stepfunctions import DefinitionBody 
+from aws_cdk.aws_stepfunctions import DefinitionBody
+from config.config import Config
 
 class TestStepFunction(Construct):
-    def __init__(self, scope: Construct, id: str):
+    def __init__(self, scope: Construct, id: str, config: Config):
         super().__init__(scope, id)
 
+        self.vpc = ec2.Vpc.from_lookup(
+            self,
+            "denali-poc-vpc",
+            vpc_id=config.networking.vpc_id
+        )
+        
+        self.subnet_selection = ec2.SubnetSelection(
+            subnets=[
+                ec2.Subnet.from_subnet_id(
+                    self, 
+                    f"denali-poc-private-subnet-{i}", 
+                    subnet_id=subnet.subnet_id
+                ) for i, subnet in enumerate(config.networking.subnets)
+            ]
+        )
+
+        self.security_group = ec2.SecurityGroup.from_security_group_id(
+            self, 
+            "LambdaSecurityGroup", 
+            config.networking.security_group_id
+        )
 
         # Define Lambda Functions
-        create_dynamodb_table = _lambda.Function(self, "CreateDynamoDBTable-CDK",
+        create_dynamodb_table = _lambda.Function(self, f"{config.namespace}-{config.version}-CreateDynamoDBTable",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/create_dynamodb_table"),
             timeout=Duration.minutes(5),
-            function_name="CreateDynamoDBTable-CDK"
+            function_name=f"{config.namespace}-{config.version}-CreateDynamoDBTable"
         )
         create_dynamodb_table.add_to_role_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -33,28 +55,15 @@ class TestStepFunction(Construct):
             resources=["arn:aws-us-gov:dynamodb:*:*:table/*"]
         ))
         
-        parse_findings = _lambda.Function(self, "ParseFortifyFindings-CDK",
+        parse_findings = _lambda.Function(self, f"{config.namespace}-{config.version}-ParseFortifyFindings",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/parse_fortify_findings_dynamodb"),
             timeout=Duration.minutes(5),
-            function_name="ParseFortifyFindings-CDK",
-            vpc=ec2.Vpc.from_lookup(
-                self, 
-                "denali-poc-vpc", 
-                vpc_id="vpc-04722c09eccda8315"
-            ),
-            vpc_subnets=ec2.SubnetSelection(
-                subnets=[
-                    ec2.Subnet.from_subnet_id(self, "denali-poc-private-subnet-2", "subnet-07b599999e083926a"),
-                    ec2.Subnet.from_subnet_id(self, "denali-poc-private-subnet-1", "subnet-037ee1b96ac684f7d")
-                ]
-            ),
-            security_groups=[ec2.SecurityGroup.from_security_group_id(
-                self, 
-                "LambdaSecurityGroup", 
-                "sg-04db58b3fca80f069" 
-            )]
+            function_name=f"{config.namespace}-{config.version}-ParseFortifyFindings",
+            vpc=self.vpc,
+            vpc_subnets=self.subnet_selection,
+            security_groups=[self.security_group]
         )
 
         parse_findings.add_to_role_policy(iam.PolicyStatement(
@@ -77,12 +86,12 @@ class TestStepFunction(Construct):
             ]
         ))
 
-        scan_table = _lambda.Function(self, "DynamoDBTableScan-CDK",
+        scan_table = _lambda.Function(self, f"{config.namespace}-{config.version}-DynamoDBTableScan",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/dynamodb_table_scan"),
             timeout=Duration.minutes(5),
-            function_name="DynamoDBTableScan-CDK"
+            function_name=f"{config.namespace}-{config.version}-DynamoDBTableScan"
         )
 
         scan_table.role.add_managed_policy(
@@ -218,8 +227,8 @@ class TestStepFunction(Construct):
 
         # Create State Machine
         self.state_machine = sfn.StateMachine(
-            self, "TestStateMachine",
-            state_machine_name="DenaliPOC-Test-CDK",
+            self, f"{config.namespace}-{config.version}-TestStateMachine",
+            state_machine_name=f"{config.namespace}-{config.version}-DenaliPOC-Test",
             definition_body=DefinitionBody.from_chainable(definition),
             timeout=Duration.minutes(30)
         )

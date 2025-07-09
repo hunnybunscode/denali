@@ -11,9 +11,10 @@ from aws_cdk import (
 
 from aws_cdk.aws_stepfunctions import DefinitionBody 
 from constructs import Construct
+from config.config import Config
 
 class RemediationStepFunction(Construct):
-    def __init__(self, scope: Construct, id: str):
+    def __init__(self, scope: Construct, id: str, config: Config):
         super().__init__(scope, id)
 
         def add_secrets_manager_permissions(lambda_function):
@@ -35,37 +36,32 @@ class RemediationStepFunction(Construct):
         self.vpc = ec2.Vpc.from_lookup(
             self,
             "denali-poc-vpc",
-            vpc_id="vpc-04722c09eccda8315"
+            vpc_id=config.networking.vpc_id
         )
-
+        
         self.subnet_selection = ec2.SubnetSelection(
             subnets=[
                 ec2.Subnet.from_subnet_id(
                     self, 
-                    "denali-poc-private-subnet-2", 
-                    "subnet-07b599999e083926a"
-                ),
-                ec2.Subnet.from_subnet_id(
-                    self, 
-                    "denali-poc-private-subnet-1", 
-                    "subnet-037ee1b96ac684f7d"
-                )
+                    f"denali-poc-private-subnet-{i}", 
+                    subnet_id=subnet.subnet_id
+                ) for i, subnet in enumerate(config.networking.subnets)
             ]
         )
 
         self.security_group = ec2.SecurityGroup.from_security_group_id(
             self, 
             "LambdaSecurityGroup", 
-            "sg-04db58b3fca80f069"
+            config.networking.security_group_id
         )
 
         # Define Lambda Functions
-        git_grab_file = _lambda.Function(self, "GitGrabFile-CDK",
+        git_grab_file = _lambda.Function(self, f"{config.namespace}-{config.version}-GitGrabFile",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/git_grab_file"),
             timeout=Duration.minutes(5),
-            function_name="GitGrabFile-CDK",
+            function_name=f"{config.namespace}-{config.version}-GitGrabFile",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -88,12 +84,12 @@ class RemediationStepFunction(Construct):
             resources=["*"]
         ))
 
-        code_remediation_bedrock = _lambda.Function(self, "CodeRemediationBedrock-CDK",
+        code_remediation_bedrock = _lambda.Function(self, f"{config.namespace}-{config.version}-CodeRemediationBedrock",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/code_remediation_bedrock"),
             timeout=Duration.minutes(5),
-            function_name="CodeRemediationBedrock-CDK",
+            function_name=f"{config.namespace}-{config.version}-CodeRemediationBedrock",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -111,12 +107,12 @@ class RemediationStepFunction(Construct):
         ))
 
 
-        git_branch_crud = _lambda.Function(self, "GitBranchCRUD-CDK",
+        git_branch_crud = _lambda.Function(self, f"{config.namespace}-{config.version}-GitBranchCRUD",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/git_branch_crud"),
             timeout=Duration.minutes(5),
-            function_name="GitBranchCRUD-CDK",
+            function_name=f"{config.namespace}-{config.version}-GitBranchCRUD",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -124,12 +120,12 @@ class RemediationStepFunction(Construct):
 
         add_secrets_manager_permissions(git_branch_crud)
 
-        git_issues_crud = _lambda.Function(self, "GitIssuesCRUD-CDK",
+        git_issues_crud = _lambda.Function(self, f"{config.namespace}-{config.version}-GitIssuesCRUD",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/git_issues_crud"),
             timeout=Duration.minutes(5),
-            function_name="GitIssuesCRUD-CDK",
+            function_name=f"{config.namespace}-{config.version}-GitIssuesCRUD",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -137,12 +133,12 @@ class RemediationStepFunction(Construct):
 
         add_secrets_manager_permissions(git_issues_crud)
 
-        git_code_merge = _lambda.Function(self, "GitCodeMerge-CDK",
+        git_code_merge = _lambda.Function(self, f"{config.namespace}-{config.version}-GitCodeMerge",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/git_code_merge"),
             timeout=Duration.minutes(5),
-            function_name="GitCodeMerge-CDK",
+            function_name=f"{config.namespace}-{config.version}-GitCodeMerge",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -150,22 +146,22 @@ class RemediationStepFunction(Construct):
 
         add_secrets_manager_permissions(git_code_merge)
 
-        verify_findings_resolved = _lambda.Function(self, "VerifyFindingsResolved-CDK",
+        verify_findings_resolved = _lambda.Function(self, f"{config.namespace}-{config.version}-VerifyFindingsResolved",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/verify_findings_resolved"),
-            function_name="VerifyFindingsResolved-CDK",
+            function_name=f"{config.namespace}-{config.version}-VerifyFindingsResolved",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
         )
 
-        git_pr_crud = _lambda.Function(self, "GitPRCRUD-CDK",
+        git_pr_crud = _lambda.Function(self, f"{config.namespace}-{config.version}-GitPRCRUD",
             runtime=_lambda.Runtime.PYTHON_3_9,
             handler="index.lambda_handler",
             code=_lambda.Code.from_asset("stacks/step_functions_stack/lambdas/git_pr_crud"),
             timeout=Duration.minutes(5),
-            function_name="GitPRCRUD-CDK",
+            function_name=f"{config.namespace}-{config.version}-GitPRCRUD",
             vpc=self.vpc,
             vpc_subnets=self.subnet_selection,
             security_groups=[self.security_group]
@@ -407,8 +403,8 @@ class RemediationStepFunction(Construct):
 
         # Create State Machine
         self.state_machine = sfn.StateMachine(
-            self, "RemediationStateMachine",
-            state_machine_name="DenaliPOC-Remediation-Test-CDK",
+            self, f"{config.namespace}-{config.version}-RemediationStateMachine",
+            state_machine_name=f"{config.namespace}-{config.version}-DenaliPOC-Remediation-Test",
             definition_body=DefinitionBody.from_chainable(definition),
             timeout=Duration.minutes(30)
         )
