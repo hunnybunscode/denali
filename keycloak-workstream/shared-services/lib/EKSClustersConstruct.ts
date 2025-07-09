@@ -24,6 +24,7 @@ import { StorageClassDefaultAddon } from "./eks-blueprints/addons/storage-class-
 
 import { NagSuppressions } from "cdk-nag";
 import { VpcCniProxyPatchAddon, VpcCniProxyPatchAddonProps } from "./eks-blueprints/addons/vpc-cni-proxy-patch-addon";
+import { LookupHostedZoneProvider } from "./eks-blueprints/resource-providers/hosted-zone";
 
 export interface EksClustersConstructProps extends StackProps, ConfigurationDocument {
   extended: {
@@ -278,6 +279,13 @@ export class EKSClustersConstruct extends Construct {
      * AWS Load Balancer Controller
      */
     {
+      const extraEnvVars: { name: string; value: string }[] = this.createHttpProxyEnv();
+
+      const extraEnvVarsFlat = extraEnvVars.reduce((acc, { name, value }) => {
+        acc[name] = value;
+        return acc;
+      }, {} as { [key: string]: string });
+
       const chart = helm?.charts.find(chart => chart.chartName === "aws-load-balancer-controller");
       if (chart) {
         const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
@@ -299,11 +307,15 @@ export class EKSClustersConstruct extends Construct {
           new blueprints.addons.AwsLoadBalancerControllerAddOn({
             repository: chartRepository,
             version: chartVersion,
-            values,
+            values: Object.assign(values, this.props.environment.proxy ? { env: extraEnvVarsFlat } : {}),
           })
         );
       } else {
-        blueprintsAddons.push(new blueprints.addons.AwsLoadBalancerControllerAddOn());
+        blueprintsAddons.push(
+          new blueprints.addons.AwsLoadBalancerControllerAddOn({
+            values: this.props.environment.proxy ? { env: extraEnvVarsFlat } : {},
+          })
+        );
       }
     }
 
@@ -494,15 +506,7 @@ export class EKSClustersConstruct extends Construct {
           if (this.props.environment.proxy) {
             const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
 
-            let noProxyStr = "";
-
-            if (noProxy) {
-              if (Array.isArray(noProxy)) {
-                noProxyStr = noProxy.join(",");
-              } else {
-                noProxyStr = noProxy;
-              }
-            }
+            const noProxyStr = this.createNoProxyString(noProxy);
 
             let rawProxyUserdata = fs
               .readFileSync(path.join(__dirname, "scripts/proxy-userdata.sh"), {
@@ -695,6 +699,14 @@ export class EKSClustersConstruct extends Construct {
             txtPrefix: "txt-",
           },
         };
+
+        if (this.props.environment.proxy) {
+          const extraEnvVars: { name: string; value: string }[] = this.createHttpProxyEnv();
+
+          Object.assign(externalDnsConfig.values, {
+            env: extraEnvVars,
+          });
+        }
       }
 
       if (publicHostedZones.length > 0 && privateHostedZones.length > 0) {
@@ -739,29 +751,33 @@ export class EKSClustersConstruct extends Construct {
       hostedZones.forEach(hostedZones => {
         // Check extended data for generated hosted zone
 
-        const { zoneName } = hostedZones;
+        const { zoneName, private: isPrivateHostedZone } = hostedZones;
         const { extended } = this.props;
 
         const stackHostedZones = extended.hostedZones;
 
-        console.warn(`Looking of hostzone of ${zoneName}`);
+        console.warn(`Looking of hosted zone: ${zoneName}`);
 
         const results = stackHostedZones
           .filter(hostedZone => hostedZone.zoneName === zoneName)
           .filter(hostedZone => hostedZone.private);
 
-        if (results.length > 1)
+        if (results.length > 1) {
           console.warn(`Found multiple hosted zones with the same name ${zoneName} and private property set to true`);
+        }
 
         if (results.length > 0) {
           console.info(`Found hosted zone ${zoneName} in extended data`);
-
-          eksBuilder.resourceProvider(zoneName, new blueprints.ImportHostedZoneProvider(zoneName));
-
-          return;
         }
 
-        eksBuilder.resourceProvider(zoneName, new blueprints.LookupHostedZoneProvider(zoneName));
+        eksBuilder.resourceProvider(
+          zoneName,
+          new LookupHostedZoneProvider({
+            domainName: zoneName,
+            privateZone: isPrivateHostedZone,
+            vpcId: isPrivateHostedZone ? vpc.vpcId : undefined,
+          })
+        );
       });
     }
 
@@ -794,15 +810,7 @@ export class EKSClustersConstruct extends Construct {
     if (this.props.environment.proxy) {
       const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
 
-      let noProxyStr = "";
-
-      if (noProxy) {
-        if (Array.isArray(noProxy)) {
-          noProxyStr = noProxy.join(",");
-        } else {
-          noProxyStr = noProxy;
-        }
-      }
+      const noProxyStr = this.createNoProxyString(noProxy);
 
       const proxyAddonConfig: VpcCniProxyPatchAddonProps = {
         proxy: {
@@ -899,7 +907,68 @@ export class EKSClustersConstruct extends Construct {
           : undefined,
       });
 
+    if (isPrivateCluster) {
+      new CfnOutput(clusterStack, `Cluster-${clusterName}-PrivateAccess`, {
+        description: `Sample alternative access to Private Cluster Endpoint - ${clusterName} via SSM, Dynamic Port Forwarding`,
+        value: `kubectl config set-cluster ${
+          clusterStack.getClusterInfo().cluster.clusterArn
+        } --proxy-url socks5://localhost:8080`,
+      });
+    }
+
+    new CfnOutput(clusterStack, `Cluster-${clusterName}-ARN`, {
+      value: clusterStack.getClusterInfo().cluster.clusterArn,
+      description: `Cluster ARN of Cluster: ${clusterName}`,
+    });
+
     return clusterStack;
+  }
+
+  private createHttpProxyEnv() {
+    const extraEnvVars: { name: string; value: string }[] = [];
+
+    if (this.props.environment.proxy) {
+      const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
+
+      const noProxyStr = this.createNoProxyString(noProxy);
+
+      extraEnvVars.push(
+        {
+          name: "HTTP_PROXY",
+          value: httpProxy,
+        },
+        {
+          name: "HTTPS_PROXY",
+          value: httpsProxy,
+        },
+        {
+          name: "NO_PROXY",
+          value: noProxyStr,
+        }
+      );
+
+      extraEnvVars.forEach(({ name, value }) => {
+        extraEnvVars.push({
+          name: name.toLowerCase(),
+          value: value,
+        });
+      });
+    }
+
+    return extraEnvVars;
+  }
+
+  private createNoProxyString(noProxy: string | string[] | undefined) {
+    let noProxyStr = "";
+
+    if (noProxy) {
+      if (Array.isArray(noProxy)) {
+        noProxyStr = noProxy.join(",");
+      } else {
+        noProxyStr = noProxy;
+      }
+    }
+    return noProxyStr;
   }
 
   private getVolumeType(storage?: { rootDeviceName: string; sizeInGB: number; type: string }): ec2.EbsDeviceVolumeType {

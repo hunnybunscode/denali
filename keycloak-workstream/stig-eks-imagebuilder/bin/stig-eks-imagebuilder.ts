@@ -13,7 +13,7 @@
 
 ///<reference path="../lib/interfaces.d.ts" />
 
-import { App, Aspects, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
+import { App, Aspects, CliCredentialsStackSynthesizer, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
 import { StigEksImageBuilderStack } from "../lib/stig-eks-imagebuilder-stack";
 import * as path from "path";
 import * as fs from "fs";
@@ -66,7 +66,12 @@ const environment = {
   },
   ...doc,
   synthesizer: doc.environment.synthesizeOverride
-    ? new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
+    ? doc.environment.synthesizeOverride.useCliCredentials
+      ? (() => {
+          console.warn("Using CLI Credentials ...");
+          return new CliCredentialsStackSynthesizer(doc.environment.synthesizeOverride);
+        })()
+      : new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
     : undefined,
 };
 
