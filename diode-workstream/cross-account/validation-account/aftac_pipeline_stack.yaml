@@ -197,7 +197,9 @@ Resources:
             Effect: Allow
             Principal:
               AWS: !GetAtt Ec2ScannerRole.Arn
-            Action: kms:GenerateDataKey
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
             Resource: "*"
             Condition:
               StringEquals:
