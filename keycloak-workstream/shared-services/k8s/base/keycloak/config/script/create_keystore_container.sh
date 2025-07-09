@@ -7,12 +7,15 @@
 
 # RHEL 9 specific image
 
+echo "Current Working Directory: $(pwd)"
+
 microdnf install --assumeyes wget unzip openssl
 
 echo "Downloading Certificates from DISA..."
 # Location of bundle from DISA site
 url='https://public.cyber.mil/pki-pke/pkipke-document-library/'
 bundle=$(curl --silent $url | awk -F '"' 'tolower($2) ~ /dod.zip/ {print $2}')
+# bundle="https://dl.cyber.mil/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
 mkdir -p tmp
 

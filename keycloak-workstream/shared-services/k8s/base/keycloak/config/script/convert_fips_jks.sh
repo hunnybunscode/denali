@@ -19,6 +19,11 @@ echo "JAVA HOME: $JAVA_HOME"
 
 curl --silent --output /opt/bc-fips.jar https://repo1.maven.org/maven2/org/bouncycastle/bc-fips/2.1.0/bc-fips-2.1.0.jar
 
+if [ $? -ne 0 ]; then
+  echo "Error downloading bc-fips.jar ..."
+  exit 1
+fi
+
 mv $JAVA_HOME/lib/security/cacerts $JAVA_HOME/lib/security/cacerts.pkcs12
 
 keytool -importkeystore \
