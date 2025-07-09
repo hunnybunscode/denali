@@ -1,58 +1,45 @@
+# Denali AI-ML Workstream
+This repo contains the CDK application that defines the infrastructure for the AI-ML workstream of this project. This project implements an automated security vulnerability remediation system for software development, leveraging AWS Step Functions and Lambda functions to create a streamlined workflow. The system analyzes code using Fortify scans to detect security vulnerabilities, then utilizes AI, specifically a Large Language Model (LLM) through Amazon Bedrock, to automatically generate fixes for identified issues. It interacts with a version control system (Gitea) to manage code changes, including creating branches, committing fixes, and opening pull requests, while tracking the remediation process through issue management in the repository. Data about findings and fixes are stored and managed using DynamoDB. 
 
-# Welcome to your CDK Python project!
+## Project Structure:
+- stacks/: This directory contains all the Python CDK stacks defining the infrastructure
+- app.py: The top-level script contain all the build logic for deploying the infrastructure defined in "stacks"
+- config/: Contains configuration files and utilities
+    - deployment_config.yaml: Main configuration file you need to modify
+    - config.py: Configuration loading and processing
+- stacks/: Contains the main stack definitions
+    - stacks/step_functions_stack/: Contains Step Function definitions
+    - stacks/step_functions_stack/lambdas/: Contains Lambda function code
 
-This is a blank project for CDK development with Python.
+## Deployment
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+### Create config file
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
-
-To manually create a virtualenv on MacOS and Linux:
-
+To deploy, you need to pass in a configuration file. An example is provided at config/deployment_config.yaml. You need to update this file with your specific settings:
 ```
-$ python3 -m venv .venv
-```
-
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
-
-```
-$ source .venv/bin/activate
-```
-
-If you are a Windows platform, you would activate the virtualenv like this:
-
-```
-% .venv\Scripts\activate.bat
-```
-
-Once the virtualenv is activated, you can install the required dependencies.
-
-```
-$ pip install -r requirements.txt
+namespace: "your-name"  # Replace with your identifier
+version: "v1"
+region: "us-gov-west-1"  # Your AWS region
+networking:
+  vpc_id: "vpc-xxxxxx"               # Replace with your VPC ID
+  subnets:
+    - subnet_id: "subnet-xxxxxx"     # Replace with your subnet IDs
+      availability_zone: "us-gov-west-1a"
+    - subnet_id: "subnet-yyyyyy"
+      availability_zone: "us-gov-west-1b"
+  security_group_id: "sg-xxxxxx"     # Replace with your security group ID
 ```
 
-At this point you can now synthesize the CloudFormation template for this code.
+### Deploy
 
+The deployment expects a config file, defined above, to be provided via the context at deployment time as follows:
 ```
-$ cdk synth
+cdk synth --context config_file=path/to/config.yaml
+cdk deploy --context config_file=path/to/config.yaml
 ```
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
-
-## Useful commands
-
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
-
-Enjoy!
+### Security Considerations
+- Resources are isolated through the namespace system
+- Lambda functions are deployed in VPC for network isolation
+- Security groups should be configured with minimum required access
+- Ensure not to commit personal AWS resource IDs to version control
