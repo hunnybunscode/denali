@@ -8,6 +8,17 @@ environment:
   name: dev                    # AUTO: Environment name
   region: us-east-1           # AUTO: AWS region (detected)
   account: '776732943381'     # AUTO: AWS account (detected)
+  
+  # OPTIONAL: Custom CDK synthesizer for specialized environments (GovCloud, etc.)
+  # Uncomment and configure if using custom CDK bootstrap roles
+  # synthesizeOverride:
+  #   cloudFormationExecutionRole: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-cfn-exec-role
+  #   deployRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-deploy-role
+  #   fileAssetPublishingRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-file-role
+  #   imageAssetPublishingRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-image-role
+  #   lookupRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-lookup-role
+  #   fileAssetsBucketName: my-custom-cdk-assets-bucket
+  #   qualifier: myqualifier
 
 vpc:
   id: vpc-037578bc40b4ca79f   # AUTO: VPC ID (detected)

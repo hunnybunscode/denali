@@ -7,6 +7,16 @@ export interface Config {
     name: string;
     region: string;
     account: string;
+    synthesizeOverride?: {
+      cloudFormationExecutionRole?: string;
+      deployRoleArn?: string;
+      fileAssetPublishingRoleArn?: string;
+      imageAssetPublishingRoleArn?: string;
+      lookupRoleArn?: string;
+      fileAssetsBucketName?: string;
+      qualifier?: string;
+      [key: string]: any; // Allow any other synthesizer options
+    };
   };
   cdk?: {
     toolkitStackName?: string;
