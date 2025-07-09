@@ -2,27 +2,39 @@
 
 This CDK project creates VPC endpoints for AWS services in an existing VPC.
 
-## Configuration
+## Zero Configuration Setup
 
-Minimal `shared-services/env/dev/configuration.yaml` (only VPC ID required):
+**No configuration required!** The system auto-detects:
+- AWS account (from your credentials)
+- AWS region (from environment or defaults to us-east-1)
+- VPC (finds suitable VPC automatically)
+- All VPC details (subnets, route tables, etc.)
+
+**Optional configuration** - only if you want to customize:
 
 ```yaml
+# All settings are optional - system uses smart defaults
 environment:
-  name: dev
-  region: us-east-1
-  account: "776732943381"
+  name: dev                    # Auto-detected
+  region: us-east-1           # Auto-detected
+  account: "776732943381"     # Auto-detected
+  
+  # OPTIONAL: For specialized environments (GovCloud, etc.)
+  # synthesizeOverride:
+  #   deployRoleArn: arn:aws-us-gov:iam::123:role/custom-deploy-role
+  #   fileAssetsBucketName: my-custom-assets-bucket
+  #   qualifier: myqualifier
 
 vpc:
-  id: vpc-037578bc40b4ca79f  # Only this is required!
+  id: vpc-037578bc40b4ca79f   # Auto-detected (or specify your own)
 
 vpcEndpoints:
   gatewayEndpoints:
-    enabled:
+    enabled: false            # Default: disabled (set to true to enable)
+    services:
       - dynamodb
       - s3
 ```
-
-**Note:** VPC CIDR and availability zones are automatically populated during build.
 
 ## Setup
 
@@ -33,29 +45,25 @@ npm run build
 
 ## Deploy
 
-Update the VPC ID in `shared-services/env/dev/configuration.yaml`, then:
+**Zero configuration deployment:**
 
 ```bash
-npm run build    # Populates VPC config + compiles
-npx cdk deploy   # Deploys stack
+npm run build    # Auto-detects everything + compiles
+npx cdk deploy   # Deploys with smart defaults
 ```
 
-For different environments:
+**For different environments:**
 
 ```bash
-# One-time environment variable
-ENVIRONMENT=dev npx cdk deploy
+# Deploy to staging
+ENVIRONMENT=staging npm run build && npx cdk deploy
 
-# Or export for multiple commands
-export ENVIRONMENT=dev
-npx cdk deploy
+# Deploy to production
+ENVIRONMENT=prod npm run build && npx cdk deploy
 ```
 
-With custom CDK toolkit:
-
-```bash
-CUSTOM_TOOLKIT=MyCompany-CDK-Toolkit npx cdk deploy
-```
+**For specialized environments (GovCloud, etc.):**
+Add `synthesizeOverride` section to your configuration.yaml with custom role ARNs.
 
 ## Destroy
 
@@ -67,26 +75,48 @@ npx cdk destroy
 
 **Note:** Destroy works even if VPC configuration is incomplete, making cleanup always possible.
 
+## Testing
+
+**Full End-to-End Test** (destroy → delete config → rebuild → redeploy):
+
+```bash
+npm run test-full-cycle
+```
+
+This single command will:
+1. Destroy existing stack (with --force, no prompts)
+2. Delete configuration.yaml file
+3. Auto-detect and rebuild configuration
+4. Deploy stack (with --require-approval never, no prompts)
+
+Perfect for testing the complete zero-configuration workflow!
+
 ## Prerequisites
 
-- Existing VPC with private subnets
 - AWS CLI configured with appropriate permissions
 - Node.js 18+ installed
 - CDK CLI installed: `npm install -g aws-cdk`
+- **That's it!** No VPC setup required - system finds suitable VPC automatically
 
-## Getting VPC Information
+## Advanced Configuration
 
-To find your VPC details for configuration:
+**Manual VPC Selection** (if auto-detection picks wrong VPC):
 
 ```bash
-# Get VPC ID and CIDR
-aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,CidrBlock]' --output table
+# Find your VPCs
+aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,CidrBlock,IsDefault]' --output table
 
-# Get private subnet IDs
-aws ec2 describe-subnets --filters "Name=vpc-id,Values=YOUR_VPC_ID" "Name=map-public-ip-on-launch,Values=false" --query 'Subnets[*].SubnetId' --output text
+# Then specify the VPC ID in configuration.yaml
+```
 
-# Get route table IDs
-aws ec2 describe-route-tables --filters "Name=vpc-id,Values=YOUR_VPC_ID" --query 'RouteTables[*].RouteTableId' --output text
+**Custom CDK Roles** (for GovCloud/Enterprise):
+
+```yaml
+environment:
+  synthesizeOverride:
+    deployRoleArn: arn:aws-us-gov:iam::123:role/my-deploy-role
+    fileAssetsBucketName: my-custom-assets-bucket
+    qualifier: myqualifier
 ```
 
 ## What Gets Created
@@ -105,12 +135,6 @@ This stack creates:
 2. **"Subnet not found"** - Ensure subnet IDs are correct and in the specified VPC
 3. **"Route table not found"** - Check route table IDs match your VPC
 4. **"Number of subnets must be multiple of AZs"** - Ensure subnet count matches AZ count
-
-## Cost Considerations
-
-- Interface endpoints: ~$7.20/month per endpoint
-- Gateway endpoints: Free (data processing charges apply)
-- Total estimated cost: ~$180/month for all interface endpoints
 
 ## Usage
 
