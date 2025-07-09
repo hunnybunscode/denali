@@ -1,14 +1,16 @@
 # =============================================================================
-# MANUAL CONFIGURATION - Update these values for your environment
+# AUTO-GENERATED CONFIGURATION
 # =============================================================================
+# This file was automatically generated with smart defaults.
+# The only setting you might want to change is gatewayEndpoints.enabled below.
 
 environment:
-  name: dev                    # MANUAL: Environment name (dev/staging/prod)
-  region: us-east-1           # MANUAL: AWS region
-  account: '776732943381'     # MANUAL: AWS account ID
+  name: dev                    # AUTO: Environment name
+  region: us-east-1           # AUTO: AWS region (detected)
+  account: '776732943381'     # AUTO: AWS account (detected)
 
 vpc:
-  id: vpc-037578bc40b4ca79f   # MANUAL: Your VPC ID (required)
+  id: vpc-037578bc40b4ca79f   # AUTO: VPC ID (detected)
   
   # =============================================================================
   # AUTO-POPULATED - These are automatically filled by 'npm run build'
@@ -26,15 +28,15 @@ vpc:
     - rtb-0901f6b8e75675ff1
     - rtb-0901f6b8e75675ff1
     - rtb-0901f6b8e75675ff1
-  publicSubnetIds:                 []         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)         # AUTO: Public subnet IDs (from AWS API)
+  publicSubnetIds: []         # AUTO: Public subnet IDs (from AWS API)
 
 # =============================================================================
-# MANUAL CONFIGURATION - Customize VPC endpoints
+# MANUAL CONFIGURATION - The only setting you might want to customize
 # =============================================================================
 
 vpcEndpoints:
   gatewayEndpoints:           # MANUAL: Enable/disable gateway endpoints
-    enabled: true             # MANUAL: Set to true/false to enable/disable ALL gateway endpoints
+    enabled: false            # MANUAL: Set to true to enable DynamoDB and S3 gateway endpoints
     services:                 # Available gateway endpoints:
-      - dynamodb              #   - DynamoDB endpoint
-      - s3                    #   - S3 endpoint
+      - dynamodb              #   - DynamoDB endpoint (free)
+      - s3                    #   - S3 endpoint (free)
