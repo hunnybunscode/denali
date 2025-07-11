@@ -1,0 +1,53 @@
+# =============================================================================
+# AUTO-GENERATED CONFIGURATION
+# =============================================================================
+# This file was automatically generated with smart defaults.
+# The only setting you might want to change is gatewayEndpoints.enabled below.
+
+environment:
+  name: dev                    # AUTO: Environment name
+  region: us-east-1           # AUTO: AWS region (detected)
+  account: '776732943381'     # AUTO: AWS account (detected)
+  
+  # OPTIONAL: Custom CDK synthesizer for specialized environments (GovCloud, etc.)
+  # Uncomment and configure if using custom CDK bootstrap roles
+  # synthesizeOverride:
+  #   cloudFormationExecutionRole: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-cfn-exec-role
+  #   deployRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-deploy-role
+  #   fileAssetPublishingRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-file-role
+  #   imageAssetPublishingRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-image-role
+  #   lookupRoleArn: arn:aws-us-gov:iam::123456789012:role/MyCustom-cdk-lookup-role
+  #   fileAssetsBucketName: my-custom-cdk-assets-bucket
+  #   qualifier: myqualifier
+
+vpc:
+  id: vpc-037578bc40b4ca79f   # AUTO: VPC ID (detected)
+  
+  # =============================================================================
+  # AUTO-POPULATED - These are automatically filled by 'npm run build'
+  # =============================================================================
+  cidr: 10.1.2.0/24           # AUTO: VPC CIDR block (from AWS API)
+  availabilityZones:          # AUTO: Available AZs in VPC (from AWS API)
+    - us-east-1a
+    - us-east-1b
+    - us-east-1c
+  privateSubnetIds:           # AUTO: Private subnet IDs (from AWS API)
+    - subnet-08373d5820b871744
+    - subnet-0d097bc1805dabf90
+    - subnet-0c3f97197fc2bc128
+  privateSubnetRouteTableIds: # AUTO: Private subnet route table IDs (from AWS API)
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
+    - rtb-0901f6b8e75675ff1
+  publicSubnetIds: []         # AUTO: Public subnet IDs (from AWS API)
+
+# =============================================================================
+# MANUAL CONFIGURATION - The only setting you might want to customize
+# =============================================================================
+
+vpcEndpoints:
+  gatewayEndpoints:           # MANUAL: Enable/disable gateway endpoints
+    enabled: false            # MANUAL: Set to true to enable DynamoDB and S3 gateway endpoints
+    services:                 # Available gateway endpoints:
+      - dynamodb              #   - DynamoDB endpoint (free)
+      - s3                    #   - S3 endpoint (free)
