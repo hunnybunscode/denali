@@ -260,6 +260,8 @@ interface Pipeline {
     deviceName: string;
     sizeInGB: number;
     iops?: number;
+    encrypted?: boolean;
+    kmsKeyId?: string;
   }[];
   components: (Component | string)[];
   tags?: { [key: string]: string };
@@ -268,7 +270,9 @@ interface Pipeline {
   test?: boolean;
   enhancedImageMetadata?: boolean;
   distributions?: {
-    amiDistributionConfiguration: {
+    region: string;
+    amiDistributionConfiguration?: {
+      kmsKeyId?: string;
       launchPermissionConfiguration?: {
         organizationalUnitArns?: string[];
         organizationArns?: string[];
@@ -277,7 +281,6 @@ interface Pipeline {
       };
       targetAccountIds?: string[];
     };
-    region: string;
   }[];
 }
 

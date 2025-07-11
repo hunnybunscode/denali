@@ -452,6 +452,24 @@ export class StigEksImageBuilderStack extends Stack {
             }),
           ],
         }),
+        "Secrets-Access-ReadOnly": new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:ListSecrets"],
+              resources: ["*"],
+            }),
+          ],
+        }),
+        "SSM-ParameterStore-ReadOnly": new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:DescribeParameters"],
+              resources: ["*"],
+            }),
+          ],
+        }),
       },
     });
 
@@ -533,15 +551,16 @@ export class StigEksImageBuilderStack extends Stack {
 
       if (storages && storages.length > 0) {
         for (const storageBlock of storages) {
-          const { deviceName, sizeInGB, type, iops } = storageBlock;
+          const { deviceName, sizeInGB, type, iops, encrypted, kmsKeyId } = storageBlock;
           const targetStorageBlock = {
             deviceName,
             ebs: {
               deleteOnTermination: true,
-              encrypted: false,
+              encrypted: encrypted ?? false,
               volumeSize: sizeInGB,
               volumeType: type,
               iops,
+              kmsKeyId: encrypted ? kmsKeyId : undefined,
             },
           };
           blockDeviceMappings.push(targetStorageBlock);
@@ -686,29 +705,48 @@ export class StigEksImageBuilderStack extends Stack {
         };
       });
 
+      type Writable<T> = { -readonly [P in keyof T]: T[P] };
+
+      const preDistributions: Writable<imageBuilder.CfnDistributionConfiguration.DistributionProperty>[] = [
+        {
+          region: this.region,
+          amiDistributionConfiguration: {
+            description: `${pipelineName} Default AMI Distribution Configuration for region ${this.region}`,
+            targetAccountIds: [Stack.of(this).account],
+            amiTags: {
+              ...{
+                PIPELINE: pipelineName,
+                VERSION: version,
+              },
+              ...tags,
+            },
+          },
+        },
+        ...distributionConfiguration,
+      ];
+
+      const mergedDistributions = preDistributions.reduce((accumulation, distribution) => {
+        const existing = accumulation.find(targetDistribution => targetDistribution.region === distribution.region);
+        if (existing) {
+          console.info(`Updating distribution [${existing.region}]`);
+
+          existing.amiDistributionConfiguration = {
+            ...existing.amiDistributionConfiguration,
+            ...distribution.amiDistributionConfiguration,
+          };
+        } else {
+          accumulation.push(distribution);
+        }
+        return accumulation;
+      }, [] as Writable<imageBuilder.CfnDistributionConfiguration.DistributionProperty>[]);
+
       const distributionConfig = new imageBuilder.CfnDistributionConfiguration(
         this,
         `${pipelineName}-ImageBuilderDistributionConfiguration`,
         {
           name: `${pipelineName}-distribution-config`,
           description: "AMI Distribution Configuration",
-          distributions: [
-            {
-              region: this.region,
-              amiDistributionConfiguration: {
-                description: `${pipelineName} Default AMI Distribution Configuration for region ${this.region}`,
-                targetAccountIds: [Stack.of(this).account],
-                amiTags: {
-                  ...{
-                    PIPELINE: pipelineName,
-                    VERSION: version,
-                  },
-                  ...tags,
-                },
-              },
-            },
-            ...distributionConfiguration,
-          ],
+          distributions: mergedDistributions,
         }
       );
 

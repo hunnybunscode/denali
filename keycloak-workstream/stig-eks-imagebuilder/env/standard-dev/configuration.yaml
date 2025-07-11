@@ -107,7 +107,7 @@ pipelines:
             value:
               - "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/eks/allow-software-access.yml
+      - lib/component/allow-software-access.yml
       - lib/component/eks/AllowEKSOperationalStatus.yml
       - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
@@ -153,7 +153,7 @@ pipelines:
           - name: SetDoDConsentBanner
             value: "Yes"
       - lib/component/DODSTIGHardening.yml
-      - lib/component/eks/allow-software-access.yml
+      - lib/component/allow-software-access.yml
       - lib/component/eks/AllowEKSOperationalStatus.yml
       - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
       - lib/component/SecurityUpdate.yml
@@ -190,7 +190,7 @@ pipelines:
             value: "Yes"
           - name: SetDoDConsentBanner
             value: "Yes"
-      - lib/component/eks/allow-software-access.yml
+      - lib/component/allow-software-access.yml
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/rhel/cleanup-RHEL.yml
 
