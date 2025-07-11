@@ -16,10 +16,10 @@ export class VpcEndpointsStack extends cdk.Stack {
       vpcId: props.config.vpc.id,
       vpcCidrBlock: props.config.vpc.cidr ?? '',
       availabilityZones: props.config.vpc.availabilityZones ?? [],
-      privateSubnetIds: props.config.vpc.privateSubnetIds ?? undefined,
-      publicSubnetIds: props.config.vpc.publicSubnetIds ?? undefined,
-      privateSubnetRouteTableIds: props.config.vpc.privateSubnetRouteTableIds ?? undefined,
-      publicSubnetRouteTableIds: props.config.vpc.publicSubnetRouteTableIds ?? undefined,
+      privateSubnetIds: props.config.vpc.privateSubnetIds,
+      publicSubnetIds: props.config.vpc.publicSubnetIds,
+      privateSubnetRouteTableIds: props.config.vpc.privateSubnetRouteTableIds,
+      publicSubnetRouteTableIds: props.config.vpc.publicSubnetRouteTableIds,
     });
 
     new VpcEndpointsConstruct(this, 'VpcEndpoints', vpc, props.config);
