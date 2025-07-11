@@ -19,9 +19,6 @@ export interface Config {
       [key: string]: any; // Allow any other synthesizer options
     };
   };
-  cdk?: {
-    toolkitStackName?: string;
-  };
   vpc: {
     id: string;
     cidr?: string;
