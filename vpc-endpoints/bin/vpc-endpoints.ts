@@ -11,18 +11,22 @@ async function main() {
   const env = process.env.ENVIRONMENT || 'dev';
   const config = await loadConfig(env);
 
+const tags = {
+  "Managed-by": "aws-cdk",
+  "Owner": process.env.USER || 'unknown',
+  "Environment": env,
+};
+
+// Apply tags to all resources in the app
+Object.entries(tags).forEach(([key, value]) => {
+  cdk.Tags.of(app).add(key, value);
+});
+
 // Create synthesizer based on configuration
 let synthesizer;
 if (config.environment.synthesizeOverride) {
   // Use custom synthesizer with all provided options
   synthesizer = new cdk.DefaultStackSynthesizer(config.environment.synthesizeOverride);
-} else if (config.cdk?.toolkitStackName) {
-  // Legacy support for simple toolkit name override
-  synthesizer = new cdk.DefaultStackSynthesizer({
-    bootstrapStackVersionSsmParameter: `/cdk-bootstrap/${config.cdk.toolkitStackName}/version`,
-    fileAssetsBucketName: `${config.cdk.toolkitStackName}-assets-\${AWS::AccountId}-\${AWS::Region}`,
-    bucketPrefix: '',
-  });
 }
 
 const stack = new VpcEndpointsStack(app, 'VpcEndpointsStack', {
