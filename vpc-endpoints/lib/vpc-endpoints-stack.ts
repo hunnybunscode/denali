@@ -12,20 +12,14 @@ export class VpcEndpointsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: VpcEndpointsStackProps) {
     super(scope, id, props);
 
-    // Skip validation if VPC config is incomplete (allows destroy to work)
-    if (!props.config.vpc.cidr || !props.config.vpc.availabilityZones) {
-      console.warn('⚠️  VPC configuration incomplete - some operations may fail');
-      return; // Exit early, don't create resources
-    }
-    
     const vpc = ec2.Vpc.fromVpcAttributes(this, 'VPC', {
       vpcId: props.config.vpc.id,
-      vpcCidrBlock: props.config.vpc.cidr,
-      availabilityZones: props.config.vpc.availabilityZones,
-      ...(props.config.vpc.privateSubnetIds && { privateSubnetIds: props.config.vpc.privateSubnetIds }),
-      ...(props.config.vpc.publicSubnetIds && { publicSubnetIds: props.config.vpc.publicSubnetIds }),
-      ...(props.config.vpc.privateSubnetRouteTableIds && { privateSubnetRouteTableIds: props.config.vpc.privateSubnetRouteTableIds }),
-      ...(props.config.vpc.publicSubnetRouteTableIds && { publicSubnetRouteTableIds: props.config.vpc.publicSubnetRouteTableIds }),
+      vpcCidrBlock: props.config.vpc.cidr ?? '',
+      availabilityZones: props.config.vpc.availabilityZones ?? [],
+      privateSubnetIds: props.config.vpc.privateSubnetIds ?? undefined,
+      publicSubnetIds: props.config.vpc.publicSubnetIds ?? undefined,
+      privateSubnetRouteTableIds: props.config.vpc.privateSubnetRouteTableIds ?? undefined,
+      publicSubnetRouteTableIds: props.config.vpc.publicSubnetRouteTableIds ?? undefined,
     });
 
     new VpcEndpointsConstruct(this, 'VpcEndpoints', vpc, props.config);

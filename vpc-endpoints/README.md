@@ -62,6 +62,45 @@ ENVIRONMENT=staging npm run build && npx cdk deploy
 ENVIRONMENT=prod npm run build && npx cdk deploy
 ```
 
+## Environment Configuration
+
+The `ENVIRONMENT` variable determines which configuration file to look for:
+
+**What happens when you set ENVIRONMENT:**
+
+```bash
+# ENVIRONMENT=dev (default)
+# Looks for: env/dev/configuration.yaml
+npm run build
+
+# ENVIRONMENT=staging  
+# Looks for: env/staging/configuration.yaml
+ENVIRONMENT=staging npm run build
+
+# ENVIRONMENT=my-local-dev
+# Looks for: env/my-local-dev/configuration.yaml
+ENVIRONMENT=my-local-dev npm run build
+```
+
+**File path pattern:**
+```
+env/{ENVIRONMENT}/configuration.yaml
+```
+
+**What the script does:**
+1. Takes `ENVIRONMENT` value (defaults to `dev`)
+2. Looks for config file at `shared-services/env/{ENVIRONMENT}/configuration.yaml`
+3. If file doesn't exist → Creates it with auto-detected settings
+4. If file exists → Updates it with current VPC details
+
+**Example with custom environment:**
+```bash
+ENVIRONMENT=my-local-dev npm run build
+```
+- Creates/updates: `env/my-local-dev/configuration.yaml`
+- Auto-detects your current AWS account, region, and VPC
+- Allows you to have completely separate config for your local development
+
 **For specialized environments (GovCloud, etc.):**
 Add `synthesizeOverride` section to your configuration.yaml with custom role ARNs.
 
