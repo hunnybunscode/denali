@@ -16,7 +16,8 @@ function question(prompt) {
 }
 
 async function main() {
-  const ec2 = new EC2Client({ region: 'us-east-1' });
+  // Auto-detect region from AWS configuration
+  const ec2 = new EC2Client({});
   
   console.log('🏷️  Subnet Tagger - CDK + Kubernetes ALB Controller Tags\n');
   
