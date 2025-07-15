@@ -1,0 +1,10 @@
+{
+  "name": "subnet-tagger",
+  "version": "0.1.0",
+  "scripts": {
+    "tag-subnets": "node scripts/interactive-tagger.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.0.0"
+  }
+}
