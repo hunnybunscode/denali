@@ -19,6 +19,11 @@ interface Environment {
   };
   readonly synthesizeOverride?: {
     /**
+     * Uses the current user access to deploy. This configuration only applies reliably to new stack deployment only.
+     * On existing stacks with defined IAM Role for execution, it will assume the user's IAM role.
+     */
+    readonly useCliCredentials?: boolean;
+    /**
      * Name of the S3 bucket to hold file assets
      *
      * You must supply this if you have given a non-standard name to the staging bucket.

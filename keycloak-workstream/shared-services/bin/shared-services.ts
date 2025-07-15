@@ -2,7 +2,7 @@
 ///<reference path="../lib/interfaces.d.ts" />
 
 import "source-map-support/register";
-import { App, Aspects, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
+import { App, Aspects, CliCredentialsStackSynthesizer, DefaultStackSynthesizer, Tags } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NIST80053R4Checks, NagSuppressions } from "cdk-nag";
 import * as path from "path";
 import * as fs from "fs";
@@ -56,7 +56,12 @@ const environment = {
   },
   ...doc,
   synthesizer: doc.environment.synthesizeOverride
-    ? new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
+    ? doc.environment.synthesizeOverride.useCliCredentials
+      ? (() => {
+          console.warn("Using CLI Credentials ...");
+          return new CliCredentialsStackSynthesizer(doc.environment.synthesizeOverride);
+        })()
+      : new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
     : undefined,
 };
 
@@ -88,6 +93,24 @@ Aspects.of(app).add(
 );
 
 const useProxy = doc.environment.proxy ? true : false;
+const proxyConfig: { [key: string]: string } = {};
+
+if (useProxy) {
+  proxyConfig["HTTP_PROXY"] = doc.environment.proxy?.httpProxy ?? "";
+  proxyConfig["HTTPS_PROXY"] = doc.environment.proxy?.httpsProxy ?? "";
+
+  if (doc.environment.proxy?.noProxy) {
+    let noProxyStr = "";
+
+    if (Array.isArray(doc.environment.proxy?.noProxy)) {
+      noProxyStr = doc.environment.proxy?.noProxy.join(",");
+    } else {
+      noProxyStr = doc.environment.proxy?.noProxy;
+    }
+
+    proxyConfig["NO_PROXY"] = noProxyStr;
+  }
+}
 
 Aspects.of(app).add(
   new LambdaEnvAspect({
@@ -96,13 +119,7 @@ Aspects.of(app).add(
         REQUESTS_CA_BUNDLE: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
         NODE_EXTRA_CA_CERTS: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
       },
-      ...(useProxy
-        ? {
-            HTTP_PROXY: doc.environment.proxy?.httpProxy,
-            HTTPS_PROXY: doc.environment.proxy?.httpsProxy,
-            NO_PROXY: doc.environment.proxy?.noProxy,
-          }
-        : {}),
+      ...(useProxy ? proxyConfig : {}),
     },
     verbose: true,
   })

@@ -23,6 +23,8 @@ spec:
   features:
     enabled:
       - fips
+    disabled:
+      - kerberos
   additionalOptions:
     - name: health-enabled
       value: "true"
@@ -61,7 +63,7 @@ spec:
             args:
               - |
                 set -e
-                echo "Initializing FIPS"                
+                echo "Initializing FIPS"
                 ls -all /opt/scripts
                 cat /opt/scripts/create_fips.sh
                 cd /opt/keycloak/providers
