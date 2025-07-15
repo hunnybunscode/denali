@@ -2,6 +2,7 @@ from aws_cdk import (
     Duration,
     Stack,
     aws_cloudwatch as cloudwatch,
+    aws_ssm as ssm,
 )
 from constructs import Construct
 import json
@@ -13,232 +14,198 @@ class DashboardStack(Stack):
 
         mapping_ids = self.node.try_get_context("mapping_ids")
         print(mapping_ids)
-
-
+        
+        dashboard_mappings = []
         dashboards = {}
-        # Define the metrics you want to track
-        for mapping in mapping_ids:
-        # Create a CloudWatch Dashboard
-            dashboards[mapping] = cloudwatch.Dashboard(self, f"{mapping}-MetricsDashboard", 
-                dashboard_name=f"DiodeMonitoring-{mapping}",
+        # break list of mappings into multiple lists of 5 to ensure that each dashboard does not contain too much information
+        list_size = 5
+        my_mappings = [mapping_ids[i:i+list_size] for i in range(0,len(mapping_ids),5)]
+        iterator = 1 
+        db_iterator = 1
+        
+        for mapping_ids_subset in my_mappings:
+            dashboard_mappings.append({f"DiodeMonitoring-Dashboard-{str(db_iterator)}": mapping_ids_subset})
+            
+            # Create a CloudWatch Dashboard
+            dashboards[str(iterator)] = cloudwatch.Dashboard(self, f"DiodeMonitoring-Dashboard-{str(db_iterator)}", 
+                dashboard_name=f"DiodeMonitoring-Dashboard-{str(db_iterator)}",
                 # Inherit period from each graph
                 period_override=cloudwatch.PeriodOverride.INHERIT)
-        ## Bi-Weekly metrics 
-            transfer_created_count = cloudwatch.Metric(
+
+            # Collect all metrics for all mappings in this dashboard
+            all_transfer_created_count = []
+            all_succeeded_transfer_count = []
+            all_succeeded_transfer_size = []
+            all_in_transit_transfer_size = []
+            all_in_transit_transfer_count = []
+            all_rejected_transfer_count = []
+
+            # Define the metrics for each mapping
+            for mapping in mapping_ids_subset:
+                transfer_created_count = cloudwatch.Metric(
                     namespace="AWS/Diode",
-                    dimensions_map={"MappingId": mapping},  # Specify the Mapping
+                    dimensions_map={"MappingId": mapping},
                     metric_name="TransferCreatedCount",
                     statistic="Sum",
-                    #period=Duration.days(14)
+                    label=f"{mapping} - TransferCreatedCount"  # Add label to distinguish in the graph
                 )
-            succeeded_transfer_count = cloudwatch.Metric(
+                succeeded_transfer_count = cloudwatch.Metric(
                     namespace="AWS/Diode",
-                    dimensions_map={"MappingId": mapping},  # Specify the Mapping
+                    dimensions_map={"MappingId": mapping},
                     metric_name="SucceededTransferCount",
                     statistic="Sum",
-                    #period=Duration.days(14)
+                    label=f"{mapping} - SucceededTransferCount"
                 )
-
-            
-            succeeded_transfer_size = cloudwatch.Metric(
+                succeeded_transfer_size = cloudwatch.Metric(
                     namespace="AWS/Diode",
-                    dimensions_map={"MappingId": mapping},  # Specify the Mapping
+                    dimensions_map={"MappingId": mapping},
                     metric_name="SucceededTransferSize",
                     statistic="Sum",
-                    #period=Duration.days(30)
+                    label=f"{mapping} - SucceededTransferSize"
                 )
-
-
-
-            in_transit_transfer_size = cloudwatch.Metric(
+                in_transit_transfer_size = cloudwatch.Metric(
                     namespace="AWS/Diode",
-                    dimensions_map={"MappingId": mapping},  # Specify the Mapping
+                    dimensions_map={"MappingId": mapping},
                     metric_name="InTransitTransferSize",
                     statistic="Average",
-                    #period=Duration.days(1)
+                    label=f"{mapping} - InTransitTransferSize"
                 )
-            in_transit_transfer_count = cloudwatch.Metric(
+                in_transit_transfer_count = cloudwatch.Metric(
                     namespace="AWS/Diode",
-                    dimensions_map={"MappingId": mapping},  # Specify the Mapping
+                    dimensions_map={"MappingId": mapping},
                     metric_name="InTransitTransferCount",
                     statistic="Average",
-                   # period=Duration.days(1)
+                    label=f"{mapping} - InTransitTransferCount"
                 )
-            rejected_transfer_count = cloudwatch.Metric(
-                namespace="AWS/Diode",
-                dimensions_map={"MappingId": mapping},  # Specify the Mapping
-                metric_name="RejectedTransferCount",
-                statistic="Sum",
-                #period=Duration.days(14)
-            )
-            
-            
-            # dashboards[mapping].add_widgets(
-            #     cloudwatch.GraphWidget(
-            #         title=f"Transfer Activity: Past hour",
-            #         left=[transfer_created_count, succeeded_transfer_count],  # Created and Succeeded counts
-            #         width=12,
-            #         period=Duration.minutes(1),
-            #         start='-PT1H'
-            #     )
-            # )
-            
-            
-            # Create transfer activity widgets
-            dashboards[mapping].add_widgets(
-# SucceededTransferCount and TransferCreatedCount Statistic ‘SUM’ Period ‘Monthly’ displaying 12 months updated monthly on 1st day of month.
+                rejected_transfer_count = cloudwatch.Metric(
+                    namespace="AWS/Diode",
+                    dimensions_map={"MappingId": mapping},
+                    metric_name="RejectedTransferCount",
+                    statistic="Sum",
+                    label=f"{mapping} - RejectedTransferCount"
+                )
+                
+                # Add metrics to their respective lists
+                all_transfer_created_count.append(transfer_created_count)
+                all_succeeded_transfer_count.append(succeeded_transfer_count)
+                all_succeeded_transfer_size.append(succeeded_transfer_size)
+                all_in_transit_transfer_size.append(in_transit_transfer_size)
+                all_in_transit_transfer_count.append(in_transit_transfer_count)
+                all_rejected_transfer_count.append(rejected_transfer_count)
+
+            # Create widgets with all metrics overlaid (outside the mapping loop)
+            dashboards[str(iterator)].add_widgets(
+                # Transfer Activity widgets with all mappings overlaid
                 cloudwatch.GraphWidget(
-                    title=f"{mapping} Transfer Activity: Preceding 365 Days by month",
-                    left=[transfer_created_count, succeeded_transfer_count],  # Created and Succeeded counts
+                    title=f"All Mappings Transfer Activity: Preceding 365 Days by month",
+                    left=all_transfer_created_count + all_succeeded_transfer_count,
                     width=12,
                     period=Duration.days(30),
                     start='-P12M'
                 ),
-# SucceededTransferCount and TransferCreatedCount Statistic ‘SUM’ Period ‘Daily’ displaying 14 days updated daily.
                 cloudwatch.GraphWidget(
-                    title=f"{mapping} Transfer Activity: Preceding 14 Days by day",
-                    left=[transfer_created_count, succeeded_transfer_count],  # Created and Succeeded counts
+                    title=f"All Mappings Transfer Activity: Preceding 14 Days by day",
+                    left=all_transfer_created_count + all_succeeded_transfer_count,
                     width=12,
                     period=Duration.days(1),
                     start='-P14D'
                 ),
-# SucceededTransferCount and TransferCreatedCount Statistic ‘SUM’ Period ‘1 minute’ displaying 14 days every 5 minutes.
                 cloudwatch.GraphWidget(
-                    title=f"{mapping} Transfer Activity: Preceding 14 by minute",
-                    left=[transfer_created_count, succeeded_transfer_count],  # Created and Succeeded counts
+                    title=f"All Mappings Transfer Activity: Preceding 14 by minute",
+                    left=all_transfer_created_count + all_succeeded_transfer_count,
                     width=12,
                     period=Duration.minutes(1),
                     start='-P14D'
                 ),
-
-# SucceededTransferSize Statistic ‘SUM’ period ‘Monthly’ displaying 12 months updated monthly on 1st day of month.
-
+                
+                # Transfer Size widgets
                 cloudwatch.GraphWidget(
-                    title=f"{mapping} Transfer Size: Preceding 12 Months",
-                    left=[succeeded_transfer_size],  # Succeeded size
+                    title=f"All Mappings Transfer Size: Preceding 12 Months",
+                    left=all_succeeded_transfer_size,
                     width=12,
                     period=Duration.days(30),
                     start="-P12M"
                 ),
-# SucceededTransferSize Statistic ‘SUM’ period ‘Daily’ displaying 14 days updated daily.
                 cloudwatch.GraphWidget(
-                    title=f"{mapping} Transfer Size: Preceding 14 Days",
-                    left=[succeeded_transfer_size],  # Succeeded size
+                    title=f"All Mappings Transfer Size: Preceding 14 Days",
+                    left=all_succeeded_transfer_size,
                     width=12,
                     period=Duration.days(1),
                     start="-P14D",
-
                 ),
-# InTransitTransferSize and InTransitTransferCount Statistic ‘SUM’ Period ‘1 minute’ displaying 14 days every 5 minutes.
+                
+                # In-Transit widgets
                 cloudwatch.GraphWidget(
-                    title=f"In-Transit Transfer Count: Previous 14 days",
-                    left=[in_transit_transfer_count],  # In-transit size and count
+                    title=f"All Mappings In-Transit Transfer Count: Previous 14 days",
+                    left=all_in_transit_transfer_count,
                     width=12,
                     period=Duration.days(1),
                     start="-P14D"
                 ),
                 cloudwatch.GraphWidget(
-                    title=f"In-Transit Transfer Size: Previous 14 days",
-                    left=[in_transit_transfer_size],  # In-transit size and count
+                    title=f"All Mappings In-Transit Transfer Size: Previous 14 days",
+                    left=all_in_transit_transfer_size,
                     width=12,
                     period=Duration.days(1),
                     start="-P14D"
                 ),
-# InTransitTransferCount Statistic ‘SUM’ Period ‘Daily’ updated every 5 minutes.
                 cloudwatch.GraphWidget(
-                    title=f"In-Transit Transfers: Previous 1 Day by 5 minutes",
-                    left=[in_transit_transfer_count],  # In-transit size and count
+                    title=f"All Mappings In-Transit Transfers: Previous 1 Day by 5 minutes",
+                    left=all_in_transit_transfer_count,
                     width=12,
                     period=Duration.minutes(5),
                     start="-P1D"
                 ),
-# SucceededTransferCount Statistic ‘SUM’ Period ‘Daily’ updated every 5 minutes.
                 cloudwatch.GraphWidget(
-                    title=f"Successful Transfers: Previous 1 Day by 5 minutes",
-                    left=[succeeded_transfer_count],  # In-transit size and count
+                    title=f"All Mappings Successful Transfers: Previous 1 Day by 5 minutes",
+                    left=all_succeeded_transfer_count,
                     width=12,
                     period=Duration.minutes(5),
                     start="-P1D"
                 ),
-# FailedTransferCount Statistic ‘SUM’ Period ‘Daily’ updated every 5 minutes.
                 cloudwatch.GraphWidget(
-                    title=f"Failed Transfers: Previous 1 Day by 5 minutes",
-                    left=[rejected_transfer_count],  # In-transit size and count
+                    title=f"All Mappings Failed Transfers: Previous 1 Day by 5 minutes",
+                    left=all_rejected_transfer_count,
                     width=12,
                     period=Duration.minutes(5),
                     start="-P1D"
                 )
             )
-            # dashboards[mapping].add_widgets(
-            #     cloudwatch.GraphWidget(
-            #         left=[in_transit_transfer_count],
-            #         title=f"{mapping} In-Transit Transfer Count - Last 12 Months",
-            #         width=12,
-            #         period=Duration.minutes(5),
-            #         start="-P1D"
-            #     ),
-            #     cloudwatch.GraphWidget(
-            #         left=[in_transit_transfer_size],
-            #         title=f"{mapping} In-Transit Transfer Size - Last 12 Months",
-            #         width=12,
-            #         period=Duration.minutes(5),
-            #         start="-P1D"
-            #     )
-            # )
 
-            dashboards[mapping].add_widgets(
-                cloudwatch.SingleValueWidget(
-                    metrics=[succeeded_transfer_count],
-                    title=f"Succeeded Transfer Count - Last 12 Months",
-                    width=6,
-                    period=Duration.days(365)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[transfer_created_count],
-                    title=f"Transfer Created Count - Last 12 Months",
-                    width=6,
-                    period=Duration.days(365)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[succeeded_transfer_count],
-                    title=f"Succeeded Transfer Count - Last 30 Days",
-                    width=6,
-                    period=Duration.days(30)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[transfer_created_count],
-                    title=f"Transfer Created Count - Last 30 Days",
-                    width=6,
-                    period=Duration.days(30)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[succeeded_transfer_count],
-                    title=f"Succeeded Transfer Count - Last 24 Hours",
-                    width=6,
-                    period=Duration.hours(24)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[transfer_created_count],
-                    title=f"Transfer Created Count - Last 24 Hours",
-                    width=6,
-                    period=Duration.hours(24)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[rejected_transfer_count],
-                    title=f"Rejected Transfer Count - Last 24 Hours",
-                    width=6,
-                    period=Duration.hours(24)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[rejected_transfer_count],
-                    title='Rejected Transfer Count - Last 30 Days',
-                    width=6,
-                    period=Duration.days(30)
-                ),
-                cloudwatch.SingleValueWidget(
-                    metrics=[rejected_transfer_count],
-                    title='Rejected Transfer Count - Last 12 Months',
-                    width=6,
-                    period=Duration.days(365)
-                )
-            )
+            # For SingleValueWidgets, you might want to create separate widgets for each mapping
+            # or create aggregated widgets. Here's an example of separate widgets:
+            single_value_widgets = []
+            for i, mapping in enumerate(mapping_ids_subset):
+                single_value_widgets.extend([
+                    cloudwatch.SingleValueWidget(
+                        metrics=[all_succeeded_transfer_count[i]],
+                        title=f"{mapping} Succeeded - Last 12 Months",
+                        width=6,
+                        period=Duration.days(365)
+                    ),
+                    cloudwatch.SingleValueWidget(
+                        metrics=[all_transfer_created_count[i]],
+                        title=f"{mapping} Created - Last 12 Months",
+                        width=6,
+                        period=Duration.days(365)
+                    ),
+                ])
+            
+            dashboards[str(iterator)].add_widgets(*single_value_widgets)
+            
+            iterator += 1
+            db_iterator += 1
+            
+        print(dashboard_mappings)
+        # Optional: Store the complete mapping structure as a single parameter
+        complete_mapping = {}
+        for dashboard_mapping in dashboard_mappings:
+            complete_mapping.update(dashboard_mapping)
+
+        ssm.StringParameter(
+            self,
+            "CompleteDashboardMappings",
+            parameter_name="/diode/dashboards/complete-mappings",
+            string_value=json.dumps(complete_mapping),
+            description="Complete mapping of all dashboards to their mapping IDs"
+        )
