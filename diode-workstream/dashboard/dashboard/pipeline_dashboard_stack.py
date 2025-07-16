@@ -104,6 +104,7 @@ class PipelineDashboardStack(Stack):
 
         )
 
+
         for function in monitored_lambda_functions:
             invocations = cloudwatch.Metric(
                 namespace="AWS/Lambda",
