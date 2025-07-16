@@ -15,7 +15,7 @@
     ]
   },
   "context": {
-    "mapping_ids":["82abb069-47ae-4422-9aaa-7f0dfa12078e","d9555c2d-9260-449b-8c8f-95d414a0c25f"],
+    "mapping_ids":[""],
     "av_scan_queue_name":"",
     "av_scan_dlq_name": "",
     "asg_name": "",
