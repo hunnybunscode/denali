@@ -4,9 +4,6 @@ Parameters:
     Description: The Prefix to prepend to IAM Resources
     Type: String
     Default: "AFC2S"
-  aaResourceSuffix:
-    Description: The suffix to append to the end of AWS Resources
-    Type: String
   aaPermissionBoundaryArn:
     Description: ARN of the permission boundary to be applied to IAM Policies
     Type: String
@@ -59,7 +56,7 @@ Parameters:
     Type: String
   BootstrapVariant:
     Type: String
-    Default: "AWS CDK: Default Resources"
+    Default: "AFTACCustomBootstrap"
     Description: Describe the provenance of the resources in this bootstrap stack. Change this when you customize the template. To prevent accidents, the CDK CLI will not overwrite bootstrap stacks with a different variant.
 Conditions:
   HasTrustedAccounts:
@@ -318,7 +315,7 @@ Resources:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
       RoleName:
-        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-file-publishing-role-${AWS::AccountId}-${AWS::Region}-${aaResourceSuffix}
+        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-file-pub-role-${AWS::AccountId}-${AWS::Region}
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: file-publishing
@@ -347,7 +344,7 @@ Resources:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
       RoleName:
-        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-image-publishing-role-${AWS::AccountId}-${AWS::Region}-${aaResourceSuffix}
+        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-image-pub-role-${AWS::AccountId}-${AWS::Region}
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: image-publishing
@@ -384,7 +381,7 @@ Resources:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
       RoleName:
-        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-lookup-role-${AWS::AccountId}-${AWS::Region}-${aaResourceSuffix}
+        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-lookup-role-${AWS::AccountId}-${AWS::Region}
       ManagedPolicyArns:
         - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/ReadOnlyAccess
       Policies:
@@ -575,7 +572,7 @@ Resources:
             Version: "2012-10-17"
           PolicyName: default
       RoleName:
-        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-deploy-role-${AWS::AccountId}-${AWS::Region}-${aaResourceSuffix}
+        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-deploy-role-${AWS::AccountId}-${AWS::Region}
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: deploy
@@ -599,7 +596,7 @@ Resources:
               - Ref: AWS::NoValue
               - - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess
       RoleName:
-        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-cfn-exec-role-${AWS::AccountId}-${AWS::Region}-${aaResourceSuffix}
+        Fn::Sub: ${aaIamPrefix}-cdk-${Qualifier}-cfn-exec-role-${AWS::AccountId}-${AWS::Region}
       # PermissionsBoundary:
       #   Fn::If:
       #     - PermissionsBoundarySet
@@ -684,4 +681,3 @@ Outputs:
       Fn::GetAtt:
         - CdkBootstrapVersion
         - Value
-
