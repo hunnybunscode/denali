@@ -13,13 +13,7 @@ Metadata:
           - ResourceSuffix
 
       - Label:
-          default: Root CA Generation Configuration (Leave all fields in Root CA Import Configuration blank)
-        Parameters:
-          - RootCertificateSubject
-          - RootCertificateValidityDays
-
-      - Label:
-          default: Root CA Import Configuration (Leave all fields in Root CA Generation Configuration blank)
+          default: Root CA Configuration
         Parameters:
           - RootKey
           - RootCertificate
@@ -57,10 +51,6 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
-      RootCertificateSubject:
-        default: Root Certificate Subject
-      RootCertificateValidityDays:
-        default: Root Certificate Validity Days
       RootKey:
         default: Root Private Key
       RootCertificate:
@@ -116,20 +106,6 @@ Parameters:
     AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
     ConstraintDescription: >
       Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
-
-  RootCertificateSubject:
-    Type: String
-    Default: /CN=RootCA/OU=nifi/O=DoD/C=US
-    Description: Subject for the root certificate (e.g. /CN=RootCA/OU=nifi/O=DoD/C=US)
-    AllowedPattern: ^$|^(/[A-Z]+=[\w\s.-]+)+$
-    ConstraintDescription: Must be either blank; or a valid subject such as /CN=RootCA/OU=nifi/O=DoD/C=US
-
-  RootCertificateValidityDays:
-    Type: String
-    Default: 3650
-    Description: Validity period in days for the root certificate
-    AllowedPattern: ^$|^\d+$
-    ConstraintDescription: Must be either blank or a valid number
 
   RootKey:
     Type: String
@@ -236,34 +212,7 @@ Parameters:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
-Rules:
-  GenerateOnly:
-    RuleCondition: !Or
-      - !Not [!Equals [!Ref RootCertificateSubject, ""]]
-      - !Not [!Equals [!Ref RootCertificateValidityDays, ""]]
-    Assertions:
-      - Assert: !And
-          - !Equals [!Ref RootKey, ""]
-          - !Equals [!Ref RootCertificate, ""]
-        AssertDescription: If RootCertificateSubject and RootCertificateValidityDays fields are populated, ensure RootKey and RootCertificate fields are blank
-
-  ImportOnly:
-    RuleCondition: !Or
-      - !Not [!Equals [!Ref RootKey, ""]]
-      - !Not [!Equals [!Ref RootCertificate, ""]]
-    Assertions:
-      - Assert: !And
-          - !Equals [!Ref RootCertificateSubject, ""]
-          - !Equals [!Ref RootCertificateValidityDays, ""]
-        AssertDescription: If RootKey and RootCertificate fields are populated, ensure RootCertificateSubject and RootCertificateValidityDays fields are blank
-
 Conditions:
-  GenerateRootCA: !And
-    - !Not [!Equals [!Ref RootCertificateSubject, ""]]
-    - !Not [!Equals [!Ref RootCertificateValidityDays, ""]]
-  ImportRootCA: !And
-    - !Not [!Equals [!Ref RootKey, ""]]
-    - !Not [!Equals [!Ref RootCertificate, ""]]
   IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
   IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
   IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
@@ -298,25 +247,23 @@ Resources:
     UpdateReplacePolicy: Delete
     Properties:
       Description: !Sub nifi-root-ca-key-${ResourceSuffix}
-      SecretString: !If
-        - ImportRootCA
-        - !Sub
-          - "-----${Begin} PRIVATE KEY-----\n${Content}\n-----END PRIVATE KEY-----" # pragma: allowlist secret
-          - Begin: BEGIN
-            Content: !Join
-              - "\n"
-              - !Split
-                - " "
-                - !Select
-                  - 0
-                  - !Split
-                    - " -----END PRIVATE KEY-----"
-                    - !Select
-                      - 1
-                      - !Split
-                        - "PRIVATE KEY----- " # pragma: allowlist secret
-                        - !Ref RootKey
-        - !Ref AWS::NoValue
+      SecretString: !Sub
+        - "-----${Begin} PRIVATE KEY-----\n${Content}\n-----END PRIVATE KEY-----" # pragma: allowlist secret
+        - Begin: BEGIN
+          Content: !Join
+            - "\n"
+            - !Split
+              - " "
+              - !Select
+                - 0
+                - !Split
+                  - " -----END PRIVATE KEY-----"
+                  - !Select
+                    - 1
+                    - !Split
+                      - "PRIVATE KEY----- " # pragma: allowlist secret
+                      - !Ref RootKey
+
       KmsKeyId: !GetAtt KmsKey.Arn
 
   RootCertificateAuthorityCertificate:
@@ -325,275 +272,21 @@ Resources:
     UpdateReplacePolicy: Delete
     Properties:
       Description: !Sub nifi-root-ca-certificate-${ResourceSuffix}
-      SecretString: !If
-        - ImportRootCA
-        - !Sub
-          - "-----BEGIN CERTIFICATE-----\n${Content}\n-----END CERTIFICATE-----"
-          - Content: !Join
-              - "\n"
-              - !Split
-                - " "
-                - !Select
-                  - 0
-                  - !Split
-                    - " -----END CERTIFICATE-----"
-                    - !Select
-                      - 1
-                      - !Split
-                        - "-----BEGIN CERTIFICATE----- "
-                        - !Ref RootCertificate
-        - !Ref AWS::NoValue
-      KmsKeyId: !GetAtt KmsKey.Arn
-
-  CodeBuildTrigger:
-    Type: Custom::CodeBuildTrigger
-    Condition: GenerateRootCA
-    Properties:
-      ServiceToken: !GetAtt CodeBuildFunction.Arn
-      ServiceTimeout: 300
-      ProjectName: !Ref RootCertificateAuthorityGenerator
-      RootCertificateSubject: !Ref RootCertificateSubject
-      RootCertificateValidityDays: !Ref RootCertificateValidityDays
-
-  RootCertificateAuthorityGenerator:
-    Type: AWS::CodeBuild::Project
-    Condition: GenerateRootCA
-    Properties:
-      Name: !Sub nifi-root-ca-generator-${ResourceSuffix}
-      Description: Generates a self-signed root CA using OpenSSL
-      Artifacts:
-        Type: NO_ARTIFACTS
-      Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
-      LogsConfig:
-        CloudWatchLogs:
-          GroupName: !Ref RootCertificateAuthorityGeneratorLogGroup
-          Status: ENABLED
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
-      TimeoutInMinutes: 5
-      Source:
-        Type: NO_SOURCE
-        BuildSpec: !Sub |
-          version: 0.2
-          env:
-            variables:
-              ROOT_CERT_SUBJECT: ${RootCertificateSubject}
-              ROOT_CERT_VALIDITY_DAYS: ${RootCertificateValidityDays}
-              ROOT_KEY_SECRET_ID: ${RootCertificateAuthorityKey}
-              ROOT_CERT_SECRET_ID: ${RootCertificateAuthorityCertificate}
-              AWS_DEFAULT_REGION: ${AWS::Region}
-              AWS_REGION: ${AWS::Region}
-              ROOT_KEY_FILE: ca.key
-              ROOT_CERT_FILE: ca.pem
-              CERT_DIR: /tmp/certs
-          phases:
-            pre_build:
-              commands:
-                - mkdir -p "$CERT_DIR" && cd "$CERT_DIR"
-            build:
-              commands:
-                - set -e
-
-                # Generate root key
-                - openssl genrsa -out "$ROOT_KEY_FILE" 4096
-
-                # Generate root CA certificate
-                - openssl req -x509 -new -key "$ROOT_KEY_FILE" -sha256 -days "$ROOT_CERT_VALIDITY_DAYS" -out "$ROOT_CERT_FILE" -subj "$ROOT_CERT_SUBJECT"
-
-                # Store in Secrets Manager
-                - aws secretsmanager update-secret --secret-id "$ROOT_KEY_SECRET_ID" --secret-string "$(cat "$ROOT_KEY_FILE")"
-                - aws secretsmanager update-secret --secret-id "$ROOT_CERT_SECRET_ID" --secret-string "$(cat "$ROOT_CERT_FILE")"
-
-              finally:
-                - cd .. && rm -rf /tmp/*
-
-  CodeBuildServiceRole:
-    Type: AWS::IAM::Role
-    Condition: GenerateRootCA
-    Properties:
-      RoleName: !Sub ${IamPrefix}-codebuild-service-role-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codebuild.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      Policies:
-        - PolicyName: CloudWatchPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !GetAtt RootCertificateAuthorityGeneratorLogGroup.Arn
-        - PolicyName: SecretsManagerPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: secretsmanager:UpdateSecret # pragma: allowlist secret
-                Resource:
-                  - !Ref RootCertificateAuthorityCertificate
-                  - !Ref RootCertificateAuthorityKey
-        - PolicyName: KmsPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - kms:Encrypt
-                  - kms:Decrypt
-                  - kms:ReEncrypt*
-                  - kms:GenerateDataKey* # For logs
-                  - kms:CreateGrant # For secretsmanager
-                  - kms:Describe*
-                Resource: !GetAtt KmsKey.Arn
-                Condition:
-                  StringEquals:
-                    kms:CallerAccount: !Ref AWS::AccountId
-                    kms:ViaService:
-                      - !Sub logs.${AWS::Region}.amazonaws.com
-                      - !Sub secretsmanager.${AWS::Region}.amazonaws.com
-
-  RootCertificateAuthorityGeneratorLogGroup:
-    Type: AWS::Logs::LogGroup
-    Condition: GenerateRootCA
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      LogGroupName: !Sub root-ca-generator-${ResourceSuffix}
-      RetentionInDays: 90
-      KmsKeyId: !GetAtt KmsKey.Arn
-
-  CodeBuildFunction:
-    Type: AWS::Lambda::Function
-    Condition: GenerateRootCA
-    Properties:
-      Description: Do Not Modify or Delete!
-      Runtime: python3.12
-      Handler: index.lambda_handler
-      Role: !GetAtt CodeBuildFunctionRole.Arn
-      LoggingConfig:
-        LogGroup: !Ref CodeBuildFunctionLogGroup
-      MemorySize: 128
-      ReservedConcurrentExecutions: 1
-      Timeout: 300
-      Code:
-        ZipFile: |
-          import json
-          import logging
-          from time import sleep
-
-          import boto3  # type: ignore
-          import cfnresponse  # type: ignore
-          from botocore.config import Config  # type: ignore
-
-          MAX_ATTEMPT = 28
-          PHYSICAL_RESOURCE_ID = "Root-CA-Generator"
-
-          config = Config(retries={"max_attempts": 5, "mode": "standard"})
-          CODEBUILD = boto3.client("codebuild", config=config)
-
-          logger = logging.getLogger()
-          logger.setLevel(logging.INFO)
-
-
-          def lambda_handler(event, context):
-              logger.info(f"Event: {json.dumps(event, default=str)}")
-
-              params = dict(
-                  event=event,
-                  context=context,
-                  responseData={},
-                  physicalResourceId=PHYSICAL_RESOURCE_ID,
-              )
-
-              if event.get("RequestType") == "Delete":
-                  params["responseStatus"] = cfnresponse.SUCCESS
-                  cfnresponse.send(**params)
-                  return
-
-              try:
-                  project_name = event["ResourceProperties"]["ProjectName"]
-                  build_id = CODEBUILD.start_build(projectName=project_name)["build"]["id"]
-
-                  for i in range(MAX_ATTEMPT):
-                      logger.info(
-                          f"Attempt {i + 1} of {MAX_ATTEMPT} checking the status of the build {build_id}"
-                      )
-                      status = CODEBUILD.batch_get_builds(ids=[build_id])["builds"][0]["buildStatus"]
-                      logger.info(f"Build Status: {status}")
-                      if status != "IN_PROGRESS":
-                          break
-                      sleep(10)
-
-                  if status == "SUCCEEDED":
-                      params["responseStatus"] = cfnresponse.SUCCESS
-                      cfnresponse.send(**params)
-                  else:
-                      params["responseStatus"] = cfnresponse.FAILED
-                      params["reason"] = f"BuildId {build_id}, Status: {status}"
-                      cfnresponse.send(**params)
-
-              except Exception as e:
-                  logger.error(f"Error: {e}")
-                  params["responseStatus"] = cfnresponse.FAILED
-                  params["reason"] = str(e)
-                  cfnresponse.send(**params)
-
-  CodeBuildFunctionRole:
-    Type: AWS::IAM::Role
-    Condition: GenerateRootCA
-    Properties:
-      RoleName: !Sub ${IamPrefix}-codebuild-function-role-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      Policies:
-        - PolicyName: CloudWatchPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !GetAtt CodeBuildFunctionLogGroup.Arn
-        - PolicyName: CodeBuildPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - codebuild:StartBuild
-                  - codebuild:BatchGetBuilds
-                Resource: !GetAtt RootCertificateAuthorityGenerator.Arn
-
-  CodeBuildFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Condition: GenerateRootCA
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      LogGroupName: !Sub codebuild-function-${ResourceSuffix}
-      RetentionInDays: 90
+      SecretString: !Sub
+        - "-----BEGIN CERTIFICATE-----\n${Content}\n-----END CERTIFICATE-----"
+        - Content: !Join
+            - "\n"
+            - !Split
+              - " "
+              - !Select
+                - 0
+                - !Split
+                  - " -----END CERTIFICATE-----"
+                  - !Select
+                    - 1
+                    - !Split
+                      - "-----BEGIN CERTIFICATE----- "
+                      - !Ref RootCertificate
       KmsKeyId: !GetAtt KmsKey.Arn
 
   ### ImageBuilder resources ###
