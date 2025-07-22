@@ -15,15 +15,16 @@
     ]
   },
   "context": {
+
     "mapping_ids":
             {
-            "Af_Air": {
-                "AFTAC": "82abb069-47ae-4422-9aaa-7f0dfa12078e",
-                "AFC2S": "58023508820280258508-adg43-afgadfa"
+            "MissionAreaName1": {
+                "FriendlyName1": "mapping-id-1",
+                "FriendlyName2": "mapping-id-2"
             },
-            "Af_Space": {
-                "AFSPACE": "d9555c2d-9260-449b-8c8f-95d414a0c25f",
-                "DAFCW": "15aw5656sh54h465a4rgae45hg"
+            "MissionAreaName2": {
+                "FriendlyName1": "mapping-id-1",
+                "FriendlyName2": "mapping-id-2"
             }
         },
     "av_scan_queue_name":"aa",
