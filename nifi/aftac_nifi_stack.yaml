@@ -1175,7 +1175,8 @@ Resources:
           {node_identities}' $authorizers_file
 
           if [ {len(nifi_cluster)} -ge 3 ]; then
-              "$NIFI_HOME"/bin/nifi.sh start
+              nohup "$NIFI_HOME"/bin/nifi.sh start > /dev/null 2>&1 &
+              echo "NiFi startup initiated in background"
           fi
           """
               return [line for line in commands.split("\n")]
