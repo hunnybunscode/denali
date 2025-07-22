@@ -15,11 +15,21 @@
     ]
   },
   "context": {
-    "mapping_ids":[""],
-    "av_scan_queue_name":"",
-    "av_scan_dlq_name": "",
-    "asg_name": "",
-    "monitored_lambda_functions": [""],
+    "mapping_ids":
+            {
+            "Af_Air": {
+                "AFTAC": "82abb069-47ae-4422-9aaa-7f0dfa12078e",
+                "AFC2S": "58023508820280258508-adg43-afgadfa"
+            },
+            "Af_Space": {
+                "AFSPACE": "d9555c2d-9260-449b-8c8f-95d414a0c25f",
+                "DAFCW": "15aw5656sh54h465a4rgae45hg"
+            }
+        },
+    "av_scan_queue_name":"aa",
+    "av_scan_dlq_name": "aa",
+    "asg_name": "aa",
+    "monitored_lambda_functions": ["aa"],
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
     "@aws-cdk/core:target-partitions": [
