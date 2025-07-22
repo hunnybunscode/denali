@@ -453,20 +453,23 @@ export class EKSClustersConstruct extends Construct {
     });
 
     const managedNodeGroups = nodeGroups.map(
-      ({
-        name: nodeGroupName,
-        ami,
-        instanceType,
-        desiredCapacity,
-        minSize,
-        maxSize,
-        labels,
-        tags,
-        taints,
-        storage,
-        subnets: nodeGroupSubnets,
-        isolated: useNodeIsolatedSubnets,
-      }): blueprints.ManagedNodeGroup => {
+      (
+        {
+          name: nodeGroupName,
+          ami,
+          instanceType,
+          desiredCapacity,
+          minSize,
+          maxSize,
+          labels,
+          tags,
+          taints,
+          storage,
+          subnets: nodeGroupSubnets,
+          isolated: useNodeIsolatedSubnets,
+        },
+        index
+      ): blueprints.ManagedNodeGroup => {
         const nodeWorkerImage = ami
           ? ec2.MachineImage.lookup({
               name: "*",
@@ -478,11 +481,23 @@ export class EKSClustersConstruct extends Construct {
           console.info(`[${clusterName}/${nodeGroupName}] - Node Image: ${nodeWorkerImage.getImage(this).imageId}`);
         else console.info(`[${clusterName}/${nodeGroupName}] - Node Image: DEFAULT`);
 
+        const workerNodeRootKmsKey =
+          storage?.encrypted && storage.kmsKeyId
+            ? blueprints.getResource(({ scope }) => {
+                return kms.Key.fromKeyArn(scope, `${this.node.id}-root-storage-key-${index}`, storage.kmsKeyId!);
+              })
+            : undefined;
+
+        if (storage?.encrypted === false) {
+          console.warn(`Node - ${nodeGroupName} is configured to have an unencrypted root storage`);
+        }
+
         const blockDevices = [
           {
             deviceName: storage?.rootDeviceName ?? "/dev/xvda",
             volume: ec2.BlockDeviceVolume.ebs(storage?.sizeInGB ?? 20, {
-              encrypted: true,
+              encrypted: storage?.encrypted ?? true,
+              kmsKey: workerNodeRootKmsKey,
               deleteOnTermination: true,
               volumeType: this.getVolumeType(storage),
             }),

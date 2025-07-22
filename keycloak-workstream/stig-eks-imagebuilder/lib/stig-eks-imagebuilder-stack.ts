@@ -172,6 +172,11 @@ export class StigEksImageBuilderStack extends Stack {
             },
           },
         }),
+      ],
+    });
+
+    const imageBuilderServiceManagedPolicyDocumentOverflow = new iam.PolicyDocument({
+      statements: [
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
           actions: ["ec2:CreateTags"],
@@ -408,12 +413,17 @@ export class StigEksImageBuilderStack extends Stack {
       roleName: "ImageBuilderCustomServiceRole",
       description: "Service Role for EC2 Image Builder",
       assumedBy: new iam.ServicePrincipal("imagebuilder.amazonaws.com"),
-      path: "/aws/custom/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder/",
+      // path: "/aws/custom/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder/",
       managedPolicies: [
         new iam.ManagedPolicy(this, "ImageBuilderServicePolicy", {
           managedPolicyName: "ImageBuilderServicePolicy",
           description: "Allows EC2ImageBuilder to call AWS services on your behalf.",
           document: imageBuilderServiceManagedPolicyDocument,
+        }),
+        new iam.ManagedPolicy(this, "ImageBuilderServicePolicyOverflow", {
+          managedPolicyName: "ImageBuilderServicePolicyOverflow",
+          description: "Allows EC2ImageBuilder to call AWS services on your behalf.",
+          document: imageBuilderServiceManagedPolicyDocumentOverflow,
         }),
       ],
     });

@@ -20,7 +20,7 @@ The AWS CDK Bootstrap process sets up the necessary resources in your AWS accoun
 - Make
 
 ## Configuration
-The configuration files are stored in `/env/<environment name>/coniguration.yaml`.
+The configuration files are stored in `/env/<environment name>/configuration.yaml`.
 The environment name is set by exporting the variable **ENVIRONMENT**.
 The default environment is `dev`
 

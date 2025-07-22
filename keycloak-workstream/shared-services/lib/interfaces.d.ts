@@ -285,6 +285,8 @@ interface NodeGroup {
     rootDeviceName: string;
     sizeInGB: number;
     type: string;
+    encrypted?: boolean;
+    kmsKeyId?: string;
   };
   subnets?: {
     id: string;
