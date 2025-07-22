@@ -16,7 +16,8 @@ Metadata:
           default: ZooKeeper Configuration
         Parameters:
           - ZkInstanceType
-          - ZkBinaryDownloadUrl
+          - ZkClusterSize
+          - ZkBinaryS3Uri
 
       - Label:
           default: Networking Configuration
@@ -45,8 +46,10 @@ Metadata:
         default: Resource Suffix
       ZkInstanceType:
         default: ZooKeeper Instance Type
-      ZkBinaryDownloadUrl:
-        default: ZooKeeper Binary Download URL
+      ZkClusterSize:
+        default: ZooKeeper Cluster Size
+      ZkBinaryS3Uri:
+        default: ZooKeeper Binary S3 URI
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -93,17 +96,24 @@ Parameters:
 
   ZkInstanceType:
     Type: String
-    Description: Instance type for ZooKeeper nodes
+    Description: Choose an appropriate instance type for ZooKeeper nodes.
     Default: m5.xlarge
     AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
     ConstraintDescription: Must be a valid instance type
 
-  ZkBinaryDownloadUrl:
+  ZkClusterSize:
+    Type: Number
+    Description: Choose an odd number equal to or greater than 3.
+    Default: 3
+    MinValue: 3
+
+  ZkBinaryS3Uri:
     Type: String
-    Description: Download URL for ZooKeeper binary
-    Default: https://dlcdn.apache.org/zookeeper/zookeeper-3.8.4/apache-zookeeper-3.8.4-bin.tar.gz
-    AllowedPattern: ^\S+$
-    ConstraintDescription: Must be a valid URL
+    Description: >
+      S3 URI for ZooKeeper binary (should start out with "s3://").
+      You can download the binary from https://dlcdn.apache.org/zookeeper/zookeeper-3.8.4/apache-zookeeper-3.8.4-bin.tar.gz, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -321,7 +331,7 @@ Resources:
                       zk_tarfile=zookeeper.tar.gz
 
                       echo "Downloading ZooKeeper binary..."
-                      wget -O "$zk_tarfile" ${ZkBinaryDownloadUrl}
+                      aws s3 cp ${ZkBinaryS3Uri} "$zk_tarfile"
                       echo "Extracting the downloaded file to $user_home_dir directory..."
                       tar -xzf "$zk_tarfile" -C "$user_home_dir"
                       echo "Deleting the downloaded file..."
@@ -395,26 +405,20 @@ Resources:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
         # TODO: Scope it down if possible
         - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
-      # Policies:
-      #   - PolicyName: KMS_Policy
-      #     PolicyDocument:
-      #       Version: 2012-10-17
-      #       Statement:
-      #         - Effect: Allow
-      #           Action: kms:Decrypt
-      #           Resource: !GetAtt KmsKey.Arn
-      # - PolicyName: S3_Policy
-      #   PolicyDocument:
-      #     Version: 2012-10-17
-      #     Statement:
-      #       - Sid: AllowGetObject
-      #         Effect: Allow
-      #         Action: s3:GetObject
-      #         Resource: !Sub ${ZkRequiredFilesBucket.Arn}/*
-      #       - Sid: AllowListBucket
-      #         Effect: Allow
-      #         Action: s3:ListBucket
-      #         Resource: !Sub ${ZkRequiredFilesBucket.Arn}
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowGetObjectZooKeeper
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath: !Select [1, !Split ["//", !Ref ZkBinaryS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
 
   ZkImageBuilderSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -446,9 +450,8 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref ZkAutoScalingGroupLaunchTemplate
         Version: !GetAtt ZkAutoScalingGroupLaunchTemplate.DefaultVersionNumber
-      # 3 is the minimum recommended size for a ZooKeeper ensemble (cluster)
-      MinSize: 3
-      MaxSize: 3
+      MinSize: !Ref ZkClusterSize
+      MaxSize: !Ref ZkClusterSize
       MetricsCollection:
         - Granularity: 1Minute
       VPCZoneIdentifier: !Ref SubnetIds
@@ -698,6 +701,7 @@ Resources:
       Environment:
         Variables:
           ASG_NAME: !Ref ZkAutoScalingGroup
+          ZK_CLUSTER_SIZE: !Ref ZkClusterSize
           ZK_CLUSTER_PARAM: !Ref ZkClusterInfoParameter
       Code:
         ZipFile: |
@@ -711,6 +715,7 @@ Resources:
 
           ZK_CLUSTER_PARAM = os.environ["ZK_CLUSTER_PARAM"]
           ASG_NAME = os.environ["ASG_NAME"]
+          ZK_CLUSTER_SIZE = os.environ["ZK_CLUSTER_SIZE"]
 
           # Two possible event types
           LAUNCH_EVENT = "EC2 Instance Launch Successful"
@@ -903,8 +908,6 @@ Resources:
               # Note: The list of servers that make up ZooKeeper servers that is used by the clients must match
               # the list of ZooKeeper servers that each ZooKeeper server has
 
-              num_of_instances_in_service = len(zk_cluster)
-
               zk_servers = "\n".join(f'server.{v["myid"]}={v["dns"]}:2888:3888;2181' for v in zk_cluster.values())
               zk_server_id = zk_cluster[instance_id]["myid"]
 
@@ -941,7 +944,7 @@ Resources:
 
           echo {zk_server_id} > "$ZK_DATA_DIR"/myid
 
-          if [ {num_of_instances_in_service} -ge 3 ] && ! "$ZK_HOME"/bin/zkServer.sh status; then
+          if [ {len(zk_cluster)} = {ZK_CLUSTER_SIZE} ] && ! "$ZK_HOME"/bin/zkServer.sh status; then
               "$ZK_HOME"/bin/zkServer.sh start
               # Alternative (run inside $ZK_HOME):
               # java -cp zookeeper.jar:lib/*:conf org.apache.zookeeper.server.quorum.QuorumPeerMain conf/zoo.cfg
@@ -1076,57 +1079,6 @@ Resources:
       LogGroupName: !Sub zookeeper-instance-events-processor-${ResourceSuffix}
       RetentionInDays: 90
       KmsKeyId: !GetAtt KmsKey.Arn
-
-  # ZkRequiredFilesBucket:
-  #   Type: AWS::S3::Bucket
-  #   DeletionPolicy: Delete
-  #   UpdateReplacePolicy: Delete
-  #   Properties:
-  #     OwnershipControls:
-  #       Rules:
-  #         - ObjectOwnership: BucketOwnerEnforced
-  #     # LoggingConfiguration:
-  #     #   DestinationBucketName: BucketName
-  #     BucketEncryption:
-  #       ServerSideEncryptionConfiguration:
-  #         - ServerSideEncryptionByDefault:
-  #             KMSMasterKeyID: !GetAtt KmsKey.Arn
-  #             SSEAlgorithm: aws:kms # Uses aws/s3
-  #           BucketKeyEnabled: true
-  #     PublicAccessBlockConfiguration:
-  #       BlockPublicAcls: true
-  #       IgnorePublicAcls: true
-  #       BlockPublicPolicy: true
-  #       RestrictPublicBuckets: true
-  #     VersioningConfiguration:
-  #       Status: Enabled
-  #     ObjectLockEnabled: true
-
-  # ZkRequiredFilesBucketPolicy:
-  #   Type: AWS::S3::BucketPolicy
-  #   Properties:
-  #     Bucket: !Ref ZkRequiredFilesBucket
-  #     PolicyDocument:
-  #       Statement:
-  #         - Effect: Deny
-  #           Principal: "*"
-  #           Action: s3:*
-  #           Resource:
-  #             - !Sub ${ZkRequiredFilesBucket.Arn}/*
-  #             - !Sub ${ZkRequiredFilesBucket.Arn}
-  #           Condition:
-  #             Bool:
-  #               aws:SecureTransport: false
-  #         - Sid: AllowTls12Only
-  #           Effect: Deny
-  #           Principal: "*"
-  #           Action: s3:*
-  #           Resource:
-  #             - !Sub ${ZkRequiredFilesBucket.Arn}
-  #             - !Sub ${ZkRequiredFilesBucket.Arn}/*
-  #           Condition:
-  #             NumericLessThan:
-  #               s3:TlsVersion: 1.2
 
   KmsKey:
     Type: AWS::KMS::Key

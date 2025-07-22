@@ -45,9 +45,11 @@
       4. Authorized Client Common Names
          1. Authorized Common Names: Enter `ALL` to authorize all clients; `NONE` to deny all clients; or a list of comma-separated common names of clients from their certificates to authorize. This acts as an additional layer of access control.
 
+   2. Once the stack has been created, enable termination protection to prevent accidental deletion.
+
 2. Update the stack
 
-   1. Once the stack has been created successfully, navigate to the `Outputs` section.
+   1. Navigate to the `Outputs` section for the stack.
    2. Copy the long series of commands in the `HowToCreateServerKeyAndCert` output value and run them in a secure environment with your AWS credentials. When prompted, enter the Common Name of your choosing.
    3. If the command ran successfully, you'll get an output like below:
 
@@ -128,7 +130,8 @@
       2. ZooKeeper Configuration
 
          1. ZooKeeper Instance Type: Self-explanatory
-         2. ZooKeeper Binary Download URL: Self-explanatory
+         2. ZooKeeper Cluster Size: Self-explanatory
+         3. ZooKeeper Binary S3 URI: Self-explanatory
 
       3. Networking Configuration
 
@@ -147,9 +150,11 @@
          5. Bypass GPG Check: Self-explanatory
          6. Outbound CIDR: Self-explanatory
 
+   2. Once the stack has been created, enable termination protection to prevent accidental deletion.
+
 2. Set Auto Scaling Group to use the default version of LaunchTemplate
 
-   1. Once the stack has been created, navigate to the `Resources` section.
+   1. Navigate to the `Resources` section for the stack.
    2. Click the link next to `ZkAutoScalingGroup` logical ID.
    3. Click `Edit` button.
    4. Under `Launch template` section, click the dropdown under `Version` field and select `Default (1)` .
@@ -196,12 +201,12 @@
 
 ### Troubleshooting
 
-1. If there are any issues, check the logs located at `$ZK_HOME/logs`.
+1. If there are any issues with the NiFi, check the logs located at `$ZK_HOME/logs`.
+2. If you make changes to the LaunchTemplate resource in the template after the deployment, follow the steps 2 and 3 above to set the Auto Scaling Group to use the default version of the LaunchTemplate and create another image.
 
 ### Future Enhancements:
 
-1. Implement S3-based ZooKeeper binary distribution.
-2. Enable secure client-server communication.
+1. Enable secure client-server communication.
 
 ## 3. NiFi Cluster
 
@@ -237,11 +242,12 @@
 
       3. NiFi Configuration
 
-         1. NiFi Instance Type: Self-explanatory
-         2. NiFi Binary Download URL: Self-explanatory
-         3. DoD Cert Bundle Download URL: Self-explanatory
-         4. NiFi Admin User: Self-explanatory
-         5. ZooKeeper Cluster Information Parameter: Paste in `ZkClusterInfoParameterName` value from the `Outputs` section of the ZooKeeper cluster stack.
+         1. NiFi Admin User: Self-explanatory
+         2. NiFi Instance Type: Self-explanatory
+         3. NiFi Cluster Size: Self-explanatory
+         4. NiFi Binary S3 URI: Self-explanatory
+         5. DoD Cert Bundle S3 URI: Self-explanatory
+         6. ZooKeeper Cluster Information Parameter: Paste in `ZkClusterInfoParameterName` value from the `Outputs` section of the ZooKeeper cluster stack.
 
       4. Networking Configuration
 
@@ -260,9 +266,11 @@
          5. Bypass GPG Check: Self-explanatory
          6. Outbound CIDR: Self-explanatory
 
+   2. Once the stack has been created, enable termination protection to prevent accidental deletion.
+
 2. Set Auto Scaling Group to use the default version of LaunchTemplate
 
-   1. Once the stack has been created, navigate to the `Resources` section.
+   1. Navigate to the `Resources` section for the stack.
    2. Click the link next to `NifiAutoScalingGroup` logical ID.
    3. Click `Edit` button.
    4. Under `Launch template` section, click the dropdown under `Version` field and select `Default (1)` .
@@ -309,16 +317,17 @@
 
 ### Troubleshooting
 
-1. If there are any issues, check the logs located at `$NIFI_HOME/logs`.
+1. If there are any issues with the NiFi, check the logs located at `$NIFI_HOME/logs`.
+2. If you make changes to the LaunchTemplate resource in the template after the deployment, follow the steps 2 and 3 above to set the Auto Scaling Group to use the default version of the LaunchTemplate and create another image.
+3. If you add additional nodes to an existing cluster, it requires manual process to synchronize authorizations.xml, users.xml, and flow.json.gz across all nodes, both existing and new.
 
 ### Future Enhancements:
 
-1. Implement S3-based NiFi binary distribution and DoD CA bundle.
-2. Create a NiFi user and specify it bootstrap.conf
-3. Run NiFi as a service
-4. Customize repos.
-5. Add NiFi Registry
-6. Specify heap size in bootstrap.conf?
+1. Create a NiFi user and specify it bootstrap.conf
+2. Run NiFi as a service
+3. Customize repos.
+4. Add NiFi Registry
+5. Specify heap size in bootstrap.conf?
 
 ## 4. Access NiFi cluster
 

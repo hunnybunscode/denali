@@ -21,10 +21,11 @@ Metadata:
       - Label:
           default: NiFi Configuration
         Parameters:
-          - NifiInstanceType
-          - NiFiBinaryDownloadUrl
-          - DodCertBundleDownloadUrl
           - NifiAdminUser
+          - NifiInstanceType
+          - NifiClusterSize
+          - NiFiBinaryS3Uri
+          - DodCertBundleS3Uri
           - ZkClusterInfoParameter
 
       - Label:
@@ -56,14 +57,16 @@ Metadata:
         default: Root Key
       RootCertificate:
         default: Root Certificate
-      NifiInstanceType:
-        default: NiFi Instance Type
-      NiFiBinaryDownloadUrl:
-        default: NiFi Binary Download URL
-      DodCertBundleDownloadUrl:
-        default: DoD Cert Bundle Download URL
       NifiAdminUser:
         default: NiFi Admin User
+      NifiInstanceType:
+        default: NiFi Instance Type
+      NifiClusterSize:
+        default: NiFi Cluster Size
+      NiFiBinaryS3Uri:
+        default: NiFi Binary S3 URI
+      DodCertBundleS3Uri:
+        default: DoD Cert Bundle S3 URI
       ZkClusterInfoParameter:
         default: ZooKeeper Cluster Information Parameter
       VpcId:
@@ -126,32 +129,40 @@ Parameters:
     NoEcho: true
     AllowedPattern: ^$|^-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----$
 
-  NifiInstanceType:
-    Type: String
-    Description: Instance type for NiFi nodes
-    Default: m5.xlarge
-    AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
-    ConstraintDescription: Must be a valid instance type
-
-  NiFiBinaryDownloadUrl:
-    Type: String
-    Description: Download URL for NiFi binary
-    Default: https://dlcdn.apache.org/nifi/2.4.0/nifi-2.4.0-bin.zip
-    AllowedPattern: ^\S+$
-    ConstraintDescription: Must be a valid URL
-
-  DodCertBundleDownloadUrl:
-    Type: String
-    Description: Download URL for DoD Cert bundle
-    Default: https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip
-    AllowedPattern: ^\S+$
-    ConstraintDescription: Must be a valid URL
-
   NifiAdminUser:
     Type: String
     Description: Common Name of the CAC certificate of NiFi Admin User (e.g. DOE.JOHN.M.0123456789)
     AllowedPattern: ^[A-Z]+(\.[A-Z]+)*\.\d{10}$
     ConstraintDescription: Must be a valid Common Name such as DOE.JOHN.M.0123456789
+
+  NifiInstanceType:
+    Type: String
+    Description: Choose an appropriate instance type for NiFi nodes.
+    Default: m5.xlarge
+    AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
+    ConstraintDescription: Must be a valid instance type
+
+  NifiClusterSize:
+    Type: Number
+    Description: Choose an odd number equal to or greater than 3.
+    Default: 3
+    MinValue: 3
+
+  NiFiBinaryS3Uri:
+    Type: String
+    Description: >
+      S3 URI for NiFi binary (should start out with "s3://").
+      You can download the binary from https://dlcdn.apache.org/nifi/2.4.0/nifi-2.4.0-bin.zip, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
+
+  DodCertBundleS3Uri:
+    Type: String
+    Description: >
+      S3 URI for DoD Cert bundle (should start out with "s3://")
+      You can download the cert bundle from https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
 
   ZkClusterInfoParameter:
     Type: String
@@ -447,7 +458,7 @@ Resources:
                       nifi_zipfile=nifi.zip
 
                       echo "Downloading NiFi binary..."
-                      wget -O "$nifi_zipfile" ${NiFiBinaryDownloadUrl}
+                      aws s3 cp ${NiFiBinaryS3Uri} "$nifi_zipfile"
                       echo "Unzipping the downloaded zipfile to $user_home_dir directory..."
                       unzip -q -o "$nifi_zipfile" -d "$user_home_dir"
                       echo "Deleting the downloaded zipfile..."
@@ -456,7 +467,7 @@ Resources:
                       dod_ca_bundle_zipfile=dod_certs.zip
 
                       echo "Downloading DoD certs bundle file..."
-                      wget -O "$dod_ca_bundle_zipfile" ${DodCertBundleDownloadUrl}
+                      aws s3 cp ${DodCertBundleS3Uri} "$dod_ca_bundle_zipfile"
                       echo "Unzipping the downloaded zipfile to $(pwd) directory..."
                       unzip -q -o "$dod_ca_bundle_zipfile"
                       echo "Deleting the downloaded zipfile..."
@@ -512,8 +523,6 @@ Resources:
             - AccountId: !Ref AWS::AccountId
               LaunchTemplateId: !Ref NifiAutoScalingGroupLaunchTemplate
               SetDefaultVersion: true # Set the specified Amazon EC2 launch template as the default launch template for the specified account.
-          # AmiDistributionConfiguration:
-          #   KmsKeyId: String
 
   NifiInfraConfig:
     Type: AWS::ImageBuilder::InfrastructureConfiguration
@@ -558,7 +567,6 @@ Resources:
                 aws:SourceAccount: !Ref AWS::AccountId
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
-        # TODO: Scope it down if possible
         - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
       Policies:
         - PolicyName: SecretsManager_Policy
@@ -578,18 +586,29 @@ Resources:
               - Effect: Allow
                 Action: kms:Decrypt
                 Resource: !GetAtt KmsKey.Arn
-        # - PolicyName: S3_Policy
-        #   PolicyDocument:
-        #     Version: 2012-10-17
-        #     Statement:
-        #       - Sid: AllowGetObject
-        #         Effect: Allow
-        #         Action: s3:GetObject
-        #         Resource: !Sub ${NifiRequiredFilesBucket.Arn}/*
-        #       - Sid: AllowListBucket
-        #         Effect: Allow
-        #         Action: s3:ListBucket
-        #         Resource: !Sub ${NifiRequiredFilesBucket.Arn}
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowGetObjectNifi
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath: !Select [1, !Split ["//", !Ref NiFiBinaryS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+              - Sid: AllowGetObjectDoDCABundle
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath:
+                      !Select [1, !Split ["//", !Ref DodCertBundleS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
 
   NifiImageBuilderSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -621,8 +640,8 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref NifiAutoScalingGroupLaunchTemplate
         Version: !GetAtt NifiAutoScalingGroupLaunchTemplate.DefaultVersionNumber
-      MinSize: 3
-      MaxSize: 3
+      MinSize: !Ref NifiClusterSize
+      MaxSize: !Ref NifiClusterSize
       MetricsCollection:
         - Granularity: 1Minute
       VPCZoneIdentifier: !Ref SubnetIds
@@ -910,6 +929,7 @@ Resources:
       Environment:
         Variables:
           ASG_NAME: !Ref NifiAutoScalingGroup
+          NIFI_CLUSTER_SIZE: !Ref NifiClusterSize
           ZK_CLUSTER_PARAM: !Ref ZkClusterInfoParameter
           NIFI_CLUSTER_PARAM: !Ref NifiClusterInfoParameter
           INITIAL_ADMIN_IDENTITY: !Ref NifiAdminUser
@@ -926,6 +946,7 @@ Resources:
           ZK_CLUSTER_PARAM = os.environ["ZK_CLUSTER_PARAM"]
           NIFI_CLUSTER_PARAM = os.environ["NIFI_CLUSTER_PARAM"]
           ASG_NAME = os.environ["ASG_NAME"]
+          NIFI_CLUSTER_SIZE = os.environ["NIFI_CLUSTER_SIZE"]
           INITIAL_ADMIN_IDENTITY = os.environ["INITIAL_ADMIN_IDENTITY"]
 
           # Two possible event types
@@ -1174,7 +1195,7 @@ Resources:
           sed -i '\|</accessPolicyProvider>|i\\
           {node_identities}' $authorizers_file
 
-          if [ {len(nifi_cluster)} -ge 3 ]; then
+          if [ {len(nifi_cluster)} = {NIFI_CLUSTER_SIZE} ]; then
               nohup "$NIFI_HOME"/bin/nifi.sh start > /dev/null 2>&1 &
               echo "NiFi startup initiated in background"
           fi
@@ -1311,57 +1332,6 @@ Resources:
       LogGroupName: !Sub nifi-instance-events-processor-${ResourceSuffix}
       RetentionInDays: 90
       KmsKeyId: !GetAtt KmsKey.Arn
-
-  # NifiRequiredFilesBucket:
-  #   Type: AWS::S3::Bucket
-  #   DeletionPolicy: Delete
-  #   UpdateReplacePolicy: Delete
-  #   Properties:
-  #     OwnershipControls:
-  #       Rules:
-  #         - ObjectOwnership: BucketOwnerEnforced
-  #     # LoggingConfiguration:
-  #     #   DestinationBucketName: BucketName
-  #     BucketEncryption:
-  #       ServerSideEncryptionConfiguration:
-  #         - ServerSideEncryptionByDefault:
-  #             KMSMasterKeyID: !GetAtt KmsKey.Arn
-  #             SSEAlgorithm: aws:kms # Uses aws/s3
-  #           BucketKeyEnabled: true
-  #     PublicAccessBlockConfiguration:
-  #       BlockPublicAcls: true
-  #       IgnorePublicAcls: true
-  #       BlockPublicPolicy: true
-  #       RestrictPublicBuckets: true
-  #     VersioningConfiguration:
-  #       Status: Enabled
-  #     ObjectLockEnabled: true
-
-  # NifiRequiredFilesBucketPolicy:
-  #   Type: AWS::S3::BucketPolicy
-  #   Properties:
-  #     Bucket: !Ref NifiRequiredFilesBucket
-  #     PolicyDocument:
-  #       Statement:
-  #         - Effect: Deny
-  #           Principal: "*"
-  #           Action: s3:*
-  #           Resource:
-  #             - !Sub ${NifiRequiredFilesBucket.Arn}/*
-  #             - !Sub ${NifiRequiredFilesBucket.Arn}
-  #           Condition:
-  #             Bool:
-  #               aws:SecureTransport: false
-  #         - Sid: AllowTls12Only
-  #           Effect: Deny
-  #           Principal: "*"
-  #           Action: s3:*
-  #           Resource:
-  #             - !Sub ${NifiRequiredFilesBucket.Arn}
-  #             - !Sub ${NifiRequiredFilesBucket.Arn}/*
-  #           Condition:
-  #             NumericLessThan:
-  #               s3:TlsVersion: 1.2
 
   KmsKey:
     Type: AWS::KMS::Key
