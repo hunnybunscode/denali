@@ -101,7 +101,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    ```
 
 
-#### Scan for IAM Role Action
+#### (Internal) Scan for IAM Role Action
 ```bash
 ./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/shared-services/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-72) -RoleArn arn:aws:iam::908027385618:role/cdk-hnb659fds-cfn-exec-role-908027385618-us-west-1 
 ```
@@ -183,3 +183,11 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    squid               squid-deployment-79df4b678-8l6d4                                  1/1     Running            0                  16h
    ```
 
+### Troubleshooting
+
+#### Sample command to test ALB routing
+> For domain routing is not ready or configured
+
+```bash
+curl -vkL https://k8s-keycloakwebui-98c2b921dc-1216040023.us-gov-west-1.elb.amazonaws.com/admin --header 'Host: sso.denali.jktruong.people.aws.dev'
+```
