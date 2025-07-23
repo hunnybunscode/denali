@@ -235,6 +235,7 @@ interface Environment {
     httpProxy?: string;
     httpsProxy?: string;
   };
+  tags?: { [key: string]: string };
 }
 
 interface Component {

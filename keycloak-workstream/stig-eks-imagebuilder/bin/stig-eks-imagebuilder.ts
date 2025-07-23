@@ -29,18 +29,6 @@ const app = new App();
 console.info("CDK_DEFAULT_ACCOUNT:", env!.CDK_DEFAULT_ACCOUNT);
 console.info("CDK_DEFAULT_REGION:", env!.CDK_DEFAULT_REGION);
 
-const tags = {
-  "Managed by": "aws-cdk",
-  Owner: `${env.USER}`,
-};
-
-for (const [key, value] of Object.entries(tags)) {
-  console.info(`Adding Key Value: "${key}" // "${value}"`);
-  Tags.of(app).add(key, value, {
-    includeResourceTypes: [],
-  });
-}
-
 let doc: ConfigurationDocument;
 
 try {
@@ -74,6 +62,23 @@ const environment = {
       : new DefaultStackSynthesizer(doc.environment.synthesizeOverride)
     : undefined,
 };
+
+const tags = {
+  "Managed by": "aws-cdk",
+  Owner: `${env.USER}`,
+};
+
+// Parse the tags for the environment
+if (doc.environment.tags) {
+  Object.assign(tags, doc.environment.tags);
+}
+
+for (const [key, value] of Object.entries(tags)) {
+  console.info(`Adding Key Value: "${key}" // "${value}"`);
+  Tags.of(app).add(key, value, {
+    includeResourceTypes: [],
+  });
+}
 
 new StigEksImageBuilderStack(app, "StigEksImagebuilderStack", environment);
 

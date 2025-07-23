@@ -49,7 +49,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
 2. Deploy the stack
    > NOTE: `--output`, `--debug` is **optional**
    ```bash
-   cdk deploy --require-approval never --yes --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
+   cdk context --clear; cdk deploy --require-approval never --yes --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
    ```
 3. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
    Sample Command

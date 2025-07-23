@@ -233,6 +233,10 @@ interface Environment {
     httpProxy?: string;
     httpsProxy?: string;
   };
+  /**
+   * Tags for all resources created under this environment
+   */
+  tags?: { [key: string]: string };
 }
 
 interface HostedZone {
