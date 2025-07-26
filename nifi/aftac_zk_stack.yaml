@@ -16,6 +16,10 @@ Metadata:
           default: ZooKeeper Configuration
         Parameters:
           - ZkInstanceType
+          - ZkInstanceVolumeType
+          - ZkInstanceVolumeSize
+          - ZkInstanceVolumeIops
+          - ZkInstanceVolumeThroughput
           - ZkClusterSize
           - ZkBinaryS3Uri
 
@@ -37,6 +41,11 @@ Metadata:
           - BypassGpgCheck
           - OutboundCidrIp
 
+      - Label:
+          default: Email Address for Notifications
+        Parameters:
+          - EmailAddress
+
     ParameterLabels:
       IamPrefix:
         default: IAM Resource Prefix
@@ -46,6 +55,14 @@ Metadata:
         default: Resource Suffix
       ZkInstanceType:
         default: ZooKeeper Instance Type
+      ZkInstanceVolumeType:
+        default: ZooKeeper Instance Volume Type
+      ZkInstanceVolumeSize:
+        default: ZooKeeper Instance Volume Size
+      ZkInstanceVolumeIops:
+        default: ZooKeeper Instance Volume IOPS
+      ZkInstanceVolumeThroughput:
+        default: ZooKeeper Instance Volume Throughput (for "gp3" volumes only)
       ZkClusterSize:
         default: ZooKeeper Cluster Size
       ZkBinaryS3Uri:
@@ -70,6 +87,8 @@ Metadata:
         default: Bypass GPG Check
       OutboundCidrIp:
         default: Outbound CIDR
+      EmailAddress:
+        default: Email Address
 
 Parameters:
   IamPrefix:
@@ -96,10 +115,38 @@ Parameters:
 
   ZkInstanceType:
     Type: String
-    Description: Choose an appropriate instance type for ZooKeeper nodes.
+    Description: Instance type for ZooKeeper nodes
     Default: m5.xlarge
     AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
     ConstraintDescription: Must be a valid instance type
+
+  ZkInstanceVolumeType:
+    Type: String
+    Description: EBS volume type for ZooKeeper nodes
+    Default: gp3
+    AllowedValues: [gp3, io1, io2]
+    ConstraintDescription: Must select a value from the list
+
+  ZkInstanceVolumeSize:
+    Type: Number
+    Description: EBS volume size for ZooKeeper nodes (in GiBs)
+    Default: 100
+    MinValue: 1
+    MaxValue: 65536
+
+  ZkInstanceVolumeIops:
+    Type: Number
+    Description: EBS volume IOPS for ZooKeeper nodes
+    Default: 3000
+    MinValue: 100
+    MaxValue: 256000
+
+  ZkInstanceVolumeThroughput:
+    Type: Number
+    Description: EBS volume throughput for ZooKeeper nodes (gp3 only; ignored otherwise)
+    Default: 125
+    MinValue: 125
+    MaxValue: 1000
 
   ZkClusterSize:
     Type: Number
@@ -178,11 +225,18 @@ Parameters:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
+  EmailAddress:
+    Type: String
+    AllowedPattern: ^$|^[^\s@]+@[^\s@]+\.[^\s@]+$
+    Description: (Optional) Email address at which to receive notifications for failure events
+
 Conditions:
   IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
   IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
   IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
   IsLowSide: !Not [Condition: IsHighSide]
+  IsGp3: !Equals [!Ref ZkInstanceVolumeType, "gp3"]
+  IsEmailAddressPopulated: !Not [!Equals [!Ref EmailAddress, ""]]
 
 Resources:
   ZkImageBuilderPipeline:
@@ -217,19 +271,6 @@ Resources:
           - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
           - !Ref AWS::NoValue
         - ComponentArn: !Ref ZkBuildComponent
-      # BlockDeviceMappings:
-      #   - DeviceName: String
-      #     Ebs:
-      #       DeleteOnTermination: true
-      #       Encrypted: true
-      #       KmsKeyId: alias/aws/ebs # The default AWS managed key
-      #       Iops: 100 # The range is 100-64000
-      #       SnapshotId: String
-      #       VolumeType: gp3 # standard | io1 | io2 | gp2 | gp3 | sc1 | st1
-      #       Throughput: 125 # For gp3 volumes only; the range is 125–1000 MiB/s
-      #       VolumeSize: 30 # The range is 1-16000
-      #     NoDevice: "" # Enter an empty string to remove a mapping from the parent image.
-      #     VirtualName: String # Manages the instance ephemeral devices.
       AdditionalInstanceConfiguration:
         SystemsManagerAgent:
           UninstallAfterBuild: false
@@ -471,21 +512,25 @@ Resources:
       LaunchTemplateData:
         IamInstanceProfile:
           Arn: !GetAtt ZkNodeInstanceProfile.Arn
-        ImageId: !Ref ParentImage
+        ImageId: !GetAtt ParentImageParameter.Value
         InstanceType: !Ref ZkInstanceType
         BlockDeviceMappings:
-          # TODO: Get the device name dynamically
-          - DeviceName: /dev/sda1
+          - DeviceName: !GetAtt GetRootDeviceName.RootDeviceName
             Ebs:
-              VolumeSize: 100
-              VolumeType: gp3
-              # Encrypted: true
-              # KmsKeyId: !Ref KmsKey
+              DeleteOnTermination: true
+              VolumeType: !Ref ZkInstanceVolumeType
+              VolumeSize: !Ref ZkInstanceVolumeSize
+              Iops: !Ref ZkInstanceVolumeIops
+              Throughput: !If
+                - IsGp3
+                - !Ref ZkInstanceVolumeThroughput
+                - !Ref AWS::NoValue
+              Encrypted: true
+              KmsKeyId: !Ref KmsKey
         Monitoring:
           Enabled: false
         DisableApiStop: true
         DisableApiTermination: true
-        # EbsOptimized: true
         MetadataOptions:
           HttpPutResponseHopLimit: 1
           HttpTokens: required
@@ -565,6 +610,274 @@ Resources:
 
             touch /opt/userdata-complete && chmod 644 /opt/userdata-complete
             echo "UserData has finished executing"
+
+  ParentImageParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /zookeeper/parent-image-${ResourceSuffix}
+      Type: String
+      DataType: aws:ec2:image
+      Value: !Ref ParentImage
+
+  GetRootDeviceName:
+    Type: Custom::GetRootDeviceName
+    Properties:
+      ServiceToken: !GetAtt GetRootDeviceNameFunction.Arn
+      ServiceTimeout: 60
+      ImageId: !Ref ParentImage
+
+  GetRootDeviceNameFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub get-zk-root-device-name-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt GetRootDeviceNameFunctionRole.Arn
+      Timeout: 60
+      LoggingConfig:
+        LogGroup: !Ref GetRootDeviceNameFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          EC2 = boto3.client("ec2", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Get-Root-Device-Name-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  image_id = event["ResourceProperties"]["ImageId"]
+                  paginator = EC2.get_paginator("describe_images")
+                  images = [
+                      image
+                      for page in paginator.paginate(ImageIds=[image_id])
+                      for image in page["Images"]
+                  ]
+                  if not images:
+                      raise Exception(f"Could not retrieve any images with {image_id}")
+
+                  # There should be only one image
+                  params |= dict(responseData={"RootDeviceName": images[0]["RootDeviceName"]})
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+  GetRootDeviceNameFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-GetZkRootDeviceName-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt GetRootDeviceNameFunctionLogGroup.Arn
+        - PolicyName: AllowDescribeImages
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeImages
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    ec2:Region: !Ref AWS::Region
+
+  GetRootDeviceNameFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/get-zk-root-device-name-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplate:
+    Type: Custom::SetDefaultLaunchTemplate
+    Properties:
+      ServiceToken: !GetAtt SetDefaultLaunchTemplateLambdaFunction.Arn
+      ServiceTimeout: 120
+      AutoScalingGroupname: !Ref ZkAutoScalingGroup
+      LaunchTemplateId: !Ref ZkAutoScalingGroupLaunchTemplate
+
+  SetDefaultLaunchTemplateLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub set-zk-default-launch-template-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt SetDefaultLaunchTemplateFunctionRole.Arn
+      Timeout: 120
+      LoggingConfig:
+        LogGroup: !Ref SetDefaultLaunchTemplateFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          AUTO_SCALING = boto3.client("autoscaling", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Set-Default-LaunchTemplate-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  resource_properties = event["ResourceProperties"]
+                  asg_name = resource_properties["AutoScalingGroupname"]
+                  launch_template_id = resource_properties["LaunchTemplateId"]
+                  update_auto_scaling_group(asg_name, launch_template_id)
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+
+          def update_auto_scaling_group(asg_name: str, launch_template_id: str):
+              AUTO_SCALING.update_auto_scaling_group(
+                  AutoScalingGroupName=asg_name,
+                  LaunchTemplate={
+                      "LaunchTemplateId": launch_template_id,
+                      "Version": "$Default"
+                  },
+              )
+
+  SetDefaultLaunchTemplateFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/set-zk-default-launch-template-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-SetZkDefaultLaunchTemplate-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt SetDefaultLaunchTemplateFunctionLogGroup.Arn
+        - PolicyName: AllowAutoScalingGroupUpdate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:UpdateAutoScalingGroup
+                Resource: !Sub arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${ZkAutoScalingGroup}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt ZkNodeRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:CreateTags
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:*:image/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${ZkAutoScalingGroupLaunchTemplate}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${ZkNodeSecurityGroup}
 
   ZkNodeSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -681,6 +994,17 @@ Resources:
       MaximumRetryAttempts: 0
       Qualifier: $LATEST
 
+  ZkInstanceEventsProcessorFunctionFailureNotification:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ZooKeeper Instance Events Processor Function Failure Notification
+      KmsMasterKeyId: !Ref KmsKey
+      Subscription: !If
+        - IsEmailAddressPopulated
+        - - Endpoint: !Ref EmailAddress
+            Protocol: email
+        - !Ref AWS::NoValue
+
   ZkInstanceEventsProcessorFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -691,8 +1015,8 @@ Resources:
       Role: !GetAtt ZkInstanceEventsProcessorFunctionRole.Arn
       LoggingConfig:
         LogGroup: !Ref ZkInstanceEventsProcessorFunctionLogGroup
-      # DeadLetterConfig:
-      #   TargetArn:
+      DeadLetterConfig:
+        TargetArn: !Ref ZkInstanceEventsProcessorFunctionFailureNotification
       MemorySize: 512
       # ReservedConcurrentExecutions set to 1 to allow function execution only one at a time, to avoid race condition
       # If necessary, use DDB to implement a better locking mechanism, with timestamp for lock expiration
@@ -1070,6 +1394,18 @@ Resources:
                   StringEquals:
                     aws:ResourceAccount: !Ref AWS::AccountId
                     aws:RequestedRegion: !Ref AWS::Region
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref ZkInstanceEventsProcessorFunctionFailureNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
 
   ZkInstanceEventsProcessorFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -1143,6 +1479,26 @@ Resources:
             Condition:
               StringLike:
                 kms:EncryptionContext:aws:imagebuilder:arn: !Sub arn:${AWS::Partition}:imagebuilder:*:${AWS::AccountId}:workflow/*
+          - Sid: Allow autoscaling service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action: kms:CreateGrant
+            Resource: "*"
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: true
 
 Outputs:
   ZkClusterInfoParameterName:
