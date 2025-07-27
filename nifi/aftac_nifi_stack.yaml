@@ -674,6 +674,127 @@ Resources:
       DisplayName: ImageBuilder Event Notification
       KmsMasterKeyId: !GetAtt KmsKey.Arn
 
+  NifiImageBuilderNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref NifiImageBuilderNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt NifiImageBuilderUpdateImageIdFunction.Arn
+      FilterPolicyScope: MessageBody
+      FilterPolicy:
+        name: [!GetAtt NifiImageRecipe.Name]
+        sourcePipelineArn: [!Ref NifiImageBuilderPipeline]
+        state:
+          status: ["AVAILABLE"]
+        type: ["AMI"]
+        accountId: [!Ref "AWS::AccountId"]
+
+  NifiImageBuilderNotificationTopicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref NifiImageBuilderUpdateImageIdFunction
+      SourceArn: !Ref NifiImageBuilderNotificationTopic
+
+  NifiImageBuilderUpdateImageIdFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub nifi-imagebuilder-update-image-id-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt NifiImageBuilderUpdateImageIdFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref NifiImageBuilderUpdateImageIdFunctionLogGroup
+      DeadLetterConfig:
+        TargetArn: !Ref NifiFunctionsDeadLetterNotification
+      MemorySize: 256
+      ReservedConcurrentExecutions: 1
+      Timeout: 60
+      Environment:
+        Variables:
+          PARAM_NAME: !Ref ParentImageParameter
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          PARAM_NAME = os.environ["PARAM_NAME"]
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SSM = boto3.client("ssm", config=config)
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+              message = json.loads(event["Records"][0]["Sns"]["Message"])
+              image_id = message["outputResources"]["amis"][0]["image"]
+              logger.info(f"Updating the value for {PARAM_NAME} parameter")
+              SSM.put_parameter(Name=PARAM_NAME, Value=image_id, Overwrite=True)
+              logger.info(f"Param value updated to {image_id}")
+
+  NifiImageBuilderUpdateImageIdFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-nifi-img-builder-update-image-id-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CloudWatchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt NifiImageBuilderUpdateImageIdFunctionLogGroup.Arn
+        - PolicyName: SSMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParentImageParameter}
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref NifiFunctionsDeadLetterNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  NifiImageBuilderUpdateImageIdFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub nifi-imagebuilder-update-image-id-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
   NifiAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -834,7 +955,6 @@ Resources:
     Properties:
       Name: !Sub /nifi/parent-image-${ResourceSuffix}
       Type: String
-      DataType: aws:ec2:image
       Value: !Ref ParentImage
 
   GetRootDeviceName:
@@ -1222,10 +1342,10 @@ Resources:
       MaximumRetryAttempts: 0
       Qualifier: $LATEST
 
-  NifiInstanceEventsProcessorFunctionFailureNotification:
+  NifiFunctionsDeadLetterNotification:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: NiFi Instance Events Processor Function Failure Notification
+      DisplayName: NiFi Failure Notification
       KmsMasterKeyId: !Ref KmsKey
       Subscription: !If
         - IsEmailAddressPopulated
@@ -1244,7 +1364,7 @@ Resources:
       LoggingConfig:
         LogGroup: !Ref NifiInstanceEventsProcessorFunctionLogGroup
       DeadLetterConfig:
-        TargetArn: !Ref NifiInstanceEventsProcessorFunctionFailureNotification
+        TargetArn: !Ref NifiFunctionsDeadLetterNotification
       MemorySize: 512
       # ReservedConcurrentExecutions set to 1 to allow function execution only one at a time, to avoid race condition
       # If necessary, use DDB to implement a better locking mechanism, with timestamp for lock expiration
@@ -1653,7 +1773,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: sns:Publish
-                Resource: !Ref NifiInstanceEventsProcessorFunctionFailureNotification
+                Resource: !Ref NifiFunctionsDeadLetterNotification
               - Effect: Allow
                 Action:
                   - kms:GenerateDataKey
@@ -1729,9 +1849,6 @@ Resources:
               - kms:GenerateDataKey*
               - kms:Decrypt
             Resource: "*"
-            Condition:
-              StringLike:
-                kms:EncryptionContext:aws:imagebuilder:arn: !Sub arn:${AWS::Partition}:imagebuilder:*:${AWS::AccountId}:workflow/*
           - Sid: Allow autoscaling service-linked role to use the key
             Effect: Allow
             Principal:

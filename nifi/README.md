@@ -335,3 +335,13 @@
 2. Retrieve the private IP address of the instance you want to log into.
 3. Type the following in the address bar of your browser, replacing the `IP_Address` with the actual IP address: `https://IP_Address:8443/nifi`
 4. If you are the admin, perform admin tasks such as adding additional users and creating/updating policies.
+
+# TODOs:
+
+1. ZooKeeper:
+   1. Reference: https://zookeeper.apache.org/doc/current/zookeeperAdmin.html
+   2. Having a supervisory process such as daemontools or SMF (other options for supervisory process are also available, it's up to you which one you would like to use, these are just two examples) managing your ZooKeeper server ensures that if the process does exit abnormally it will automatically be restarted and will quickly rejoin the cluster.
+      1. Set it up in a way that sends a notification to SNS topic for monitoring?
+   3. Use secureClientPort
+   4. Be careful where you put the transaction log. A dedicated transaction log device is key to consistent good performance. Putting the log on a busy device will adversely affect performance.
+      1. dataLogDir : This option will direct the machine to write the transaction log to the dataLogDir rather than the dataDir. This allows a dedicated log device to be used, and helps avoid competition between logging and snapshots. Having a dedicated log device has a large impact on throughput and stable latencies. It is highly recommended dedicating a log device and set dataLogDir to point to a directory on that device, and then make sure to point dataDir to a directory not residing on that device. The most performance critical part of ZooKeeper is the transaction log. ZooKeeper syncs transactions to media before it returns a response. A dedicated transaction log device is key to consistent good performance. Putting the log on a busy device will adversely affect performance. If you only have one storage device, increase the snapCount so that snapshot files are generated less often; it does not eliminate the problem, but it makes more resources available for the transaction log.
