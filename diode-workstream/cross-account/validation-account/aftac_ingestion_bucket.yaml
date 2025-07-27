@@ -8,6 +8,12 @@ Metadata:
           - ResourceSuffix
 
       - Label:
+          default: Allowed File Types and Mime Mapping
+        Parameters:
+          - ApprovedFileTypes
+          - MimeMapping
+
+      - Label:
           default: Tags
         Parameters:
           - IngestBucketMappingId
@@ -45,6 +51,10 @@ Metadata:
         default: IAM Prefix
       ResourceSuffix:
         default: Resource Suffix
+      ApprovedFileTypes:
+        default: Approved File Types
+      MimeMapping:
+        default: Mime Mapping
       IngestBucketMappingId:
         default: (Conditional) Mapping ID
       DfdlBound:
@@ -85,6 +95,27 @@ Parameters:
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  ApprovedFileTypes:
+    Type: CommaDelimitedList
+    Description: A comma-separated list of file extensions (without leading dots) allowed through the validation pipeline
+    Default: csv, flac, wav, mp4, txt, json, zip
+
+  MimeMapping:
+    Type: String
+    Description: >
+      MIME type mapping as JSON object, with file extensions (without leading dots) as keys and arrays of MIME types as values.
+      For example, {"txt": ["text/plain"], "json": ["application/json"]}. Recommend using a tool to validate the input as JSON.
+    Default: '{
+      "txt": ["text/plain"],
+      "json": ["application/json"],
+      "xml": ["application/xml"],
+      "flac": ["audio/flac"],
+      "zip": ["application/zip"],
+      "wav": ["audio/wav", "audio/wave", "audio/x-wav"]
+      }'
+    AllowedPattern: ^\s*\{\s*(?:"[^"]*"\s*:\s*\[[^\]]*\]\s*(?:,\s*"[^"]*"\s*:\s*\[[^\]]*\]\s*)*)\s*\}\s*$
+    ConstraintDescription: Must be a valid JSON
 
   IngestBucketMappingId:
     Type: String
@@ -286,6 +317,22 @@ Resources:
               Action: s3:PutObject
               Resource: !Sub ${IngestBucket.Arn}/*
             - !Ref AWS::NoValue
+
+  ApprovedFileTypesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${IngestBucket}/ApprovedFileTypes-${ResourceSuffix}
+      Description: !Sub File types which are authorized for low to high transfer from ${IngestBucket}
+      Type: StringList
+      Value: !Join [",", !Ref ApprovedFileTypes]
+
+  MimeMappingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${IngestBucket}/MimeMapping-${ResourceSuffix}
+      Description: !Sub Mime mapping in JSON for ${IngestBucket}
+      Type: String
+      Value: !Ref MimeMapping
 
   SSES3KmsKey:
     Type: AWS::KMS::Key

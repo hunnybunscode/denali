@@ -37,10 +37,6 @@ Parameters:
     AllowedPattern: ^ami-[0-9a-f]{17}$
     ConstraintDescription: Must be a valid AMI ID
 
-  ApprovedFileTypes:
-    Type: String
-    Description: The list of approved file types
-
   DfdlApprovedFileTypes:
     Type: String
     Description: The list of approved file types for DFDL
@@ -48,10 +44,6 @@ Parameters:
   ExemptFileTypes:
     Type: String
     Description: The list of exempt file types
-
-  MimeMapping:
-    Type: String
-    Description: Mime mapping in JSON
 
   EmailEndPoint:
     Type: String
@@ -1451,14 +1443,6 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
-  ApprovedFileTypesParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /pipeline/ApprovedFileTypes-${ResourceSuffix}
-      Description: File types which are authorized for low to high transfer
-      Type: StringList
-      Value: !Ref ApprovedFileTypes
-
   DfdlApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -1474,14 +1458,6 @@ Resources:
       Description: File types that should bypass file type validation
       Type: StringList
       Value: !If [ExemptFileTypesBlank, " ", !Ref ExemptFileTypes]
-
-  MimeMappingParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /pipeline/MimeMapping-${ResourceSuffix}
-      Description: Mime mapping in JSON
-      Type: String
-      Value: !Ref MimeMapping
 
   InvalidFilesBucketNameParameter:
     Type: AWS::SSM::Parameter

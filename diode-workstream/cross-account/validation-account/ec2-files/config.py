@@ -17,10 +17,8 @@ ssm_params = {
     f"/pipeline/InvalidFilesBucketName-{resource_suffix}": "",
     f"/pipeline/DfdlInputBucketName-{resource_suffix}": "",
     f"/pipeline/AvScanQueueUrl-{resource_suffix}": "",
-    f"/pipeline/ApprovedFileTypes-{resource_suffix}": "",
     f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}": "",
     f"/pipeline/ExemptFileTypes-{resource_suffix}": "",
-    f"/pipeline/MimeMapping-{resource_suffix}": "",
     f"/pipeline/QuarantineTopicArn-{resource_suffix}": "",
     f"/pipeline/InvalidFilesTopicArn-{resource_suffix}": "",
 }
