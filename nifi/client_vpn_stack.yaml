@@ -1,0 +1,564 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Configuration
+        Parameters:
+          - ResourceSuffix
+
+      - Label:
+          default: Root CA Configuration
+        Parameters:
+          - RootKey
+          - RootCertificate
+
+      - Label:
+          default: Client VPN Endpoint Configuration
+        Parameters:
+          - ServerCertificateArn
+          - ClientCidrBlock
+          - VpcId
+          - VpcCidr
+          - PrivateSubnet1
+          - PrivateSubnet2
+          - SessionTimeoutHours
+          - DnsServerAddresses
+          - BannerText
+
+      - Label:
+          default: Authorized Client Common Names
+        Parameters:
+          - AuthorizedCommonNames
+
+    ParameterLabels:
+      ResourceSuffix:
+        default: Resource Suffix
+      RootKey:
+        default: Root Key
+      RootCertificate:
+        default: Root Certificate
+      ServerCertificateArn:
+        default: Server Certificate ARN
+      ClientCidrBlock:
+        default: Client CIDR Block
+      VpcId:
+        default: VPC ID
+      VpcCidr:
+        default: VPC CIDR
+      PrivateSubnet1:
+        default: Private Subnet 1
+      PrivateSubnet2:
+        default: Private Subnet 2
+      SessionTimeoutHours:
+        default: Session Timeout Hours
+      DnsServerAddresses:
+        default: DNS Server Addresses
+      BannerText:
+        default: Banner Text
+      AuthorizedCommonNames:
+        default: Authorized Common Names
+
+Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: >
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  RootKey:
+    Type: String
+    Description: >
+      Root private key in PEM format. Here is a sample command: openssl genrsa -out ca.key 2048
+    NoEcho: true
+    AllowedPattern: ^$|^-----BEGIN [A-Z ]+-----[\s\S]*-----END [A-Z ]+-----$
+
+  RootCertificate:
+    Type: String
+    Description: >
+      Root certificate in PEM format. The certificate MUST have a domain. Here is a sample command:
+      openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=client-vpn/O=DoD/C=US
+    NoEcho: true
+    AllowedPattern: ^$|^-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----$
+
+  ServerCertificateArn:
+    Type: String
+    Description: >
+      Leave this blank when creating the stack.
+      After the stack has been created, run the commands in the Output section to retrieve the value that should be pasted here.
+      Update the stack with that value, the ARN of the server certificate in AWS Certificate Manager (ACM) for the Client VPN endpoint.
+    AllowedPattern: ^$|^arn:[a-z-]+:acm:[a-z0-9-]+:\d{12}:certificate/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
+    ConstraintDescription: Must be either blank or a valid ARN in AWS Certificate Manager
+
+  ClientCidrBlock:
+    Type: String
+    Description: >
+      (***IMPORTANT***: This value CANNOT be updated after the initial stack creation)
+      The IPv4 address range in CIDR notation, from which to assign client IP addresses.
+      The address range cannot overlap with the local CIDR of the VPC in which the associated subnet is located, or the routes that you add manually.
+      The address range must have a size of at least /22 and not be greater than /12; if unsure, specify /16 or larger.
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/(1[2-9]|2[0-2]))$
+    ConstraintDescription: Client CIDR range must have a size of at least /22 and must not be greater than /12
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The ID of the VPC to associate with the Client VPN endpoint
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the VPC
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of a private subnet in the VPC selected above.
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of a private subnet in the VPC selected above, in a **DIFFERENT** AZ than Private Subnet 1.
+
+  SessionTimeoutHours:
+    Type: Number
+    Description: The maximum VPN session duration time in hours
+    Default: 12
+    AllowedValues: [8, 10, 12, 24]
+
+  DnsServerAddresses:
+    Type: CommaDelimitedList
+    Description: >
+      (OPTIONAL) A comma-separated list of up to two custom DNS servers.
+      If you want to resolve private resources within the VPC, for example, use the IP address of the base of the VPC network range plus two.
+      If no DNS server is specified, the DNS address configured on the device is used for the DNS server.
+    AllowedPattern: ^$|^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$
+    ConstraintDescription: Must be a comma-separated list of up to two custom DNS servers.
+
+  BannerText:
+    Type: String
+    Description: >
+      (OPTIONAL) Customizable text that will be displayed in a banner on AWS provided clients when a VPN session is established.
+      UTF-8 encoded characters only. Maximum of 1400 characters. If not provided, no banner will be displayed.
+    MinLength: 0
+    MaxLength: 1400
+
+  AuthorizedCommonNames:
+    Type: String
+    Description: >
+      Enter "ALL" to authorize all clients, "NONE" to deny all clients, or a list of comma-separated common names
+      of clients from their certificates to authorize.
+    Default: ALL
+    AllowedPattern: ^(ALL|NONE|[a-zA-Z0-9._@-]+(,[a-zA-Z0-9._@-]+)*)$
+    ConstraintDescription: Must be either ALL, NONE, or a comma-separated list of common names
+
+Conditions:
+  CreateVpnEndpoint: !Not [!Equals [!Ref ServerCertificateArn, ""]]
+  UseBannerText: !Not [!Equals [!Ref BannerText, ""]]
+  UseDnsServerAddresses:
+    !Not [!Equals [!Join ["", !Ref DnsServerAddresses], ""]]
+
+Resources:
+  # A Client VPN endpoint supports 1024-bit and 2048-bit RSA key sizes only. Also, the client certificate must have the CN attribute in the Subject field.
+  RootCertificateAuthorityKey:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub client-vpn-root-ca-key-${ResourceSuffix}
+      SecretString: !Sub
+        - "-----${Begin} PRIVATE KEY-----\n${Content}\n-----END PRIVATE KEY-----" # pragma: allowlist secret
+        - Begin: BEGIN
+          Content: !Join
+            - "\n"
+            - !Split
+              - " "
+              - !Select
+                - 0
+                - !Split
+                  - " -----END PRIVATE KEY-----"
+                  - !Select
+                    - 1
+                    - !Split
+                      - "PRIVATE KEY----- " # pragma: allowlist secret
+                      - !Ref RootKey
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  RootCertificateAuthorityCertificate:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub client-vpn-root-ca-certificate-${ResourceSuffix}
+      SecretString: !Sub
+        - "-----BEGIN CERTIFICATE-----\n${Content}\n-----END CERTIFICATE-----"
+        - Content: !Join
+            - "\n"
+            - !Split
+              - " "
+              - !Select
+                - 0
+                - !Split
+                  - " -----END CERTIFICATE-----"
+                  - !Select
+                    - 1
+                    - !Split
+                      - "-----BEGIN CERTIFICATE----- "
+                      - !Ref RootCertificate
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  ClientVpnEndpoint:
+    Type: AWS::EC2::ClientVpnEndpoint
+    Condition: CreateVpnEndpoint
+    Properties:
+      Description: Client VPN Endpoint to access resources for NiFi cluster
+      ServerCertificateArn: !Ref ServerCertificateArn
+      AuthenticationOptions:
+        - Type: certificate-authentication # Can be combined with other authentication options (directory-service-authentication or federated-authentication)
+          MutualAuthentication:
+            # Use the ServerCertificateArn if signed by the same CA as the server
+            # https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/mutual.html
+            ClientRootCertificateChainArn: !Ref ServerCertificateArn
+      ClientCidrBlock: !Ref ClientCidrBlock
+      # https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/connection-authorization.html
+      ClientConnectOptions:
+        Enabled: true
+        LambdaFunctionArn: !GetAtt ConnectionAuthorizerLambdaFunction.Arn
+      ClientLoginBannerOptions: !If # Only works with AWS provided clients
+        - UseBannerText
+        - Enabled: true
+          BannerText: !Ref BannerText
+        - !Ref AWS::NoValue
+      ClientRouteEnforcementOptions: # Only works with AWS provided Client VPN (version 5.2.0 or higher)
+        Enforced: true
+      ConnectionLogOptions:
+        Enabled: true
+        CloudwatchLogGroup: !Ref ClientVpnEndpointLogs
+      SessionTimeoutHours: !Ref SessionTimeoutHours
+      DisconnectOnSessionTimeout: true # "true" prompts users to reconnect after the maximum SessionTimeoutHours is reached
+      DnsServers: !If
+        - UseDnsServerAddresses
+        - !Ref DnsServerAddresses
+        - !Ref AWS::NoValue
+      VpcId: !Ref VpcId
+      SecurityGroupIds: # https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/client-authorization.html#security-groups
+        - !Ref ClientVpnEndpointSecurityGroup
+      SelfServicePortal: disabled # Not available for clients that authenticate using mutual authentication
+      SplitTunnel: true # If true, allows only traffic with a destination to the network matching a route from the Client VPN endpoint route table is routed over the Client VPN tunnel.
+      TransportProtocol: tcp # tcp | udp
+      VpnPort: 443 # 443 | 1194
+      TagSpecifications:
+        - ResourceType: client-vpn-endpoint
+          Tags:
+            - Key: Name
+              Value: !Sub nifi-vpn-${ResourceSuffix}
+
+  ClientVpnEndpointLogs:
+    Type: AWS::Logs::LogGroup
+    Condition: CreateVpnEndpoint
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub client-vpn-endpoint-logs-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  ConnectionAuthorizerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Condition: CreateVpnEndpoint
+    Properties:
+      # The name MUST begin with "AWSClientVPN-"
+      FunctionName: !Sub AWSClientVPN-connection-authorizer-${ResourceSuffix}
+      Description: Returns a decision to the Client VPN service to allow or deny a new connection
+      Architectures: [x86_64]
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      MemorySize: 256
+      ReservedConcurrentExecutions: 3
+      LoggingConfig:
+        LogGroup: !Ref ConnectionAuthorizerLambdaFunctionLogs
+      Environment:
+        Variables:
+          AUTH_COMMON_NAMES: !Ref AuthorizedCommonNames
+      Role: !GetAtt ConnectionAuthorizerLambdaFunctionRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+              auth_common_names = os.getenv("AUTH_COMMON_NAMES", "")
+              common_name = event["common-name"]
+
+              if auth_common_names == "ALL":
+                  allow = True
+              elif auth_common_names == "NONE":
+                  allow = False
+              else:
+                  auth_common_names = {cn.strip() for cn in auth_common_names.split(",") if cn.strip()}
+                  logger.info(f"Authorized common names: {auth_common_names}")
+                  allow = common_name in auth_common_names
+
+              if allow:
+                  logger.info(f"{common_name} is authorized to connect")
+              else:
+                  logger.info(f"{common_name} is NOT authorized to connect")
+
+              return {
+                  "allow": allow,
+                  "error-msg-on-denied-connection": "" if allow else f"{common_name} is NOT authorized to connect"[:255],
+                  "posture-compliance-statuses": [],
+                  "schema-version": "v3"
+              }
+
+  ConnectionAuthorizerLambdaFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Condition: CreateVpnEndpoint
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub client-vpn-connection-authorizer-logs-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  ConnectionAuthorizerLambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Condition: CreateVpnEndpoint
+    Properties:
+      RoleName: !Sub connection-authorizer-lambda-function-role-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CW_Permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ConnectionAuthorizerLambdaFunctionLogs.Arn
+
+  ClientVpnEndpointTargetNetworkAssociation1:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Condition: CreateVpnEndpoint
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !Ref PrivateSubnet1
+
+  # A second network association in a different AZ for redundancy
+  ClientVpnEndpointTargetNetworkAssociation2:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Condition: CreateVpnEndpoint
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !Ref PrivateSubnet2
+
+  ###########################################################################################################
+  ##                                                                                                       ##
+  ## Security groups, route tables, and authorization rules control access to resources in target networks ##
+  ##                                                                                                       ##
+  ###########################################################################################################
+
+  # Attached to the ENIs created in target network associations for controlling outbound access
+  ClientVpnEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateVpnEndpoint
+    Properties:
+      GroupDescription: Security Group for Client VPN Endpoint ENIs
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8443 # Port used by NiFi
+          ToPort: 8443
+          CidrIp: !Ref VpcCidr
+          Description: Allow outbound TCP traffic on port 8443 to VPC CIDR
+
+  # Network-based inbound authorization rules: Acts as ﬁrewall rules that grant access to networks
+  ClientVpnEndpointAuthorizationRule:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Condition: CreateVpnEndpoint
+    Properties:
+      Description: Authorizes access to the VPC CIDR
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      TargetNetworkCidr: !Ref VpcCidr # We can scope this down further, if needed
+      AuthorizeAllGroups: true
+
+  # Create a ClientVpnRoute resource only when you want to add a route outside the VPC
+  # (When you associate a subnet from a VPC with a Client VPN endpoint, a route for the VPC is
+  # automatically added to the Client VPN endpoint's route table).
+
+  # ClientVpnEndpointRoute:
+  #   Type: AWS::EC2::ClientVpnRoute
+  #   # A target network association must be created before you can specify a route
+  #   DependsOn:
+  #     - ClientVpnEndpointTargetNetworkAssociation1
+  #     - ClientVpnEndpointTargetNetworkAssociation2
+  #   Properties:
+  #     Description: String
+  #     ClientVpnEndpointId: !Ref ClientVpnEndpoint
+  #     DestinationCidrBlock: String
+  #     TargetVpcSubnetId: String
+
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for client VPN stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+          - Sid: Allow logs service principal to use the key
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/client-vpn-${ResourceSuffix}
+      TargetKeyId: !Ref KmsKey
+
+Outputs:
+  HowToCreateServerKeyAndCert:
+    Description: Run the commands to generate a server key and cert.
+    Value: !Sub |-
+      set -e;
+      echo;
+      read -p "Enter the Common Name for the server: " common_name;
+      [ -z "$common_name" ] && { echo "Error: Common Name cannot be empty"; exit 1; };
+      temp_dir=$(mktemp -d);
+      echo;
+      echo -e "Creating a private key for $common_name...\n";
+      key_file="$temp_dir"/server.key;
+      openssl genrsa -out "$key_file" 2048;
+      echo -e "Creating a CSR...\n";
+      csr_file="$temp_dir"/server.csr;
+      openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$common_name/OU=DoD/O=U.S. Government/C=US";
+      echo -e "Getting the root CA key from Secrets Manager...\n";
+      ca_key="$temp_dir"/ca.key;
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityKey} --query SecretString --output text > "$ca_key";
+      echo -e "Getting the root CA cert from Secrets Manager...\n";
+      ca_cert="$temp_dir"/ca.pem;
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$ca_cert";
+      echo -e "Creating a server cert by signing the CSR with the root CA...\n";
+      ext_file="$temp_dir"/ext.cnf;
+      echo "subjectAltName = DNS:$common_name" > "$ext_file";
+      echo "basicConstraints = CA:FALSE" >> "$ext_file";
+      echo "subjectKeyIdentifier = hash" >> "$ext_file";
+      echo "authorityKeyIdentifier = keyid,issuer:always" >> "$ext_file";
+      echo "extendedKeyUsage = serverAuth,clientAuth" >> "$ext_file";
+      echo "keyUsage = digitalSignature,keyEncipherment" >> "$ext_file";
+      server_cert_file="$temp_dir"/server.pem;
+      openssl x509 -req -in "$csr_file" -out "$server_cert_file" -CA "$ca_cert" -CAkey "$ca_key" -CAcreateserial -days 1095 -sha256 -extfile "$ext_file";
+      echo -e "Uploading the server key and cert to AWS Certificate Manager...\n";
+      aws acm import-certificate --certificate fileb://"$server_cert_file" --private-key fileb://"$key_file" --certificate-chain fileb://"$ca_cert";
+      echo;
+      echo -e "Cleaning up...\n";
+      find "$temp_dir" -type f -exec shred -u {} \; 2>/dev/null || true;
+      rm -rf "$temp_dir";
+      echo -e "Update the CFN template with CertificateArn value";
+
+  HowToCreateClientKeyAndCert:
+    Condition: CreateVpnEndpoint
+    Description: Run the commands to generate a client key and cert.
+    Value: !Sub |-
+      set -e;
+      echo;
+      read -p "Enter the Common Name for the client: " common_name;
+      [ -z "$common_name" ] && { echo "Error: Common Name cannot be empty"; exit 1; };
+      temp_dir=$(mktemp -d);
+      echo;
+      echo -e "Creating a private key for $common_name...\n";
+      key_file="$temp_dir"/client.key;
+      openssl genrsa -out "$key_file" 2048;
+      echo -e "Creating a CSR...\n";
+      csr_file="$temp_dir"/client.csr;
+      openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$common_name/OU=DoD/O=U.S. Government/C=US";
+      echo -e "Getting the root CA key from Secrets Manager...\n";
+      ca_key="$temp_dir"/ca.key;
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityKey} --query SecretString --output text > "$ca_key";
+      echo -e "Getting the root CA cert from Secrets Manager...\n";
+      ca_cert="$temp_dir"/ca.pem;
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$ca_cert";
+      echo -e "Creating a client cert by signing the CSR with the root CA...\n";
+      ext_file="$temp_dir"/ext.cnf;
+      echo "subjectAltName = DNS:$common_name" > "$ext_file";
+      echo "basicConstraints = CA:FALSE" >> "$ext_file";
+      echo "subjectKeyIdentifier = hash" >> "$ext_file";
+      echo "authorityKeyIdentifier = keyid,issuer:always" >> "$ext_file";
+      echo "extendedKeyUsage = serverAuth,clientAuth" >> "$ext_file";
+      echo "keyUsage = digitalSignature,keyEncipherment" >> "$ext_file";
+      client_cert_file="$temp_dir"/client.pem;
+      openssl x509 -req -in "$csr_file" -out "$client_cert_file" -CA "$ca_cert" -CAkey "$ca_key" -CAcreateserial -days 1095 -sha256 -extfile "$ext_file";
+      echo -e "Extracting and updating the VPN configuration file with the key and cert data...\n";
+      temp_dir2=$(mktemp -d);
+      config_file="$temp_dir2"/"$common_name"_config_file.ovpn;
+      aws ec2 export-client-vpn-client-configuration --client-vpn-endpoint-id ${ClientVpnEndpoint} --output text > "$config_file";
+      echo >> "$config_file";
+      echo "<cert>" >> "$config_file";
+      cat $client_cert_file >> "$config_file";
+      echo "</cert>" >> "$config_file";
+      echo >> "$config_file";
+      echo "<key>" >> "$config_file";
+      cat $key_file >> "$config_file";
+      echo "</key>" >> "$config_file";
+      echo -e "Cleaning up...\n";
+      find "$temp_dir" -type f -exec shred -u {} \; 2>/dev/null || true;
+      rm -rf "$temp_dir";
+      echo -e "Send to the intended user the config file at the following location: $config_file\n";
+      echo "***IMPORTANT*** Delete the config file using the following command:";
+      echo "shred -u $config_file";
