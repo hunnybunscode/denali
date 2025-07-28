@@ -15,8 +15,9 @@ Metadata:
       - Label:
           default: Root CA Configuration
         Parameters:
-          - RootKey
-          - RootCertificate
+          - RootKeySecretArn
+          - RootCertificateSecretArn
+          - RootCAKmsKeyArn
 
       - Label:
           default: NiFi Configuration
@@ -62,10 +63,12 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
-      RootKey:
-        default: Root Key
-      RootCertificate:
-        default: Root Certificate
+      RootKeySecretArn:
+        default: Root Key Secret ARN
+      RootCertificateSecretArn:
+        default: Root Certificate Secret ARN
+      RootCAKmsKeyArn:
+        default: Root CA KMS Key ARN
       NifiAdminUser:
         default: NiFi Admin User
       NifiInstanceType:
@@ -132,21 +135,20 @@ Parameters:
     ConstraintDescription: >
       Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
-  RootKey:
+  RootKeySecretArn:
     Type: String
-    Description: >
-      Root private key in PEM format. You can run the following sample command in CloudShell or on an EC2 instance to generate one:
-      openssl genrsa -out ca.key 4096
-    NoEcho: true
-    AllowedPattern: ^$|^-----BEGIN [A-Z ]+-----[\s\S]*-----END [A-Z ]+-----$
+    Description: ARN of the secret that stores root CA key
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
 
-  RootCertificate:
+  RootCertificateSecretArn:
     Type: String
-    Description: >
-      Root certificate in PEM format. You can run the following sample command in CloudShell or on an EC2 instance to generate one:
-      openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=nifi/O=DoD/C=US
-    NoEcho: true
-    AllowedPattern: ^$|^-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----$
+    Description: ARN of the secret that stores root CA certificate
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
+
+  RootCAKmsKeyArn:
+    Type: String
+    Description: ARN of the KMS key that protects the root CA
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9-]+:\d{12}:key/\S+$
 
   NifiAdminUser:
     Type: String
@@ -316,54 +318,6 @@ Resources:
         ExcludePunctuation: true
       KmsKeyId: !GetAtt KmsKey.Arn
 
-  RootCertificateAuthorityKey:
-    Type: AWS::SecretsManager::Secret
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Description: !Sub nifi-root-ca-key-${ResourceSuffix}
-      SecretString: !Sub
-        - "-----${Begin} PRIVATE KEY-----\n${Content}\n-----END PRIVATE KEY-----" # pragma: allowlist secret
-        - Begin: BEGIN
-          Content: !Join
-            - "\n"
-            - !Split
-              - " "
-              - !Select
-                - 0
-                - !Split
-                  - " -----END PRIVATE KEY-----"
-                  - !Select
-                    - 1
-                    - !Split
-                      - "PRIVATE KEY----- " # pragma: allowlist secret
-                      - !Ref RootKey
-
-      KmsKeyId: !GetAtt KmsKey.Arn
-
-  RootCertificateAuthorityCertificate:
-    Type: AWS::SecretsManager::Secret
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Description: !Sub nifi-root-ca-certificate-${ResourceSuffix}
-      SecretString: !Sub
-        - "-----BEGIN CERTIFICATE-----\n${Content}\n-----END CERTIFICATE-----"
-        - Content: !Join
-            - "\n"
-            - !Split
-              - " "
-              - !Select
-                - 0
-                - !Split
-                  - " -----END CERTIFICATE-----"
-                  - !Select
-                    - 1
-                    - !Split
-                      - "-----BEGIN CERTIFICATE----- "
-                      - !Ref RootCertificate
-      KmsKeyId: !GetAtt KmsKey.Arn
-
   ### ImageBuilder resources ###
 
   NifiImageBuilderPipeline:
@@ -528,7 +482,7 @@ Resources:
 
                       echo "Adding root CA and DoD CA to truststore"
                       temp_cert=$(mktemp)
-                      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$temp_cert"
+                      aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$temp_cert"
                       keytool -importcert -keystore conf/truststore.p12 -storetype PKCS12 \
                           -file "$temp_cert" -alias root_ca -storepass "$keystore_password" -noprompt
                       keytool -importcert -keystore conf/truststore.p12 -storetype PKCS12 \
@@ -617,7 +571,7 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue # pragma: allowlist secret
                 Resource:
-                  - !Ref RootCertificateAuthorityCertificate
+                  - !Ref RootCertificateSecretArn
                   - !Ref KeystorePassword
                   - !Ref SensitiveKeyPassword
         - PolicyName: KMS_Policy
@@ -626,7 +580,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: kms:Decrypt
-                Resource: !GetAtt KmsKey.Arn
+                Resource:
+                  - !GetAtt KmsKey.Arn
+                  - !Ref RootCAKmsKeyArn
         - PolicyName: S3_Policy
           PolicyDocument:
             Version: 2012-10-17
@@ -896,11 +852,11 @@ Resources:
 
             echo "Getting root CA key from SecretsManager..."
             ca_key="$temp_dir"/ca.key
-            aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityKey} --query SecretString --output text > "$ca_key"
+            aws secretsmanager get-secret-value --secret-id ${RootKeySecretArn} --query SecretString --output text > "$ca_key"
 
             echo "Getting root CA cert from SecretsManager..."
             ca_cert="$temp_dir"/ca.pem
-            aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$ca_cert"
+            aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$ca_cert"
 
             echo "Creating a cert by signing the CSR with root CA..."
             cert_file="$temp_dir"/nifi.pem
@@ -1289,8 +1245,8 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue # pragma: allowlist secret
                 Resource:
-                  - !Ref RootCertificateAuthorityCertificate
-                  - !Ref RootCertificateAuthorityKey
+                  - !Ref RootCertificateSecretArn
+                  - !Ref RootKeySecretArn
                   - !Ref KeystorePassword
         - PolicyName: KMS_Policy
           PolicyDocument:
@@ -1298,7 +1254,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: kms:Decrypt
-                Resource: !GetAtt KmsKey.Arn
+                Resource:
+                  - !GetAtt KmsKey.Arn
+                  - !Ref RootCAKmsKeyArn
 
   NifiClusterInfoParameter:
     Type: AWS::SSM::Parameter
@@ -1871,14 +1829,6 @@ Resources:
                 kms:GrantIsForAWSResource: true
 
 Outputs:
-  RootKeySecretArn:
-    Description: ARN of the secret containing the root CA key
-    Value: !Ref RootCertificateAuthorityKey
-
-  RootCertSecretArn:
-    Description: ARN of the secret containing the root CA certificate
-    Value: !Ref RootCertificateAuthorityCertificate
-
   KeystorePasswordSecretArn:
     Description: ARN of the secret containing the password for keystore and truststore
     Value: !Ref KeystorePassword
