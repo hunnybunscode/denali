@@ -351,8 +351,8 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: RELATED_IMAGE_KEYCLOAK
-              value: quay.io/keycloak/keycloak:26.2.5
-          image: quay.io/keycloak/keycloak-operator:26.2.5
+              value: 776732943381.dkr.ecr.us-east-1.amazonaws.com/keycloak-fips:26.3.1-fips
+          image: 776732943381.dkr.ecr.us-east-1.amazonaws.com/keycloak-operator:26.2.5
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3

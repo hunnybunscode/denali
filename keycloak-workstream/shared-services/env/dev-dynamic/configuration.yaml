@@ -1,0 +1,25 @@
+environment:
+  name: dev
+  region: us-east-1
+  account: '776732943381'
+hostedZones: []
+clusters:
+  - name: SharedServices
+    version: '1.30'
+    vpc:
+      id: vpc-014f5c11797a4b3d0
+      isolated: false
+      subnets:
+        - id: subnet-0feac163a1cc9a184
+          cidr: 10.0.16.0/23
+        - id: subnet-01bf5f0fa17970bc1
+          cidr: 10.0.4.0/22
+    nodeGroups:
+      - name: compute-small
+        instanceType: t3.medium
+        subnets:
+          - id: subnet-0feac163a1cc9a184
+          - id: subnet-01bf5f0fa17970bc1
+        minSize: 1
+        desiredCapacity: 2
+        maxSize: 3

@@ -1,5 +1,6 @@
 *.js
 !jest.config.js
+!scripts/populate-config.js
 *.d.ts
 !interfaces.d.ts
 node_modules
