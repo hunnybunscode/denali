@@ -43,3 +43,10 @@ cdk deploy --context config_file=path/to/config.yaml
 - Lambda functions are deployed in VPC for network isolation
 - Security groups should be configured with minimum required access
 - Ensure not to commit personal AWS resource IDs to version control
+
+### dynamodb_table_scan lambda
+- Path: ai-ml-workstream/stacks/step_functions_stack/lambdas/dynamodb_table_scan
+- Uses a minSeverity payload value to filter the findings returned by severity.
+  - A missing minSeverity value returns findings of any severity.
+  - Setting the minSeverity value will turn on filtering so that the lambda only returns findings with that severity or higher. 
+  - Example: a "4" minSeverity would only return findings with 4 and above severity (highs and criticals)
