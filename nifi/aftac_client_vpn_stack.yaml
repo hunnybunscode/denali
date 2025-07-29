@@ -4,13 +4,15 @@ Metadata:
       - Label:
           default: General Configuration
         Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
           - ResourceSuffix
 
       - Label:
           default: Root CA Configuration
         Parameters:
-          - RootKey
-          - RootCertificate
+          - RootKeySecretArn
+          - RootCertificateSecretArn
 
       - Label:
           default: Client VPN Endpoint Configuration
@@ -31,12 +33,16 @@ Metadata:
           - AuthorizedCommonNames
 
     ParameterLabels:
+      IamPrefix:
+        default: IAM Resource Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
-      RootKey:
-        default: Root Key
-      RootCertificate:
-        default: Root Certificate
+      RootKeySecretArn:
+        default: Root Key Secret ARN
+      RootCertificateSecretArn:
+        default: Root Certificate Secret ARN
       ServerCertificateArn:
         default: Server Certificate ARN
       ClientCidrBlock:
@@ -59,6 +65,19 @@ Metadata:
         default: Authorized Common Names
 
 Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
   ResourceSuffix:
     Type: String
     Description: >
@@ -67,20 +86,15 @@ Parameters:
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
-  RootKey:
+  RootKeySecretArn:
     Type: String
-    Description: >
-      Root private key in PEM format. Here is a sample command: openssl genrsa -out ca.key 2048
-    NoEcho: true
-    AllowedPattern: ^$|^-----BEGIN [A-Z ]+-----[\s\S]*-----END [A-Z ]+-----$
+    Description: ARN of the secret that stores root CA key
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
 
-  RootCertificate:
+  RootCertificateSecretArn:
     Type: String
-    Description: >
-      Root certificate in PEM format. The certificate MUST have a domain. Here is a sample command:
-      openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=client-vpn/O=DoD/C=US
-    NoEcho: true
-    AllowedPattern: ^$|^-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----$
+    Description: ARN of the secret that stores root CA certificate
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
 
   ServerCertificateArn:
     Type: String
@@ -156,54 +170,6 @@ Conditions:
     !Not [!Equals [!Join ["", !Ref DnsServerAddresses], ""]]
 
 Resources:
-  # A Client VPN endpoint supports 1024-bit and 2048-bit RSA key sizes only. Also, the client certificate must have the CN attribute in the Subject field.
-  RootCertificateAuthorityKey:
-    Type: AWS::SecretsManager::Secret
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Description: !Sub client-vpn-root-ca-key-${ResourceSuffix}
-      SecretString: !Sub
-        - "-----${Begin} PRIVATE KEY-----\n${Content}\n-----END PRIVATE KEY-----" # pragma: allowlist secret
-        - Begin: BEGIN
-          Content: !Join
-            - "\n"
-            - !Split
-              - " "
-              - !Select
-                - 0
-                - !Split
-                  - " -----END PRIVATE KEY-----"
-                  - !Select
-                    - 1
-                    - !Split
-                      - "PRIVATE KEY----- " # pragma: allowlist secret
-                      - !Ref RootKey
-      KmsKeyId: !GetAtt KmsKey.Arn
-
-  RootCertificateAuthorityCertificate:
-    Type: AWS::SecretsManager::Secret
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Description: !Sub client-vpn-root-ca-certificate-${ResourceSuffix}
-      SecretString: !Sub
-        - "-----BEGIN CERTIFICATE-----\n${Content}\n-----END CERTIFICATE-----"
-        - Content: !Join
-            - "\n"
-            - !Split
-              - " "
-              - !Select
-                - 0
-                - !Split
-                  - " -----END CERTIFICATE-----"
-                  - !Select
-                    - 1
-                    - !Split
-                      - "-----BEGIN CERTIFICATE----- "
-                      - !Ref RootCertificate
-      KmsKeyId: !GetAtt KmsKey.Arn
-
   ClientVpnEndpoint:
     Type: AWS::EC2::ClientVpnEndpoint
     Condition: CreateVpnEndpoint
@@ -329,7 +295,8 @@ Resources:
     Type: AWS::IAM::Role
     Condition: CreateVpnEndpoint
     Properties:
-      RoleName: !Sub connection-authorizer-lambda-function-role-${ResourceSuffix}
+      RoleName: !Sub ${IamPrefix}-conn-auth-lambda-function-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       Description: Do Not Modify or Delete!
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -490,10 +457,10 @@ Outputs:
       openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$common_name/OU=DoD/O=U.S. Government/C=US";
       echo -e "Getting the root CA key from Secrets Manager...\n";
       ca_key="$temp_dir"/ca.key;
-      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityKey} --query SecretString --output text > "$ca_key";
+      aws secretsmanager get-secret-value --secret-id ${RootKeySecretArn} --query SecretString --output text > "$ca_key";
       echo -e "Getting the root CA cert from Secrets Manager...\n";
       ca_cert="$temp_dir"/ca.pem;
-      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$ca_cert";
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$ca_cert";
       echo -e "Creating a server cert by signing the CSR with the root CA...\n";
       ext_file="$temp_dir"/ext.cnf;
       echo "subjectAltName = DNS:$common_name" > "$ext_file";
@@ -530,10 +497,10 @@ Outputs:
       openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$common_name/OU=DoD/O=U.S. Government/C=US";
       echo -e "Getting the root CA key from Secrets Manager...\n";
       ca_key="$temp_dir"/ca.key;
-      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityKey} --query SecretString --output text > "$ca_key";
+      aws secretsmanager get-secret-value --secret-id ${RootKeySecretArn} --query SecretString --output text > "$ca_key";
       echo -e "Getting the root CA cert from Secrets Manager...\n";
       ca_cert="$temp_dir"/ca.pem;
-      aws secretsmanager get-secret-value --secret-id ${RootCertificateAuthorityCertificate} --query SecretString --output text > "$ca_cert";
+      aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$ca_cert";
       echo -e "Creating a client cert by signing the CSR with the root CA...\n";
       ext_file="$temp_dir"/ext.cnf;
       echo "subjectAltName = DNS:$common_name" > "$ext_file";
