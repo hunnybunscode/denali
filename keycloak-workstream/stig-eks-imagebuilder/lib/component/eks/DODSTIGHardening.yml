@@ -1,0 +1,124 @@
+name: DOD STIG Hardening
+description: Add additional hardening to image based on scanning results.
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: EnableFIPS
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              echo "Enable FIPS ..."
+
+              # Get the current version
+              current_version=$(cat /etc/system-release)
+              echo "Current version: $current_version"
+
+              # Check if running AL2023
+              if [ -f /etc/os-release ]; then
+                  cat /etc/os-release
+                  source /etc/os-release
+
+                  if [[ $ID == "amzn" && $VERSION_ID == "2023" ]]; then
+                      echo "Running Amazon Linux 2023"
+                      
+                      sudo dnf --assumeyes install crypto-policies crypto-policies-scripts
+                      sudo fips-mode-setup --enable
+                  # Check if RHEL and running at least 8 or greater
+                  elif [[ $ID == "rhel" && $(echo "$VERSION_ID" | awk '{print ($0 >= 8)}') -eq 1 ]]; then
+                      echo "Running RHEL 8 or greater"
+                      
+                      sudo dnf --assumeyes install crypto-policies crypto-policies-scripts
+                      sudo fips-mode-setup --enable                  
+                  # Check if running Amazon 2 Linux
+                  elif [[ $ID == "amzn" && $VERSION_ID == "2" ]]; then
+                      echo "Running Amazon Linux 2"
+                      sudo yum install --assumeyes dracut-fips
+                      sudo dracut -f
+                      sudo /sbin/grubby --update-kernel=ALL --args="fips=1"
+                  else
+                      echo "Unsupported OS ..."
+                      exit 1
+                  fi
+              else
+                  echo "Cannot determine OS version"
+                  exit 1
+              fi
+
+      - name: X11Forwarding
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              sudo sed -i -E -e 's/^X11Forwarding\s*yes|^#X11Forwarding\s*yes|^#X11Forwarding\s*no/X11Forwarding no/' /etc/ssh/sshd_config
+
+      - name: Protocol2
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              if sudo grep -qwx "Protocol 2" /etc/ssh/sshd_config; then
+                echo "Protocol already set to 2"
+              else
+                  sudo sed -i -e '/^X11Forwarding/a\Protocol 2' /etc/ssh/sshd_config
+              fi
+
+      - name: DisallowNullPasswords
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              if sudo grep -q "nullok" /etc/pam.d/system-auth; then
+                sudo sed -i 's/nullok//g' /etc/pam.d/system-auth
+              else
+                  echo "system-auth nullok non-existent"
+              fi
+              if sudo grep -q "nullok" /etc/pam.d/password-auth; then
+                sudo sed -i 's/nullok//g' /etc/pam.d/password-auth
+              else
+                  echo "password-auth nullok non-existent"
+              fi
+
+      - name: DisallowBlankPasswords
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              if sudo grep -q -E '^(\s*#\s*)?PermitEmptyPasswords\s+(yes|no)' /etc/ssh/sshd_config; then
+                  sudo sed -i -E 's/^(\s*#\s*)?PermitEmptyPasswords\s+(yes|no)/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+              else
+                  echo "PermitEmptyPasswords no" | sudo tee -a /etc/ssh/sshd_config
+              fi
+
+      - name: FipsEnabled-Disallow_ed25519
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              if grep -q "^HostKey /etc/ssh/ssh_host_ed25519_key" /etc/ssh/sshd_config; then
+                sudo sed -i 's/^\(HostKey \/etc\/ssh\/ssh_host_ed25519_key\)/#\1/' /etc/ssh/sshd_config
+              fi
+
+      - name: DisableCtrl-Alt-Delete
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              sudo systemctl disable ctrl-alt-del.target
+              sudo systemctl mask ctrl-alt-del.target
+              if ! grep -q '^CtrlAltDelBurstAction=none' /etc/systemd/system.conf; then
+                sudo sed -i -E 's/^(CtrlAltDelBurstAction=).*$/CtrlAltDelBurstAction=none/' /etc/systemd/system.conf
+                if ! grep -q '^CtrlAltDelBurstAction=none' /etc/systemd/system.conf; then
+                  echo "CtrlAltDelBurstAction=none" | sudo tee -a /etc/systemd/system.conf
+                fi
+              fi
+              sudo systemctl daemon-reload
+
+      - name: SELinuxPolicy
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              sudo sed -i -E -e 's/SELINUX=disabled|SELINUX=permissive/SELINUX=enforcing/' /etc/selinux/config

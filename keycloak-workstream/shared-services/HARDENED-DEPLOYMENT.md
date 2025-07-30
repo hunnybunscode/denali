@@ -11,7 +11,21 @@ This guide walks you through deploying hardened Keycloak with Ironbank FIPS imag
 - CAC card for Ironbank registry access
 - Node.js 18+ and npm
 
-## Step 1: Pull Ironbank Images to ECR
+## Step 1: Set Up Ironbank Authentication
+
+First, authenticate with Ironbank registry using your CAC credentials:
+
+```bash
+# Set up Ironbank authentication (one-time setup)
+./scripts/setup-ironbank-auth.sh
+```
+
+**What this does:**
+- Guides you to get CLI credentials from registry1.dso.mil
+- Authenticates Docker with Ironbank registry
+- Stores credentials securely for future use
+
+## Step 2: Pull Ironbank Images to ECR
 
 Run the scripts to pull hardened images to your private ECR:
 
@@ -24,34 +38,20 @@ Run the scripts to pull hardened images to your private ECR:
 ```
 
 **What this does:**
-- Authenticates to Ironbank registry using your CAC
+- Uses your stored Ironbank credentials automatically
 - Pulls hardened Keycloak FIPS and operator images
 - Pushes them to your private ECR repositories
 - Auto-detects your AWS account and region
 
-## Step 2: Install Dependencies
+## Step 3: Install Dependencies
 
 ```bash
 # Install CDK dependencies
-npm install
+npm ci
 
 # Install AWS SDK dependencies for config script
 npm install @aws-sdk/client-ec2 @aws-sdk/client-sts js-yaml
 ```
-
-## Step 3: Add EC2 Tagging Permissions
-
-Add permissions for CDK to automatically tag subnets for EKS:
-
-```bash
-# Add EC2 tagging permissions to CDK execution role
-./scripts/add-tagging-permissions.sh
-```
-
-**What this does:**
-- Adds EC2 CreateTags, DeleteTags, DescribeTags permissions
-- Allows CDK to automatically tag subnets for load balancer functionality
-- Eliminates subnet tagging warnings during deployment
 
 ## Step 4: Generate Dynamic Configuration
 
