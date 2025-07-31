@@ -18,6 +18,7 @@ Metadata:
           - IngestBucketDataSteward
           - IngestBucketGovPoc
           - IngestBucketKeyOwner
+          - IngestBucketDestinationMappingKey # Mapping Key Parameter for one-to-many effort AR 7/31
 
       - Label:
           default: (OPTIONAL) Encryption Key Alias
@@ -69,6 +70,8 @@ Metadata:
         default: SSH Public Keys
       ObjectExpirationInDays:
         default: Object Expiration In Days
+      IngestBucketDestinationMappingKey:  # Added AR 7/31
+        default: Ingest Bucket Destination Parameter Mapping Key
 
 Parameters:
   IamPrefix:
@@ -163,6 +166,10 @@ Parameters:
     Type: Number
     Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
     Default: 30
+ # Added Destination mapping Parameter (AR 7/31)
+  IngestBucketDestinationMappingKey:
+    Type: String
+    Description: The Mapping Key that will be used to to identify the ultimate transfer destination
 
 Rules:
   MappingIdOnly:
@@ -183,6 +190,8 @@ Conditions:
   UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
   UseAllowedExternalRoleArn: !Not [!Equals [!Ref AllowedExternalRoleArn, ""]]
   UseIngestBucketKeyAlias: !Not [!Equals [!Ref IngestBucketKeyAlias, ""]]
+  # Adding Condition for ingest bucket destination Mapping Key AR 7/31
+  UseDestinationMappingKey: !Not [!Equals [!Ref IngestBucketDestinationMappingKey, ""]]
 
 Resources:
   IngestBucket:
@@ -243,6 +252,11 @@ Resources:
           Value: !Ref IngestBucketGovPoc
         - Key: KeyOwner
           Value: !Ref IngestBucketKeyOwner
+        - !If
+          - UseDestinationMappingKey
+          - Key: DestinationMappingKey
+            Value: !Ref IngestBucketDestinationMappingKey
+          - !Ref AWS::NoValue
 
   IngestBucketPolicy:
     Type: AWS::S3::BucketPolicy
