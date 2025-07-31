@@ -231,6 +231,15 @@ def change_message_visibility(queue_url: str, receipt_handle: str, timeout: int)
     logger.info("Successfully updated the visibility timeout")
 
 
+def get_param_value(name: str, with_decryption=False) -> str:
+    logger.info(f"Getting the value for {name} parameter")
+    value = SSM_CLIENT.get_parameter(Name=name, WithDecryption=with_decryption)[
+        "Parameter"
+    ]["Value"]
+    logger.info("Successfully retrieved the value")
+    return value
+
+
 def get_params_values(
     ssm_params: dict[str, str],
     with_decryption=False,
@@ -324,12 +333,17 @@ def get_file_identity(file_path: str) -> tuple[str, str]:
         return ERROR, ERROR
 
 
-def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, str]]:
+def validate_file_type(
+    s3_event: dict,
+    file_path: str,
+    file_ext: str,
+) -> tuple[bool, dict[str, str]]:
     """
     Validates a single file and returns the validation status and tags
     """
     logger.info(f"Validating file: {file_path}")
 
+    bucket_name = s3_event["s3"]["bucket"]["name"]
     file_type, mime_type = get_file_identity(file_path)
 
     # If puremagic can't determine the file type
@@ -355,7 +369,10 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
     logger.info(
         f"File type ({file_type}) matches file extension ({file_ext})",
     )
-    if file_type not in get_approved_file_types() + get_dfdl_file_types():
+    if (
+        file_type
+        not in get_approved_file_types(bucket_name, get_ttl()) + get_dfdl_file_types()
+    ):
         logger.warning(f"File type ({file_type}) is NOT approved")
         tags = create_tags_for_file_validation(
             "FileTypeNotApproved",
@@ -365,7 +382,7 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
         return False, tags
 
     logger.info(f"File type ({file_type}) is an approved type")
-    if mime_type not in get_mime_mapping().get(file_type, []):
+    if mime_type not in get_mime_mapping(bucket_name, get_ttl()).get(file_type, []):
         logger.warning(f"Mime type ({mime_type}) is NOT approved")
         tags = create_tags_for_file_validation(
             "MimeTypeNotApproved",
@@ -380,13 +397,10 @@ def validate_file_type(file_path: str, file_ext: str) -> tuple[bool, dict[str, s
     return True, tags
 
 
-def get_approved_file_types() -> list[str]:
-    return (
-        ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"]
-        .replace(".", "")
-        .replace(" ", "")
-        .split(",")
-    )
+@lru_cache(maxsize=100)
+def get_approved_file_types(bucket_name: str, ttl: int) -> list[str]:
+    param_value = get_param_value(f"/{bucket_name}/ApprovedFileTypes-{resource_suffix}")
+    return param_value.replace(".", "").replace(" ", "").split(",")
 
 
 def get_dfdl_file_types() -> list[str]:
@@ -407,8 +421,10 @@ def get_exempt_file_types() -> list[str]:
     )
 
 
-def get_mime_mapping() -> dict:
-    return json.loads(ssm_params[f"/pipeline/MimeMapping-{resource_suffix}"])
+@lru_cache(maxsize=100)
+def get_mime_mapping(bucket_name: str, ttl: int) -> dict:
+    param_value = get_param_value(f"/{bucket_name}/MimeMapping-{resource_suffix}")
+    return json.loads(param_value)
 
 
 def get_file_ext(file_path: str) -> str:
@@ -609,15 +625,6 @@ def add_tags(
     logger.info(f"Combined tags: {combined_tags}")
     put_object_tagging(bucket, key, combined_tags, bucket_owner)
     logger.info("Successfully added the new tags")
-
-
-def get_param_value(name: str, with_decryption=False) -> str:
-    logger.info(f"Getting the value for {name} parameter")
-    value = SSM_CLIENT.get_parameter(Name=name, WithDecryption=with_decryption)[
-        "Parameter"
-    ]["Value"]
-    logger.info("Successfully retrieved the value")
-    return value
 
 
 def send_sqs_message(queue_url: str, message: str, delay_seconds: int | None = None):

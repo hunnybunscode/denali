@@ -7,6 +7,17 @@ def lambda_handler(event, context):
         # Initialize DynamoDB client
         dynamodb = boto3.client('dynamodb')
         
+        # Use default 0 as minimum severity
+        min_severity = 0
+        # Extract minSeverity value from event
+        if 'minSeverity' in event:
+            try:
+                min_severity = int(event['minSeverity'])
+            except:
+                raise ValueError(f"minSeverity '{event['minSeverity']}' cannot be successfully converted into a valid integer.")
+        if min_severity > 0:
+            print(f"Filtering out all items with severity less than {min_severity}")
+
         # Extract table name from event
         if 'tableName' not in event:
             raise ValueError("Table name not provided in event")
@@ -41,7 +52,9 @@ def lambda_handler(event, context):
                     simplified_item[key] = value['M']
                 elif 'NULL' in value:  # Null
                     simplified_item[key] = None
-                
+            # filter out items with lower than specified minimum severity        
+            if 'severity' in simplified_item and simplified_item['severity'] < min_severity:
+                continue
             simplified_items.append(simplified_item)
             
         return {

@@ -1,0 +1,1620 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates a ZooKeeper cluster
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Configuration
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - ResourceSuffix
+
+      - Label:
+          default: ZooKeeper Configuration
+        Parameters:
+          - ZkInstanceType
+          - ZkInstanceVolumeType
+          - ZkInstanceVolumeSize
+          - ZkInstanceVolumeIops
+          - ZkInstanceVolumeThroughput
+          - ZkClusterSize
+          - ZkBinaryS3Uri
+
+      - Label:
+          default: Networking Configuration
+        Parameters:
+          - VpcId
+          - VpcCidr
+          - SubnetIds
+          - S3PrefixListId
+
+      - Label:
+          default: Image Builder Configuration
+        Parameters:
+          - SemVer
+          - ParentImage
+          - ProxyServerAddress
+          - NoProxyList
+          - BypassGpgCheck
+          - OutboundCidrIp
+
+      - Label:
+          default: Email Address for Notifications
+        Parameters:
+          - EmailAddress
+
+    ParameterLabels:
+      IamPrefix:
+        default: IAM Resource Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
+      ResourceSuffix:
+        default: Resource Suffix
+      ZkInstanceType:
+        default: ZooKeeper Instance Type
+      ZkInstanceVolumeType:
+        default: ZooKeeper Instance Volume Type
+      ZkInstanceVolumeSize:
+        default: ZooKeeper Instance Volume Size
+      ZkInstanceVolumeIops:
+        default: ZooKeeper Instance Volume IOPS
+      ZkInstanceVolumeThroughput:
+        default: ZooKeeper Instance Volume Throughput (for "gp3" volumes only)
+      ZkClusterSize:
+        default: ZooKeeper Cluster Size
+      ZkBinaryS3Uri:
+        default: ZooKeeper Binary S3 URI
+      VpcId:
+        default: VPC ID
+      VpcCidr:
+        default: VPC CIDR
+      SubnetIds:
+        default: Subnet IDs
+      S3PrefixListId:
+        default: S3 Prefix List ID
+      SemVer:
+        default: Semantic Version
+      ParentImage:
+        default: Parent Image
+      ProxyServerAddress:
+        default: Proxy Server Address
+      NoProxyList:
+        default: No Proxy List
+      BypassGpgCheck:
+        default: Bypass GPG Check
+      OutboundCidrIp:
+        default: Outbound CIDR
+      EmailAddress:
+        default: Email Address
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
+    ConstraintDescription: >
+      Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  ZkInstanceType:
+    Type: String
+    Description: Instance type for ZooKeeper nodes
+    Default: m5.xlarge
+    AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
+    ConstraintDescription: Must be a valid instance type
+
+  ZkInstanceVolumeType:
+    Type: String
+    Description: EBS volume type for ZooKeeper nodes
+    Default: gp3
+    AllowedValues: [gp3, io1, io2]
+    ConstraintDescription: Must select a value from the list
+
+  ZkInstanceVolumeSize:
+    Type: Number
+    Description: EBS volume size for ZooKeeper nodes (in GiBs)
+    Default: 100
+    MinValue: 1
+    MaxValue: 65536
+
+  ZkInstanceVolumeIops:
+    Type: Number
+    Description: EBS volume IOPS for ZooKeeper nodes
+    Default: 3000
+    MinValue: 100
+    MaxValue: 256000
+
+  ZkInstanceVolumeThroughput:
+    Type: Number
+    Description: EBS volume throughput for ZooKeeper nodes (gp3 only; ignored otherwise)
+    Default: 125
+    MinValue: 125
+    MaxValue: 1000
+
+  ZkClusterSize:
+    Type: Number
+    Description: Choose an odd number equal to or greater than 3.
+    Default: 3
+    MinValue: 3
+
+  ZkBinaryS3Uri:
+    Type: String
+    Description: >
+      S3 URI for ZooKeeper binary (should start out with "s3://").
+      You can download the binary from https://dlcdn.apache.org/zookeeper/zookeeper-3.8.4/apache-zookeeper-3.8.4-bin.tar.gz, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC in which ZooKeeper nodes will be created. Note that the same VPC will be used by the image pipeline.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a VPC
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR of the VPC chosen above
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Select subnets (from the VPC chosen above) in which ZooKeeper nodes will be created. Note that the first subnet will be used by the image pipeline.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet
+
+  S3PrefixListId:
+    Type: String
+    Description: S3 Prefix List ID (e.g. pl-7a3a1b0f)
+    AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid S3 Prefix List ID
+
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the ZooKeeper Image Recipe and other associated resources.
+      Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+    AllowedPattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+    ConstraintDescription: Must be a valid semantic version (e.g., 1.0.0)
+
+  ParentImage:
+    Type: AWS::EC2::Image::Id
+    Description: Parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+
+  ProxyServerAddress:
+    Type: String
+    Description: Address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  NoProxyList:
+    Type: String
+    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
+    Default: 169.254.169.254,s3.us-gov-west-1.amazonaws.com,ssm.us-gov-west-1.amazonaws.com,ssmmessages.us-gov-west-1.amazonaws.com,ec2messages.us-gov-west-1.amazonaws.com
+
+  BypassGpgCheck:
+    Type: String
+    Description: Select "true" to bypass GPG check for SSM Agent installation file; otherwise, select "false"
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    ConstraintDescription: Must be either "true" or "false"
+
+  OutboundCidrIp:
+    Type: String
+    Description: Outbound CIDR block for ImageBuilder instances
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  EmailAddress:
+    Type: String
+    AllowedPattern: ^$|^[^\s@]+@[^\s@]+\.[^\s@]+$
+    Description: (Optional) Email address at which to receive notifications for failure events
+
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+  IsGp3: !Equals [!Ref ZkInstanceVolumeType, "gp3"]
+  IsEmailAddressPopulated: !Not [!Equals [!Ref EmailAddress, ""]]
+
+Resources:
+  ZkImageBuilderPipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub zookeeper-image-pipeline-${ResourceSuffix}
+      Status: ENABLED
+      EnhancedImageMetadataEnabled: true
+      ImageRecipeArn: !Ref ZkImageRecipe
+      DistributionConfigurationArn: !Ref ZkImageBuilderDistroConfig
+      ImageScanningConfiguration:
+        ImageScanningEnabled: false # Enable it if Amazon Inspector is activated
+      ImageTestsConfiguration:
+        ImageTestsEnabled: true
+      InfrastructureConfigurationArn: !Ref ZkInfraConfig
+      # This Role is for the workflow
+      # ExecutionRole: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+      # Workflows:
+      #   - WorkflowArn: !GetAtt BuildWorkflow.Arn
+
+  ZkImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub zookeeper-image-recipe-${ResourceSuffix}
+      Version: !Ref SemVer
+      ParentImage: !Ref ParentImage
+      WorkingDirectory: "/tmp"
+      Components:
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
+        - ComponentArn: !Ref ZkBuildComponent
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false
+        # If overriding the user data, add commands to install SSM, unless it is pre-installed on the base image.
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+
+            cat >/etc/environment <<EOF
+            HTTP_PROXY=${ProxyServerAddress}:3128
+            HTTPS_PROXY=${ProxyServerAddress}:3128
+            NO_PROXY=${NoProxyList}
+            http_proxy=${ProxyServerAddress}:3128
+            https_proxy=${ProxyServerAddress}:3128
+            no_proxy=${NoProxyList}
+
+            AWS_DEFAULT_REGION=${AWS::Region}
+            AWS_REGION=${AWS::Region}
+            EOF
+
+            source /etc/environment
+
+            mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            [Service]
+            EnvironmentFile=/etc/environment
+            EOF
+
+            cat >> /etc/yum.conf <<EOF
+            proxy=$https_proxy
+            EOF
+
+            # Install SSM Agent
+            BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
+            ARCH=$(arch)
+            if [ "$ARCH" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
+            fi
+
+            # Restart SSM Agent
+            systemctl daemon-reload
+            systemctl restart amazon-ssm-agent
+
+  ZkBuildComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub zookeeper-build-component-${ResourceSuffix}
+      Version: !Ref SemVer
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt KmsKey.Arn
+      Data: !Sub |
+        name: zookeeper-build
+        description: zookeeper-build
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: zookeeper-build
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      echo "Setting the script to exit on any error..."
+                      set -e
+
+                      working_dir=$(pwd)
+
+                      # Create a function to check if a package is installed
+                      is_installed() {
+                          rpm -q "$1" >/dev/null 2>&1
+                      }
+
+                      echo "Gathering yum packages to install..."
+                      # https://docs.redhat.com/en/documentation/red_hat_build_of_openjdk/11/html-single/installing_and_using_red_hat_build_of_openjdk_11_on_rhel/index
+                      packages="java-21-openjdk wget"
+                      packages_to_install=""
+                      for package in $packages; do
+                          if ! is_installed "$package"; then
+                              packages_to_install="$packages_to_install $package"
+                          else
+                              echo "$package is already installed"
+                          fi
+                      done
+
+                      if [ -n "$packages_to_install" ]; then
+                          echo "Installing packages: $packages_to_install"
+                          yum install -y $packages_to_install
+                      else
+                          echo "All required packages are already installed"
+                      fi
+
+                      user=root
+                      user_home_dir=$(getent passwd "$user" | cut -d: -f6)
+                      zk_tarfile=zookeeper.tar.gz
+
+                      echo "Downloading ZooKeeper binary..."
+                      aws s3 cp ${ZkBinaryS3Uri} "$zk_tarfile"
+                      echo "Extracting the downloaded file to $user_home_dir directory..."
+                      tar -xzf "$zk_tarfile" -C "$user_home_dir"
+                      echo "Deleting the downloaded file..."
+                      rm -f "$zk_tarfile"
+
+                      cat >> /etc/environment <<EOF
+
+                      ZK_HOME=$(realpath -e "$user_home_dir"/apache-zookeeper-*-bin)
+                      # ZOO_DATADIR_AUTOCREATE_DISABLE=1
+                      EOF
+
+                      # https://docs.aws.amazon.com/imagebuilder/latest/userguide/security-best-practices.html#post-build-cleanup
+                      touch "$working_dir"/perform_cleanup
+                      echo "SUCCESS!"
+
+  ZkImageBuilderDistroConfig:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub zookeeper-distro-config-${ResourceSuffix}
+      Distributions:
+        - Region: !Ref AWS::Region
+          LaunchTemplateConfigurations:
+            - AccountId: !Ref AWS::AccountId
+              LaunchTemplateId: !Ref ZkAutoScalingGroupLaunchTemplate
+              SetDefaultVersion: true # Set the specified Amazon EC2 launch template as the default launch template for the specified account.
+
+  ZkInfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub zookeeper-infra-config-${ResourceSuffix}
+      InstanceMetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      InstanceProfileName: !Ref ZkImageBuilderInstanceProfile
+      SubnetId: !Select [0, !Ref SubnetIds]
+      SecurityGroupIds:
+        - !Ref ZkImageBuilderSecurityGroup
+      TerminateInstanceOnFailure: true
+      InstanceTypes: [!Ref ZkInstanceType]
+      SnsTopicArn: !Ref ZkImageBuilderNotificationTopic
+
+  ZkImageBuilderInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-zk-imagebuilder-instance-profile-${ResourceSuffix}
+      Roles: [!Ref ZkImageBuilderInstanceRole]
+
+  ZkImageBuilderInstanceRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-zk-imagebuilder-instance-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowGetObjectZooKeeper
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath: !Select [1, !Split ["//", !Ref ZkBinaryS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+
+  ZkImageBuilderSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for ZooKeeper ImageBuilder infrastructure
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow outbound traffic on 443
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          Description: Allow outbound traffic on 3128
+
+  ZkImageBuilderNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ImageBuilder Event Notification
+      KmsMasterKeyId: !GetAtt KmsKey.Arn
+
+  ZkImageBuilderNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref ZkImageBuilderNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt ZkImageBuilderUpdateImageIdFunction.Arn
+      FilterPolicyScope: MessageBody
+      FilterPolicy:
+        name: [!GetAtt ZkImageRecipe.Name]
+        sourcePipelineArn: [!Ref ZkImageBuilderPipeline]
+        state:
+          status: ["AVAILABLE"]
+        type: ["AMI"]
+        accountId: [!Ref "AWS::AccountId"]
+
+  ZkImageBuilderNotificationTopicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ZkImageBuilderUpdateImageIdFunction
+      SourceArn: !Ref ZkImageBuilderNotificationTopic
+
+  ZkImageBuilderUpdateImageIdFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub zookeeper-imagebuilder-update-image-id-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt ZkImageBuilderUpdateImageIdFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref ZkImageBuilderUpdateImageIdFunctionLogGroup
+      DeadLetterConfig:
+        TargetArn: !Ref ZkFunctionsDeadLetterNotification
+      MemorySize: 256
+      ReservedConcurrentExecutions: 1
+      Timeout: 60
+      Environment:
+        Variables:
+          PARAM_NAME: !Ref ParentImageParameter
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          PARAM_NAME = os.environ["PARAM_NAME"]
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SSM = boto3.client("ssm", config=config)
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+              message = json.loads(event["Records"][0]["Sns"]["Message"])
+              image_id = message["outputResources"]["amis"][0]["image"]
+              logger.info(f"Updating the value for {PARAM_NAME} parameter")
+              SSM.put_parameter(Name=PARAM_NAME, Value=image_id, Overwrite=True)
+              logger.info(f"Param value updated to {image_id}")
+
+  ZkImageBuilderUpdateImageIdFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-zk-img-builder-update-image-id-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CloudWatchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ZkImageBuilderUpdateImageIdFunctionLogGroup.Arn
+        - PolicyName: SSMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParentImageParameter}
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref ZkFunctionsDeadLetterNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  ZkImageBuilderUpdateImageIdFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub zookeeper-imagebuilder-update-image-id-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  ZkAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub zookeeper-asg-${ResourceSuffix}
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ZkAutoScalingGroupLaunchTemplate
+        Version: !GetAtt ZkAutoScalingGroupLaunchTemplate.DefaultVersionNumber
+      MinSize: !Ref ZkClusterSize
+      MaxSize: !Ref ZkClusterSize
+      MetricsCollection:
+        - Granularity: 1Minute
+      VPCZoneIdentifier: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: false
+          Value: !Sub zookeeper-asg-${ResourceSuffix}
+
+  ZkAutoScalingGroupLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: !Sub zookeeper-launch-template-${ResourceSuffix}
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt ZkNodeInstanceProfile.Arn
+        ImageId: !GetAtt ParentImageParameter.Value
+        InstanceType: !Ref ZkInstanceType
+        BlockDeviceMappings:
+          - DeviceName: !GetAtt GetRootDeviceName.RootDeviceName
+            Ebs:
+              DeleteOnTermination: true
+              VolumeType: !Ref ZkInstanceVolumeType
+              VolumeSize: !Ref ZkInstanceVolumeSize
+              Iops: !Ref ZkInstanceVolumeIops
+              Throughput: !If
+                - IsGp3
+                - !Ref ZkInstanceVolumeThroughput
+                - !Ref AWS::NoValue
+              Encrypted: true
+              KmsKeyId: !Ref KmsKey
+        Monitoring:
+          Enabled: false
+        DisableApiStop: true
+        DisableApiTermination: true
+        MetadataOptions:
+          HttpPutResponseHopLimit: 1
+          HttpTokens: required
+        SecurityGroupIds:
+          - !GetAtt ZkNodeSecurityGroup.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub zookeeper-node-${ResourceSuffix}
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub zookeeper-node-${ResourceSuffix}
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub zookeeper-node-${ResourceSuffix}
+        UserData:
+          Fn::Base64: |
+            #!/bin/bash
+
+            echo "Setting the script to exit on any error..."
+            set -e
+
+            # Get total memory in MB
+            total_mem_mb=$(grep MemTotal /proc/meminfo | awk '{print int($2/1024)}')
+            # Calculate 75% of total memory
+            heap_size_mb=$(( total_mem_mb * 75 / 100 ))
+            # Add ZooKeeper heap settings to environment
+            cat >> /etc/environment <<EOF
+            JVMFLAGS="-Xms${heap_size_mb}m -Xmx${heap_size_mb}m"
+            EOF
+
+            # ZK maintenance: https://zookeeper.apache.org/doc/current/zookeeperAdmin.html#sc_maintenance
+            # dataDir:
+            # ZooKeeper will store the in-memory database snapshots in this dir and, unless specified otherwise, the transaction log of updates to the database.
+            # "myid" file should be created inside this dir as well
+
+            data_dir=/zookeeper/data
+            mkdir -p $data_dir
+            # Add data_dir to environment
+            cat >> /etc/environment <<EOF
+            ZK_DATA_DIR="$data_dir"
+            EOF
+
+            source /etc/environment
+
+            cat > "$ZK_HOME"/conf/zoo.cfg <<EOF
+            # unit of time (in milliseconds)
+            tickTime=2000
+            # limits the length of time the ZooKeeper servers in quorum have to connect to a leader (tickTime * 5)
+            initLimit=10
+            # limits how far out of date a server can be from a leader (tickTime * 2)
+            syncLimit=5
+            clientPort=2181
+            standaloneEnabled=false
+            # enables dynamic reconfiguration feature
+            reconfigEnabled=true
+            dynamicConfigFile=$ZK_HOME/conf/zoo.cfg.dynamic
+            dataDir=$ZK_DATA_DIR
+            # Purge task interval in hours; default (0) disables it
+            autopurge.purgeInterval=24
+            # The number of snapshots to retain in dataDir
+            autopurge.snapRetainCount=30
+
+            # secureClientPort=
+            # dataLogDir: Highly recommended. Indicates a different directory to use for the transaction logs.
+            EOF
+
+            # Create an initialization marker file
+            # This file indicates that an empty data directory is expected.
+            # When present, an empty database is created and the marker file deleted.
+            # When not present, an empty data directory will mean this peer will not have voting rights and it will not populate the data directory until it communicates with an active leader.
+            # Intended use is to only create this file when bringing up a new ensemble.
+            touch "$ZK_DATA_DIR"/initialize
+
+            touch /opt/userdata-complete && chmod 644 /opt/userdata-complete
+            echo "UserData has finished executing"
+
+  ParentImageParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /zookeeper/parent-image-${ResourceSuffix}
+      Type: String
+      Value: !Ref ParentImage
+
+  GetRootDeviceName:
+    Type: Custom::GetRootDeviceName
+    Properties:
+      ServiceToken: !GetAtt GetRootDeviceNameFunction.Arn
+      ServiceTimeout: 60
+      ImageId: !Ref ParentImage
+
+  GetRootDeviceNameFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub get-zk-root-device-name-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt GetRootDeviceNameFunctionRole.Arn
+      Timeout: 60
+      LoggingConfig:
+        LogGroup: !Ref GetRootDeviceNameFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          EC2 = boto3.client("ec2", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Get-Root-Device-Name-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  image_id = event["ResourceProperties"]["ImageId"]
+                  paginator = EC2.get_paginator("describe_images")
+                  images = [
+                      image
+                      for page in paginator.paginate(ImageIds=[image_id])
+                      for image in page["Images"]
+                  ]
+                  if not images:
+                      raise Exception(f"Could not retrieve any images with {image_id}")
+
+                  # There should be only one image
+                  params |= dict(responseData={"RootDeviceName": images[0]["RootDeviceName"]})
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+  GetRootDeviceNameFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-GetZkRootDeviceName-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt GetRootDeviceNameFunctionLogGroup.Arn
+        - PolicyName: AllowDescribeImages
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeImages
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    ec2:Region: !Ref AWS::Region
+
+  GetRootDeviceNameFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/get-zk-root-device-name-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplate:
+    Type: Custom::SetDefaultLaunchTemplate
+    Properties:
+      ServiceToken: !GetAtt SetDefaultLaunchTemplateLambdaFunction.Arn
+      ServiceTimeout: 120
+      AutoScalingGroupname: !Ref ZkAutoScalingGroup
+      LaunchTemplateId: !Ref ZkAutoScalingGroupLaunchTemplate
+
+  SetDefaultLaunchTemplateLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub set-zk-default-launch-template-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt SetDefaultLaunchTemplateFunctionRole.Arn
+      Timeout: 120
+      LoggingConfig:
+        LogGroup: !Ref SetDefaultLaunchTemplateFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          AUTO_SCALING = boto3.client("autoscaling", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Set-Default-LaunchTemplate-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  resource_properties = event["ResourceProperties"]
+                  asg_name = resource_properties["AutoScalingGroupname"]
+                  launch_template_id = resource_properties["LaunchTemplateId"]
+                  update_auto_scaling_group(asg_name, launch_template_id)
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+
+          def update_auto_scaling_group(asg_name: str, launch_template_id: str):
+              AUTO_SCALING.update_auto_scaling_group(
+                  AutoScalingGroupName=asg_name,
+                  LaunchTemplate={
+                      "LaunchTemplateId": launch_template_id,
+                      "Version": "$Default"
+                  },
+              )
+
+  SetDefaultLaunchTemplateFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/set-zk-default-launch-template-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-SetZkDefaultLaunchTemplate-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt SetDefaultLaunchTemplateFunctionLogGroup.Arn
+        - PolicyName: AllowAutoScalingGroupUpdate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:UpdateAutoScalingGroup
+                Resource: !Sub arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${ZkAutoScalingGroup}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt ZkNodeRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:CreateTags
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:*:image/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${ZkAutoScalingGroupLaunchTemplate}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${ZkNodeSecurityGroup}
+
+  ZkNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for ZooKeeper instances
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
+
+  ZkNodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ZkNodeSecurityGroup
+      Description: Allows all inbound traffic within VPC
+      IpProtocol: "-1"
+      # SourceSecurityGroupId: !Ref ZkNodeSecurityGroup
+      CidrIp: !Ref VpcCidr
+
+  ZkNodeSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref ZkNodeSecurityGroup
+      Description: Allows all outbound traffic within VPC
+      IpProtocol: "-1"
+      # DestinationSecurityGroupId: !Ref ZkNodeSecurityGroup
+      CidrIp: !Ref VpcCidr
+
+  ZkNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-ZooKeeper-Node-Instance-Profile-${ResourceSuffix}
+      Roles: [!Ref ZkNodeRole]
+
+  ZkNodeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-ZooKeeper-Node-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Role to be assumed by ZooKeeper instances
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  ZkClusterInfoParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /zookeeper/cluster-${ResourceSuffix}
+      Description: !Sub ZooKeeper nodes in ${ZkAutoScalingGroup}
+      Type: String
+      Value: "{}"
+
+  ZkInstanceEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub zookeeper-instance-events-rule-${ResourceSuffix}
+      Description: !Sub Captures events when ZooKeeper instances in ${ZkAutoScalingGroup} launch or terminate
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance Launch Successful
+          - EC2 Instance Terminate Successful
+        detail:
+          AutoScalingGroupName:
+            - !Ref ZkAutoScalingGroup
+      Targets:
+        - Arn: !GetAtt ZkInstanceEventsProcessorFunction.Arn
+          Id: !Ref ZkInstanceEventsProcessorFunction
+
+  LambdaPermissionForZkInstanceEventsRule:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ZkInstanceEventsProcessorFunction
+      Principal: events.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !GetAtt ZkInstanceEventsRule.Arn
+
+  ZkInstanceEventsProcessorFunctionConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref ZkInstanceEventsProcessorFunction
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+
+  ZkFunctionsDeadLetterNotification:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ZooKeeper Failure Notification
+      KmsMasterKeyId: !Ref KmsKey
+      Subscription: !If
+        - IsEmailAddressPopulated
+        - - Endpoint: !Ref EmailAddress
+            Protocol: email
+        - !Ref AWS::NoValue
+
+  ZkInstanceEventsProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub zookeeper-instance-events-processor-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt ZkInstanceEventsProcessorFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref ZkInstanceEventsProcessorFunctionLogGroup
+      DeadLetterConfig:
+        TargetArn: !Ref ZkFunctionsDeadLetterNotification
+      MemorySize: 512
+      # ReservedConcurrentExecutions set to 1 to allow function execution only one at a time, to avoid race condition
+      # If necessary, use DDB to implement a better locking mechanism, with timestamp for lock expiration
+      ReservedConcurrentExecutions: 1
+      Timeout: 900
+      Environment:
+        Variables:
+          ASG_NAME: !Ref ZkAutoScalingGroup
+          ZK_CLUSTER_SIZE: !Ref ZkClusterSize
+          ZK_CLUSTER_PARAM: !Ref ZkClusterInfoParameter
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          from time import sleep
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          ZK_CLUSTER_PARAM = os.environ["ZK_CLUSTER_PARAM"]
+          ASG_NAME = os.environ["ASG_NAME"]
+          ZK_CLUSTER_SIZE = os.environ["ZK_CLUSTER_SIZE"]
+
+          # Two possible event types
+          LAUNCH_EVENT = "EC2 Instance Launch Successful"
+          TERMINATION_EVENT = "EC2 Instance Terminate Successful"
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SSM = boto3.client("ssm", config=config)
+          EC2 = boto3.client("ec2", config=config)
+          ASG = boto3.client("autoscaling", config=config)
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              event_instance_id = event["detail"]["EC2InstanceId"]
+              instance_added = event["detail-type"] == LAUNCH_EVENT
+              instance_ids = get_instances_in_service(event_instance_id, instance_added)
+              zk_cluster: dict[str, dict] = json.loads(get_param_value(ZK_CLUSTER_PARAM))
+              id_to_dns_mapping = get_instance_id_to_dns_mapping(instance_ids)
+              remove_instances_not_in_service(zk_cluster, instance_ids)
+              add_instances_in_service(zk_cluster, instance_ids, id_to_dns_mapping)
+              sorted_zk_cluster = dict(sorted(zk_cluster.items(), key=lambda n: n[1]["myid"]))
+              update_param_value(ZK_CLUSTER_PARAM, json.dumps(sorted_zk_cluster))
+              if sorted_zk_cluster:
+                  wait_for_ssm_managed(sorted_zk_cluster)
+                  send_command_to_cluster(sorted_zk_cluster)
+              logger.info("Completed!")
+
+
+          def get_instances_in_service(instance_id: str, instance_added: bool) -> list[str]:
+              # https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-lifecycle.html
+
+              logger.info(f"Getting instance IDs of all instances in service")
+
+              if instance_added:
+                  wait_for_in_service(instance_id)
+
+              paginator = ASG.get_paginator("describe_auto_scaling_groups")
+              instances_in_service = [
+                  instance["InstanceId"]
+                  for page in paginator.paginate(AutoScalingGroupNames=[ASG_NAME])
+                  for asg in page["AutoScalingGroups"]
+                  for instance in asg["Instances"]
+                  if instance["LifecycleState"] == "InService"
+              ]
+
+              if not instance_added and instance_id in instances_in_service:
+                  instances_in_service.remove(instance_id)
+
+              logger.info(f"Instances in service: {instances_in_service}")
+              return instances_in_service
+
+
+          def wait_for_in_service(instance_id: str) -> None:
+              """
+              Waits for `instance_id` to be in service for up to ~5 minutes,
+              checking for the state every 15 seconds
+              """
+              max_retries = 20
+              paginator = ASG.get_paginator("describe_auto_scaling_instances")
+              for i in range(max_retries):
+                  logger.info(f"Attempt {i + 1} of {max_retries}: Checking if {instance_id} is in service")
+                  in_service = any(instance["LifecycleState"] == "InService"
+                                  for page in paginator.paginate(InstanceIds=[instance_id])
+                                  for instance in page["AutoScalingInstances"])
+                  if in_service:
+                      logger.info(f"{instance_id} is in service")
+                      return
+                  if i < max_retries - 1:
+                      logger.info(f"{instance_id} not in service yet; trying again in 15 seconds")
+                      sleep(15)
+
+              raise InstanceNotInServiceError(f"{instance_id} not in service after {max_retries} attempts")
+
+
+          def get_instance_id_to_dns_mapping(instance_ids: list[str]) -> dict[str, str]:
+              """
+              Returns a dict with Instance ID as key and Private DNS Name as value for each instance
+              """
+              if not instance_ids:
+                  return {}
+
+              paginator = EC2.get_paginator("describe_instances")
+              return {
+                  instance["InstanceId"]: instance["PrivateDnsName"]
+                  for page in paginator.paginate(InstanceIds=instance_ids)
+                  for reservation in page["Reservations"]
+                  for instance in reservation["Instances"]
+              }
+
+
+          def remove_instances_not_in_service(zk_cluster: dict[str, dict], instance_ids: list[str]):
+              # Remove instances that are not in service
+              for node_instance_id in list(zk_cluster):
+                  if node_instance_id not in instance_ids:
+                      del zk_cluster[node_instance_id]
+
+
+          def add_instances_in_service(zk_cluster: dict[str, dict], instance_ids: list[str], id_to_dns_mapping: dict[str, str]):
+              # Get existing myid values
+              existing_myids = {node["myid"] for node in zk_cluster.values()}
+
+              next_myid = 1
+              # Add instances that are in service
+              for instance_id in instance_ids:
+                  if instance_id not in zk_cluster:
+                      # Find the lowest available myid
+                      while next_myid in existing_myids:
+                          if next_myid > 20: # 20 was chosen arbitrarily, to prevent infinite loop
+                              raise ValueError(f"{next_myid} went beyond the maximum allowed")
+                          next_myid += 1
+                      existing_myids.add(next_myid)  # Reserve this myid
+                      zk_cluster[instance_id] = {"myid": next_myid, "dns": id_to_dns_mapping[instance_id]}
+                      next_myid += 1
+
+
+          def get_param_value(param_name: str, with_decryption=False) -> str:
+              logger.info(f"Getting the value for {param_name} parameter")
+              value = SSM.get_parameter(Name=param_name, WithDecryption=with_decryption)[
+                  "Parameter"
+              ]["Value"]
+              logger.info(f"Param value: {value}")
+              return value
+
+
+          def update_param_value(param_name: str, param_value: str) -> None:
+              logger.info(f"Updating the value for {param_name} parameter")
+              SSM.put_parameter(Name=param_name, Value=param_value, Overwrite=True)
+              logger.info(f"Param value updated to {param_value}")
+
+
+          def wait_for_ssm_managed(zk_cluster: dict[str, dict]) -> None:
+              max_retries = 20
+              instance_ids = list(zk_cluster)
+              paginator = SSM.get_paginator("describe_instance_information")
+              for i in range(max_retries):
+                  logger.info(f"Attempt {i + 1} of {max_retries}: Checking if {instance_ids} are managed nodes")
+                  managed_instance_ids = [
+                      instance["InstanceId"]
+                      for page in paginator.paginate(Filters=[{"Key": "InstanceIds", "Values": instance_ids}])
+                      for instance in page["InstanceInformationList"]
+                  ]
+                  non_managed_nodes = list(set(instance_ids) - set(managed_instance_ids))
+                  if not non_managed_nodes:
+                      logger.info(f"{instance_ids} are all managed nodes")
+                      return
+                  if i < max_retries - 1:
+                      logger.info(f"{non_managed_nodes} are not managed nodes yet; trying again in 15 seconds")
+                      sleep(15)
+
+              raise InstanceNotManagedError(f"{non_managed_nodes} did not become managed nodes after {max_retries} attempts")
+
+
+          def send_command_to_cluster(zk_cluster: dict[str, dict]) -> None:
+              instance_command_ids = {instance_id: "" for instance_id in zk_cluster}
+              max_retries = 5
+              for i in range(max_retries):
+                  remaining_instances = list(instance_command_ids)
+                  if not remaining_instances:
+                      return
+                  for instance_id in remaining_instances:
+                      commands = construct_commands(instance_id, zk_cluster)
+                      instance_command_ids[instance_id] = send_command(instance_id, commands)
+                  logger.info("Waiting 10 seconds before checking the command execution status") # execution itself takes 1-2 seconds on average
+                  sleep(10)
+                  for instance_id, command_id in list(instance_command_ids.items()):
+                      logger.info(f"Attempt {i + 1} of {max_retries}: Checking if command ({command_id}) was successful on {instance_id}")
+                      command_status = get_command_status(instance_id, command_id)
+                      if command_status == "Success":
+                          logger.info(f"Command was successful on {instance_id}")
+                          del instance_command_ids[instance_id]
+                      elif command_status in ("Pending", "InProgress", "Delayed"):
+                          if i < max_retries - 1:
+                              logger.info(f"Command status on {instance_id}: {command_status}; cancelling and trying again in 15 seconds")
+                          else:
+                              logger.info(f"Command status on {instance_id}: {command_status}; cancelling")
+                          cancel_command(instance_id, command_id)
+                      else: # 'Cancelled'|'TimedOut'|'Failed'|'Cancelling'
+                          raise CommandUnsuccessful(f"Command status on {instance_id}: {command_status}")
+
+              raise CommandUnsuccessful(f"Command status was not Success on {instance_command_ids.keys()} after {max_retries} attempts")
+
+
+          def construct_commands(instance_id: str, zk_cluster: dict) -> list[str]:
+              # https://zookeeper.apache.org/doc/current/zookeeperAdmin.html#sc_zkMulitServerSetup
+
+              # Note: The list of servers that make up ZooKeeper servers that is used by the clients must match
+              # the list of ZooKeeper servers that each ZooKeeper server has
+
+              zk_servers = "\n".join(f'server.{v["myid"]}={v["dns"]}:2888:3888;2181' for v in zk_cluster.values())
+              zk_server_id = zk_cluster[instance_id]["myid"]
+
+              commands = f"""
+          set -ex
+
+          for i in {{1..30}}; do
+              echo "Attempt "$i" of 30 to check if UserData has been run to completion"
+              if [ -f "/opt/userdata-complete" ]; then
+                  echo "UserData has been run to completion"
+                  break
+              else
+                  if [ $i = 30 ]; then
+                      echo "Could not verify UserData has been run to completion"
+                      exit 1
+                  fi
+                  echo "UserData may still be running; retrying in 10 seconds"
+                  sleep 10
+              fi
+          done
+
+          source /etc/environment
+
+          # The following configuration keywords are considered part of the dynamic configuration: server, group and weight.
+
+          zk_dynamic_config="$ZK_HOME"/conf/zoo.cfg.dynamic
+          touch "$zk_dynamic_config"
+          # Delete existing lines
+          sed -i '\|server.[0-9]\+=|d' $zk_dynamic_config
+          # Add servers at the end of the file
+          cat >> "$zk_dynamic_config" << EOF
+          {zk_servers}
+          EOF
+
+          echo {zk_server_id} > "$ZK_DATA_DIR"/myid
+
+          if [ {len(zk_cluster)} = {ZK_CLUSTER_SIZE} ] && ! "$ZK_HOME"/bin/zkServer.sh status; then
+              "$ZK_HOME"/bin/zkServer.sh start
+              # Alternative (run inside $ZK_HOME):
+              # java -cp zookeeper.jar:lib/*:conf org.apache.zookeeper.server.quorum.QuorumPeerMain conf/zoo.cfg
+          fi
+          """
+              return [line for line in commands.split("\n")]
+
+
+          def send_command(instance_id: str, commands: list[str]) -> str:
+              """
+              Sends `commands` to the specified instance and returns the CommandId
+              """
+              logger.info(f"Sending commands to {instance_id}")
+              return SSM.send_command(
+                  InstanceIds=[instance_id],
+                  DocumentName="AWS-RunShellScript",
+                  Parameters={
+                      "commands": commands
+                  },
+              )["Command"]["CommandId"]
+
+
+          def get_command_status(instance_id: str, command_id: str) -> str:
+              """
+              Returns command status if available, otherwise "Unknown"
+              """
+              response = SSM.get_command_invocation(
+                  InstanceId=instance_id,
+                  CommandId=command_id,
+              )
+              status = response["Status"]
+              if response["ResponseCode"] == -1:
+                  logger.info("ResponseCode was -1")
+                  status = "Pending"
+              return status
+
+
+          def cancel_command(instance_id: str, command_id: str) -> None:
+              SSM.cancel_command(InstanceIds=[instance_id], CommandId=command_id)
+
+
+          class InstanceNotInServiceError(Exception):
+              pass
+
+
+          class InstanceNotManagedError(Exception):
+              pass
+
+
+          class CommandUnsuccessful(Exception):
+              pass
+
+  ZkInstanceEventsProcessorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-zk-instances-events-processor-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CloudWatchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ZkInstanceEventsProcessorFunctionLogGroup.Arn
+        - PolicyName: SSMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ZkClusterInfoParameter}
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeInstanceInformation
+                  - ssm:GetCommandInvocation
+                  - ssm:CancelCommand
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+        - PolicyName: EC2Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    ec2:Region: !Ref AWS::Region
+        - PolicyName: AutoScalingGroupPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:DescribeAutoScalingInstances
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref ZkFunctionsDeadLetterNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  ZkInstanceEventsProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub zookeeper-instance-events-processor-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for root CA stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+          - Sid: Allow logs service principal to use the key
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Sid: Allow imagebuilder service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+            Action:
+              - kms:GenerateDataKey*
+              - kms:Decrypt
+            Resource: "*"
+          - Sid: Allow autoscaling service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action: kms:CreateGrant
+            Resource: "*"
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: true
+
+Outputs:
+  ZkClusterInfoParameterName:
+    Description: Name of SSM Parameter that contains ZooKeeper cluster information
+    Value: !Ref ZkClusterInfoParameter

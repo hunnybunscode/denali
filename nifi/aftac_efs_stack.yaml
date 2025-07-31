@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates a EFS
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Networking Configuration
+        Parameters:
+          - VpcId
+          - VpcCidr
+          - NumberOfMountTargets
+          - SubnetIds
+          - EfsFileSystemId
+
+    ParameterLabels:
+      VpcId:
+        default: VPC ID
+      VpcCidr:
+        default: VPC CIDR
+      NumberOfMountTargets:
+        default: Number of Mount Targets
+      SubnetIds:
+        default: Subnet IDs
+      EfsFileSystemId:
+        default: EFS File System ID
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC in which to create the EFS mount targets.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a VPC
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR of the VPC chosen above
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  NumberOfMountTargets:
+    Type: Number
+    Description: >
+      Number of mount targets to create.
+      Note that only one mount target can be created in an Availability Zone (regardless of the number of subnets in it).
+    AllowedValues: [1, 2, 3]
+    ConstraintDescription: Must select a value from the list
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Select a subnet or subnets from the VPC chosen above.
+      The number of subnets MUST correspond to the number of mount targets chosen above.
+      All selected subnets MUST be in different Availability Zones.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet or subnets
+
+  EfsFileSystemId:
+    Type: String
+    Description: >
+      Leave this blank when creating the stack. After creation, retrieve "EfsFileSystemId" value from the stack Outputs to
+      update the stack by adding File System Policy to the EFS.
+    AllowedPattern: ^$|^fs-[0-9a-f]+$
+    ConstraintDescription: Must be a valid file system ID
+
+Conditions:
+  CreateMountTarget2: !Or
+    - !Equals [!Ref NumberOfMountTargets, 2]
+    - !Equals [!Ref NumberOfMountTargets, 3]
+  CreateMountTarget3: !Equals [!Ref NumberOfMountTargets, 3]
+  AddFileSystemPolicy: !Not [!Equals [!Ref EfsFileSystemId, ""]]
+
+Resources:
+  NifiEfs:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      # FileSystemPolicy: https://docs.aws.amazon.com/efs/latest/ug/iam-access-control-nfs-efs.html
+      # Added after initial creation, due to a circular dependency: https://github.com/aws-cloudformation/cloudformation-coverage-roadmap/issues/900
+      FileSystemPolicy: !If
+        - AddFileSystemPolicy
+        - Statement:
+            - Effect: Allow
+              Principal:
+                AWS: !Ref AWS::AccountId
+              Action:
+                - elasticfilesystem:ClientMount # Provides read-only access to a file system
+                - elasticfilesystem:ClientWrite # Provides write permissions on a file system
+                # - elasticfilesystem:ClientRootAccess # Provides use of the root user when accessing a file system
+              Resource: !Sub arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${EfsFileSystemId}
+              Condition:
+                Bool:
+                  aws:SecureTransport: true
+                  elasticfilesystem:AccessedViaMountTarget: true
+        - !Ref AWS::NoValue
+      BackupPolicy:
+        Status: ENABLED
+      Encrypted: true
+      KmsKeyId: !Ref KmsKey # Updating this requires replacement
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub NiFi-EFS-${AWS::StackName}
+      FileSystemProtection:
+        ReplicationOverwriteProtection: ENABLED
+      # LifecyclePolicies:
+      #   - TransitionToIA: AFTER_30_DAYS
+      #   - TransitionToArchive: AFTER_90_DAYS
+      #   - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      PerformanceMode: generalPurpose # Can't be updated after creation
+      ThroughputMode: elastic # bursting | provisioned
+
+  NifiEfsMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref NifiEfs
+      SecurityGroups:
+        - !Ref NifiEfsSecurityGroup
+      SubnetId: !Select [0, !Ref SubnetIds]
+
+  NifiEfsMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Condition: CreateMountTarget2
+    Properties:
+      FileSystemId: !Ref NifiEfs
+      SecurityGroups:
+        - !Ref NifiEfsSecurityGroup
+      SubnetId: !Select [1, !Ref SubnetIds]
+
+  NifiEfsMountTarget3:
+    Type: AWS::EFS::MountTarget
+    Condition: CreateMountTarget3
+    Properties:
+      FileSystemId: !Ref NifiEfs
+      SecurityGroups:
+        - !Ref NifiEfsSecurityGroup
+      SubnetId: !Select [2, !Ref SubnetIds]
+
+  NifiEfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for EFS mount targets
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          Description: Allow TCP traffic in on port 2049 from VPC CIDR
+      # Added per doc: https://docs.aws.amazon.com/efs/latest/ug/network-access.html#security-group-create
+      # To allow all TCP traffic on ephemeral ports to clients
+      SecurityGroupEgress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 1025
+          ToPort: 65535
+          Description: Allow TCP traffic out on ephemeral ports to VPC CIDR
+
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for EFS
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+                kms:ViaService: !Sub elasticfilesystem.${AWS::Region}.amazonaws.com
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      TargetKeyId: !Ref KmsKey
+      AliasName: !Sub alias/efs-${AWS::StackName}
+
+Outputs:
+  EfsFileSystemId:
+    Description: EFS File System ID. Use this value to update the stack, which will add file system policy to the EFS
+    Value: !Ref NifiEfs
+  EfsDnsName:
+    Description: DNS name for the EFS file system
+    Value: !Sub ${NifiEfs}.efs.${AWS::Region}.${AWS::URLSuffix}

@@ -51,14 +51,14 @@ def validate_file(s3_event: dict, receipt_handle: str):
 def _validate_file(s3_event: dict, file_path: str, receipt_handle: str):
     try:
         file_ext = get_file_ext(file_path)
-        valid, tags = validate_file_type(file_path, file_ext)
+        valid, tags = validate_file_type(s3_event, file_path, file_ext)
 
         if not valid:
             _process_invalid_file(s3_event, file_path, tags, receipt_handle)
             return False, {}
 
         if file_ext == "zip":
-            _valid, _tags = _validate_zip_file(file_path)
+            _valid, _tags = _validate_zip_file(s3_event, file_path)
             if not _valid:
                 _process_invalid_file(s3_event, file_path, _tags, receipt_handle)
                 return False, {}
@@ -72,7 +72,7 @@ def _validate_file(s3_event: dict, file_path: str, receipt_handle: str):
         return False, {}
 
 
-def _validate_zip_file(file_path: str, depth=0):
+def _validate_zip_file(s3_event: dict, file_path: str, depth=0):
     # TODO: What files are allowed to be in a zip file?
     # For example, should files destined for DFDL be allowed?
 
@@ -97,7 +97,7 @@ def _validate_zip_file(file_path: str, depth=0):
         file_paths = [str(item) for item in Path(tmpdir).rglob("*") if item.is_file()]
         for _file_path in file_paths:
             _file_ext = get_file_ext(_file_path)
-            valid, _ = validate_file_type(_file_path, _file_ext)
+            valid, _ = validate_file_type(s3_event, _file_path, _file_ext)
 
             if not valid:
                 # Even if one file fails validation, reject the entire zip file

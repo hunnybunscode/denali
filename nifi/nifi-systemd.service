@@ -1,0 +1,23 @@
+[Unit]
+Description=Apache NiFi
+After=network.target
+Wants=network.target
+
+[Service]
+Type=forking
+User=nifi
+Group=nifi
+Environment=NIFI_HOME=/opt/nifi/nifi-current
+Environment=JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+ExecStartPre=/usr/local/bin/nifi-cluster-setup.sh
+ExecStart=/opt/nifi/nifi-current/bin/nifi.sh start
+ExecStop=/opt/nifi/nifi-current/bin/nifi.sh stop
+ExecReload=/opt/nifi/nifi-current/bin/nifi.sh restart
+PIDFile=/opt/nifi/nifi-current/run/nifi.pid
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
