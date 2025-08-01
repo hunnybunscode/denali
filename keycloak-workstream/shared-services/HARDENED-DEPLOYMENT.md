@@ -6,10 +6,12 @@ This guide walks you through deploying hardened Keycloak with Ironbank FIPS imag
 
 ## Prerequisites
 
-- AWS CLI configured with appropriate permissions
-- Docker installed and running
-- CAC card for Ironbank registry access
-- Node.js 18+ and npm
+Before starting, make sure you have:
+
+• **AWS CLI** set up with the right permissions to create resources
+• **Docker** installed and running on your machine
+• **CAC card** ready for accessing government security repositories
+• **Node.js 18+** and npm for running deployment scripts
 
 ## Step 1: Set Up Ironbank Authentication
 
@@ -21,9 +23,9 @@ First, authenticate with Ironbank registry using your CAC credentials:
 ```
 
 **What this does:**
-- Guides you to get CLI credentials from registry1.dso.mil
-- Authenticates Docker with Ironbank registry
-- Stores credentials securely for future use
+• Walks you through getting your login credentials from the government registry
+• Sets up Docker to access hardened security images
+• Saves your credentials safely so you don't have to enter them again
 
 ## Step 2: Pull Ironbank Images to ECR
 
@@ -38,19 +40,16 @@ Run the scripts to pull hardened images to your private ECR:
 ```
 
 **What this does:**
-- Uses your stored Ironbank credentials automatically
-- Pulls hardened Keycloak FIPS and operator images
-- Pushes them to your private ECR repositories
-- Auto-detects your AWS account and region
+• Downloads the government-hardened Keycloak images from Ironbank
+• Uploads them to your private AWS image repository
+• Automatically figures out your AWS account details
+• Sets up both the main Keycloak application and its management tools
 
 ## Step 3: Install Dependencies
 
 ```bash
-# Install CDK dependencies
+# Install all dependencies (including CDK and AWS SDK packages)
 npm ci
-
-# Install AWS SDK dependencies for config script
-npm install @aws-sdk/client-ec2 @aws-sdk/client-sts js-yaml
 ```
 
 ## Step 4: Generate Dynamic Configuration
@@ -95,21 +94,26 @@ aws eks update-kubeconfig --region $(aws configure get region) --name SharedServ
 kubectl apply -k k8s/overlay/dev/
 ```
 
-**What this deploys:**
+This deployment sets up Keycloak with government-grade security features. Here's what's included:
 
-**Keycloak Configuration Files:**
-- `quarkus.properties` - Keycloak runtime configuration
-- `keycloak-init-scripts/` - FIPS initialization scripts:
-  - `create_keystore_container.sh` - Sets up PKI certificates in container
-  - `convert_fips_jks.sh` - Converts Java keystores to FIPS-compliant format
-  - `create_fips.sh` - Configures FIPS mode for Keycloak
-- `keycloak-spi-awsalb-mtls.jar` - AWS ALB mutual TLS plugin for client certificate authentication
+**Core Configuration**
 
-**Key FIPS Features Enabled:**
-- `KC_FEATURES: fips` - Enables FIPS 140-2 compliant cryptography
-- `KC_FIPS_MODE: non-strict` - FIPS mode configuration
-- `KC_SPI_X509CERT_LOOKUP_PROVIDER: awsalb` - AWS ALB client certificate extraction
-- Init containers using Ironbank UBI9 images for secure initialization
+The main Keycloak settings live in `quarkus.properties`, which controls how the server runs.
+
+**Security Setup Scripts** (located in `keycloak-init-scripts/` folder)
+• `create_keystore_container.sh`: Creates and manages security certificates
+• `convert_fips_jks.sh`: Makes sure our certificate storage meets government standards
+• `create_fips.sh`: Sets up special government-required security mode
+
+**Authentication Plugin**
+
+`keycloak-spi-awsalb-mtls.jar`: Handles secure certificate-based login through AWS load balancers
+
+**Key Security Features**
+• Uses government-approved encryption (FIPS 140-2)
+• Runs in a flexible security mode that balances security with usability
+• Automatically handles user certificates through AWS load balancers
+• Sets everything up using extra-secure government-approved container images
 
 ## Step 8: Verify Deployment
 

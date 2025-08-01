@@ -29,8 +29,8 @@ echo ""
 echo ""
 echo "Attempting to log into Ironbank registry..."
 
-# Attempt login
-if docker login registry1.dso.mil --username "$IRONBANK_USERNAME" --password "$IRONBANK_CLI_SECRET"; then
+# Attempt login using password-stdin for security
+if echo "$IRONBANK_CLI_SECRET" | docker login registry1.dso.mil --username "$IRONBANK_USERNAME" --password-stdin; then
     echo ""
     echo "✅ SUCCESS! You are now authenticated with Ironbank registry."
     echo "✅ Your hardening scripts (ironbank-to-ecr.sh, operator-to-ecr.sh) will now work without prompting for credentials."

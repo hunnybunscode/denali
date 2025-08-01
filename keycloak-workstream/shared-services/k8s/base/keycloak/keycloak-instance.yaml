@@ -51,7 +51,7 @@ spec:
           keycloak: keycloak-instance
       spec:
         initContainers:
-          - name: fips-initialize
+          - name: pki-initialize
             image: registry.access.redhat.com/ubi9/ubi-minimal:latest
             securityContext:
               privileged: false

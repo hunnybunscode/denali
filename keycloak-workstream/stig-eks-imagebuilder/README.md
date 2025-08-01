@@ -10,17 +10,20 @@ Builds STIG-hardened AMIs for EKS worker nodes with FIPS compliance.
 - **FIPS-enabled** Amazon Linux 2023 images
 - **Security hardening** components
 
+## Useful Commands
+
+* `npm run build`   compile typescript to js
+* `npm run watch`   watch for changes and compile
+* `npm run test`    perform the jest unit tests
+* `npx cdk deploy`  deploy this stack to your default AWS account/region
+* `npx cdk diff`    compare deployed stack with current state
+* `npx cdk synth`   emits the synthesized CloudFormation template
+
 ## Commercial AWS Setup Required
 
 This project was originally configured for GovCloud (`us-gov-west-1`, account `303344244756`). For commercial AWS deployment, the following changes were made:
 
-### 1. File Structure Fix
-```bash
-# Move STIG hardening file to expected location
-cp lib/component/DODSTIGHardening.yml lib/component/eks/DODSTIGHardening.yml
-```
-
-### 2. Environment Configuration
+### 1. Environment Configuration
 Update `env/dev/configuration.yaml`:
 ```yaml
 environment:
@@ -37,7 +40,7 @@ pipelines:
   - version: 1.0.1                     # Incremented to avoid conflicts
 ```
 
-### 3. IAM Permissions Setup
+### 2. IAM Permissions Setup
 **Required:** Assume admin role first:
 ```bash
 isengardcli assume  # Select admin role
@@ -52,15 +55,15 @@ npx cdk deploy
 
 ## Changes Made for Commercial AWS
 
-| Component | Original (GovCloud) | Updated (Commercial) |
-|-----------|-------------------|---------------------|
-| Account | `303344244756` | `776732943381` |
-| Region | `us-gov-west-1` | `us-east-1` |
-| VPC | `vpc-040175d809b8f8b32` | `vpc-014f5c11797a4b3d0` |
-| Subnet | `subnet-086ac47d6754023ce` | `subnet-0c1dc0737a0311693` |
-| File Location | `lib/component/` | `lib/component/eks/` |
-| Recipe Version | `1.0.0` | `1.0.1` |
-| IAM Permissions | Default | Enhanced (10 actions) |
+| Component       | Original (GovCloud)           | Updated (Commercial)          |
+|-----------------|-------------------------------|-------------------------------|
+| Account         | `303344244756`                | `776732943381`                |
+| Region          | `us-gov-west-1`               | `us-east-1`                   |
+| VPC             | `vpc-040175d809b8f8b32`       | `vpc-014f5c11797a4b3d0`       |
+| Subnet          | `subnet-086ac47d6754023ce`    | `subnet-0c1dc0737a0311693`    |
+
+| Recipe Version  | `1.0.0`                       | `1.0.1`                       |
+| IAM Permissions | Default                       | Enhanced (10 actions)         |
 
 ## Common Issues
 

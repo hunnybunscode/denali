@@ -1,7 +1,7 @@
 environment:
-  name: dev
-  region: us-gov-west-1
-  account: "303344244756"
+  name: dev-dynamic
+  region: us-east-1
+  account: "776732943381"
 
 .storage: &storage
   type: gp3
@@ -9,14 +9,14 @@ environment:
   sizeInGB: 20
 
 .vpc: &vpc
-  id: vpc-040175d809b8f8b32
+  id: vpc-014f5c11797a4b3d0
   subnet:
-    id: subnet-086ac47d6754023ce
+    id: subnet-0c1dc0737a0311693
 
 pipelines:
   - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
-    version: 1.0.0
+    version: 1.0.1
     scan: false
     vpc: *vpc
     instanceTypes:
