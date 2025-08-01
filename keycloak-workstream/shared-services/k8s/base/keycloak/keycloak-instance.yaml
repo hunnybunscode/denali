@@ -76,6 +76,9 @@ spec:
                 mountPath: /etc/pki-custom
               - name: keycloak-init-scripts
                 mountPath: /opt/scripts
+              # - name: dod-ca-bundle
+              #   mountPath: /home/default/tmp/unclass-certificates_pkcs7_DoD.zip
+              #   subPath: unclass-certificates_pkcs7_DoD.zip
           - name: bcfks-initialize
             image: registry.access.redhat.com/ubi9/ubi-minimal:latest
             securityContext:
@@ -125,4 +128,8 @@ spec:
           - name: keycloak-provider-plugins
             configMap:
               name: keycloak-provider-plugins
-
+          - name: keycloak-provider-fips-plugins
+            emptyDir: {}
+          # - name: dod-ca-bundle
+          #   configMap:
+          #     name: dod-ca-bundle

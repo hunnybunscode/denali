@@ -233,6 +233,10 @@ interface Environment {
     httpProxy?: string;
     httpsProxy?: string;
   };
+  /**
+   * Tags for all resources created under this environment
+   */
+  tags?: { [key: string]: string };
 }
 
 interface HostedZone {
@@ -285,6 +289,8 @@ interface NodeGroup {
     rootDeviceName: string;
     sizeInGB: number;
     type: string;
+    encrypted?: boolean;
+    kmsKeyId?: string;
   };
   subnets?: {
     id: string;

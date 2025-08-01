@@ -3,3 +3,11 @@ kind: Kustomization
 
 resources:
   - tls-certificate.yaml
+
+# configMapGenerator:
+#   - name: dod-ca-bundle
+#     namespace: keycloak
+#     options:
+#       disableNameSuffixHash: true
+#     files:
+#       - external/unclass-certificates_pkcs7_DoD.zip

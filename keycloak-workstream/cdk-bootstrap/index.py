@@ -64,7 +64,8 @@ environment_region = environment_config.get("region")
 environment_account = environment_config.get("account")
 environment_iam = environment_config.get("iam", {})
 environment_execute = environment_config.get("execute", True)
-environment_qualifier = environment_config.get("qualifier", "a")
+environment_qualifier = environment_config.get("qualifier", "hnb659fds")
+environment_enableRoles = environment_config.get("enableRoles", True)
 
 # Check if region and account is defined
 if not environment_region or not environment_account:
@@ -84,40 +85,47 @@ else:
 
     # Get all resources who has Type: AWS::IAM::Role
     iam_roles = [resource for resource in resources if resource[1].get("Type") == "AWS::IAM::Role"]
-    # logging.info(f"IAM Roles: {iam_roles}")
 
-    if iam_prefix is not None:
-        logging.info(f"Updating Role Name with Prefix - {iam_prefix}")
-        # Get the old Role Name, Add prefix to old role name and update
+    if environment_enableRoles is False:
+        # Delete the iam role nodes
+        logging.warning("Disabling IAM Roles...")
         for resource_name, resource in iam_roles:
-            role_name = resource["Properties"]["RoleName"]["Fn::Sub"]
+            logging.info(f"Deleting Role: {resource_name}")
+            bootstrap_data["Resources"].pop(resource_name, None)
 
-            role_name_short = role_name.replace("cdk-${Qualifier}-", "")
-            role_name_short = role_name_short.replace("-${AWS::AccountId}-${AWS::Region}", "")
-            test_role_name = role_name.replace("${Qualifier}", "a")
-            test_role_name = test_role_name.replace("${AWS::Region}", environment_region)
-            test_role_name = test_role_name.replace("${AWS::AccountId}", environment_account)
-            test_full_role_name = f"{iam_prefix}-{test_role_name}"
+    else:
+        if iam_prefix is not None:
+            logging.info(f"Updating Role Name with Prefix - {iam_prefix}")
+            # Get the old Role Name, Add prefix to old role name and update
+            for resource_name, resource in iam_roles:
+                role_name = resource["Properties"]["RoleName"]["Fn::Sub"]
 
-            new_role_name = f"{iam_prefix}-{role_name}"
+                role_name_short = role_name.replace("cdk-${Qualifier}-", "")
+                role_name_short = role_name_short.replace("-${AWS::AccountId}-${AWS::Region}", "")
+                test_role_name = role_name.replace("${Qualifier}", "a")
+                test_role_name = test_role_name.replace("${AWS::Region}", environment_region)
+                test_role_name = test_role_name.replace("${AWS::AccountId}", environment_account)
+                test_full_role_name = f"{iam_prefix}-{test_role_name}"
 
-            # Check if Permission Boundary ARN is defined
-            if iam_permission_boundary_arn is not None:
-                resource["Properties"]["PermissionsBoundary"] = iam_permission_boundary_arn
+                new_role_name = f"{iam_prefix}-{role_name}"
 
-            # Check the length of the new role name is less than 64 characters
-            if len(test_full_role_name) > 64:
-                logging.warning(f"Role Name {new_role_name} is greater than 64 characters")
-                logging.warning(f"Role Name {new_role_name} will be truncated to 64 characters")
+                # Check if Permission Boundary ARN is defined
+                if iam_permission_boundary_arn is not None:
+                    resource["Properties"]["PermissionsBoundary"] = iam_permission_boundary_arn
 
-                role_name_parts = role_name_short.split("-")
-                role_name_shorten = "".join(part[0] for part in role_name_parts)
-                new_role_name = new_role_name.replace(role_name_short, role_name_shorten)
+                # Check the length of the new role name is less than 64 characters
+                if len(test_full_role_name) > 64:
+                    logging.warning(f"Role Name {new_role_name} is greater than 64 characters")
+                    logging.warning(f"Role Name {new_role_name} will be truncated to 64 characters")
 
-                logging.warning(f"Role Name {new_role_name} will be updated")
+                    role_name_parts = role_name_short.split("-")
+                    role_name_shorten = "".join(part[0] for part in role_name_parts)
+                    new_role_name = new_role_name.replace(role_name_short, role_name_shorten)
 
-            resource["Properties"]["RoleName"]["Fn::Sub"] = new_role_name
-            logging.info(f"Updated Role Name - {role_name} to {new_role_name}")
+                    logging.warning(f"Role Name {new_role_name} will be updated")
+
+                resource["Properties"]["RoleName"]["Fn::Sub"] = new_role_name
+                logging.info(f"Updated Role Name - {role_name} to {new_role_name}")
 
 # Check is region starts with us-iso
 if environment_region.startswith("us-iso"):

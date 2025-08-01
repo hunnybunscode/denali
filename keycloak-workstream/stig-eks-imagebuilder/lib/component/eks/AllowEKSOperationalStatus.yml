@@ -1,5 +1,5 @@
-name: Allow EKS Operational Status
-description: Some hardening causes operational status to fail, this reverses some of the hardening for EKS
+name: AllowEKSOperationalStatus
+description: Some hardening causes operational status to fail, this reverses some of the hardening.
 schemaVersion: 1.0
 
 phases:
@@ -10,7 +10,7 @@ phases:
         inputs:
           commands:
             - |
-              # install jq and container-selinux for EKS AMIs
+              # Install jq and container-selinux for EKS AMIs
               if command -v dnf &> /dev/null && command -v kubelet &> /dev/null; then
                 sudo dnf install jq container-selinux -y
                 sudo semanage permissive --add kubelet_t
@@ -31,7 +31,8 @@ phases:
               sudo sh -c 'cat << EOF > /etc/sysctl.d/999-imagebuilder_allowOPstatus.conf
               net.ipv4.ip_forward = 1
               net.ipv4.conf.all.forwarding = 1
-              EOF'
+              EOF
+              '
               sudo sysctl --system
 
       - name: fapolicyd-rule-config
@@ -42,14 +43,15 @@ phases:
           commands:
             - |
               if command -v fapolicyd-cli > /dev/null; then
-                RULES=/etc/fapolicyd/rules.d/00-allow_op_status.rules
+                RULES="/etc/fapolicyd/rules.d/00-allow_op_status.rules"
 
-                if [[ -f $RULES ]]; then
-                  sudo rm $RULES
+                if [[ -f "$RULES" ]]; then
+                  sudo rm "$RULES"
                 fi
 
-                # Create the rules file with proper permissions
-                sudo tee "$RULES" << 'EOF' > /dev/null
+                echo "Creating fapolicyd rules..."
+
+                sudo tee "$RULES" > /dev/null << 'EOF'
               allow perm=execute exe=/usr/bin/ctr : all
               allow perm=execute exe=/usr/bin/containerd : all
               allow perm=execute exe=/usr/bin/containerd-stress : all
@@ -61,21 +63,24 @@ phases:
               allow perm=any all : dir=/var/lib/kubelet/
               EOF
 
-                echo "Load fapolicyd rules..."
+                echo "Loading fapolicyd rules..."
                 sudo fagenrules --load
 
-                # Update fapolicyd service file to include --debug-deny to execstart
+                echo "Updating fapolicyd service configuration..."
                 sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/sbin/fapolicyd --debug-deny|' /usr/lib/systemd/system/fapolicyd.service
+
                 fapolicyd-cli --check-config
 
-                echo "Restarting fapolicyd after adding rules..."
+                echo "Restarting fapolicyd..."
+                sudo systemctl daemon-reload
                 sudo systemctl restart fapolicyd
 
-                # Allow some time for the service to restart if needed
                 sleep 2
 
-                # Verify the rules are loaded
+                echo "Verifying rules..."
                 sudo fapolicyd-cli --list
+              else
+                echo "fapolicyd-cli not found. Skipping rule configuration."
               fi
 
   - name: validate

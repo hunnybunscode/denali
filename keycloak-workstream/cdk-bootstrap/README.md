@@ -20,7 +20,7 @@ The AWS CDK Bootstrap process sets up the necessary resources in your AWS accoun
 - Make
 
 ## Configuration
-The configuration files are stored in `/env/<environment name>/coniguration.yaml`.
+The configuration files are stored in `/env/<environment name>/configuration.yaml`.
 The environment name is set by exporting the variable **ENVIRONMENT**.
 The default environment is `dev`
 
@@ -30,7 +30,8 @@ The default environment is `dev`
 | environment.region                    | AWS region where resources will be deployed | us-west-1                                        | Yes      |
 | environment.account                   | AWS account ID for deployment               | "908027385618"                                   | Yes      |
 | environment.execute                   | Flag to control execution of bootstrap      | false                                            | No       |
-| environment.qualifier                 | Value to control qualifier of bootstrap     | a                                                | No       |
+| environment.enableRoles               | Flag to create the default CDK roles        | true                                             | No       |
+| environment.qualifier                 | Value to control qualifier of bootstrap     | hnb659fds                                        | No       |
 | environment.iam.prefix                | Prefix for IAM resource names               | AFC2S                                            | No       |
 | environment.iam.permissionBoundaryArn | ARN of IAM permission boundary policy       | arn:aws:iam::908027385618:policy/ProjAdminPolicy | No       |
 
