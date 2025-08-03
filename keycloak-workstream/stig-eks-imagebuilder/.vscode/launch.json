@@ -19,6 +19,21 @@
         "ENVIRONMENT": "standard-dev"
       },
       "envFile": "${workspaceFolder}/.env"
+    },    
+    {
+      "name": "Python Debugger: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${fileDirname}",
+      "env": {
+        "AWS_DEFAULT_REGION": "us-west-1",
+        "CDK_DEFAULT_REGION": "us-west-1",
+        "DEBUG": "true",
+        "ENVIRONMENT": "standard-dev"
+      },
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }

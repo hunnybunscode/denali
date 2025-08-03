@@ -17,6 +17,12 @@ import {
   aws_iam as iam,
   aws_s3 as s3,
   aws_ssm as ssm,
+  aws_logs as logs,
+  aws_lambda as lambda,
+  aws_stepfunctions as sfn,
+  aws_stepfunctions_tasks as tasks,
+  aws_events as events,
+  aws_events_targets as targets,
   Tags,
   RemovalPolicy,
   Duration,
@@ -26,6 +32,7 @@ import { Construct } from "constructs";
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
+import { v4 as uuidv4 } from "uuid";
 
 export interface StigEksImageBuilderStackProps extends StackProps, ConfigurationDocument {}
 
@@ -62,352 +69,9 @@ export class StigEksImageBuilderStack extends Stack {
       ],
     });
 
-    const imageBuilderServiceManagedPolicyDocument = new iam.PolicyDocument({
-      statements: [
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:RegisterImage"],
-          resources: [`arn:${this.partition}:ec2:*::image/*`],
-          conditions: {
-            StringEquals: {
-              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:RegisterImage"],
-          resources: [`arn:${this.partition}:ec2:*::snapshot/*`],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:RunInstances"],
-          resources: [
-            `arn:${this.partition}:ec2:*::image/*`,
-            `arn:${this.partition}:ec2:*::snapshot/*`,
-            `arn:${this.partition}:ec2:*:*:subnet/*`,
-            `arn:${this.partition}:ec2:*:*:network-interface/*`,
-            `arn:${this.partition}:ec2:*:*:security-group/*`,
-            `arn:${this.partition}:ec2:*:*:key-pair/*`,
-            `arn:${this.partition}:ec2:*:*:launch-template/*`,
-            `arn:${this.partition}:license-manager:*:*:license-configuration:*`,
-          ],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:RunInstances"],
-          resources: [`arn:${this.partition}:ec2:*:*:volume/*`, `arn:${this.partition}:ec2:*:*:instance/*`],
-          conditions: {
-            StringEquals: {
-              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["iam:PassRole"],
-          resources: ["*"],
-          conditions: {
-            StringEquals: {
-              "iam:PassedToService": ["ec2.amazonaws.com", "ec2.amazonaws.com.cn", "vmie.amazonaws.com"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:StopInstances", "ec2:StartInstances", "ec2:TerminateInstances"],
-          resources: ["*"],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            "ec2:CopyImage",
-            "ec2:CreateImage",
-            "ec2:CreateLaunchTemplate",
-            "ec2:DeregisterImage",
-            "ec2:DescribeImages",
-            "ec2:DescribeInstanceAttribute",
-            "ec2:DescribeInstanceStatus",
-            "ec2:DescribeInstances",
-            "ec2:DescribeInstanceTypeOfferings",
-            "ec2:DescribeInstanceTypes",
-            "ec2:DescribeSubnets",
-            "ec2:DescribeTags",
-            "ec2:ModifyImageAttribute",
-            "ec2:DescribeImportImageTasks",
-            "ec2:DescribeExportImageTasks",
-            "ec2:DescribeSnapshots",
-            "ec2:DescribeHosts",
-          ],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:ModifySnapshotAttribute"],
-          resources: [`arn:${this.partition}:ec2:*::snapshot/*`],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:CreateTags"],
-          resources: ["*"],
-          conditions: {
-            StringEquals: {
-              "ec2:CreateAction": ["RunInstances", "CreateImage"],
-              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
-            },
-          },
-        }),
-      ],
-    });
+    const imageBuilderServiceManagedPolicyDocument = this.getImageBuilderServiceManagedPolicyDocument();
 
-    const imageBuilderServiceManagedPolicyDocumentOverflow = new iam.PolicyDocument({
-      statements: [
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:CreateTags"],
-          resources: [`arn:${this.partition}:ec2:*::image/*`, `arn:${this.partition}:ec2:*:*:export-image-task/*`],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:CreateTags"],
-          resources: [`arn:${this.partition}:ec2:*::snapshot/*`, `arn:${this.partition}:ec2:*:*:launch-template/*`],
-          conditions: {
-            StringEquals: {
-              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["license-manager:UpdateLicenseSpecificationsForResource"],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["sns:Publish"],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            "ssm:ListCommands",
-            "ssm:ListCommandInvocations",
-            "ssm:AddTagsToResource",
-            "ssm:DescribeInstanceInformation",
-            "ssm:GetAutomationExecution",
-            "ssm:StopAutomationExecution",
-            "ssm:ListInventoryEntries",
-            "ssm:SendAutomationSignal",
-            "ssm:DescribeInstanceAssociationsStatus",
-            "ssm:DescribeAssociationExecutions",
-            "ssm:GetCommandInvocation",
-          ],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ssm:SendCommand"],
-          resources: [
-            `arn:${this.partition}:ssm:*:*:document/AWS-RunPowerShellScript`,
-            `arn:${this.partition}:ssm:*:*:document/AWS-RunShellScript`,
-            `arn:${this.partition}:ssm:*:*:document/AWSEC2-RunSysprep`,
-            `arn:${this.partition}:s3:::*`,
-          ],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ssm:SendCommand"],
-          resources: [`arn:${this.partition}:ec2:*:*:instance/*`],
-          conditions: {
-            StringEquals: {
-              "ssm:resourceTag/CreatedBy": ["EC2 Image Builder"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ssm:StartAutomationExecution"],
-          resources: [`arn:${this.partition}:ssm:*:*:automation-definition/ImageBuilder*`],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ssm:CreateAssociation", "ssm:DeleteAssociation"],
-          resources: [
-            `arn:${this.partition}:ssm:*:*:document/AWS-GatherSoftwareInventory`,
-            `arn:${this.partition}:ssm:*:*:association/*`,
-            `arn:${this.partition}:ec2:*:*:instance/*`,
-          ],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            "kms:Encrypt",
-            "kms:Decrypt",
-            "kms:ReEncryptFrom",
-            "kms:ReEncryptTo",
-            "kms:GenerateDataKeyWithoutPlaintext",
-          ],
-          resources: ["*"],
-          conditions: {
-            "ForAllValues:StringEquals": {
-              "kms:EncryptionContextKeys": ["aws:ebs:id"],
-            },
-            StringLike: {
-              "kms:ViaService": ["ec2.*.amazonaws.com"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["kms:DescribeKey"],
-          resources: ["*"],
-          conditions: {
-            StringLike: {
-              "kms:ViaService": ["ec2.*.amazonaws.com"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["kms:CreateGrant"],
-          resources: ["*"],
-          conditions: {
-            Bool: {
-              "kms:GrantIsForAWSResource": "true",
-            },
-            StringLike: {
-              "kms:ViaService": ["ec2.*.amazonaws.com"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["sts:AssumeRole"],
-          resources: [`arn:${this.partition}:iam::*:role/EC2ImageBuilderDistributionCrossAccountRole`],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["logs:CreateLogStream", "logs:CreateLogGroup", "logs:PutLogEvents"],
-          resources: [`arn:${this.partition}:logs:*:*:log-group:/aws/imagebuilder/*`],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            "ec2:CreateLaunchTemplateVersion",
-            "ec2:DescribeLaunchTemplates",
-            "ec2:ModifyLaunchTemplate",
-            "ec2:DescribeLaunchTemplateVersions",
-          ],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:ExportImage"],
-          resources: [`arn:${this.partition}:ec2:*::image/*`],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:ExportImage"],
-          resources: [`arn:${this.partition}:ec2:*:*:export-image-task/*`],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:CancelExportTask"],
-          resources: [`arn:${this.partition}:ec2:*:*:export-image-task/*`],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["iam:CreateServiceLinkedRole"],
-          resources: ["*"],
-          conditions: {
-            StringEquals: {
-              "iam:AWSServiceName": ["ssm.amazonaws.com", "ec2fastlaunch.amazonaws.com"],
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ec2:EnableFastLaunch"],
-          resources: [`arn:${this.partition}:ec2:*::image/*`, `arn:${this.partition}:ec2:*:*:launch-template/*`],
-          conditions: {
-            StringEquals: {
-              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["inspector2:ListCoverage", "inspector2:ListFindings"],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ecr:CreateRepository"],
-          resources: ["*"],
-          conditions: {
-            StringEquals: {
-              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ecr:TagResource"],
-          resources: [`arn:${this.partition}:ecr:*:*:repository/image-builder-*`],
-          conditions: {
-            StringEquals: {
-              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ecr:BatchDeleteImage"],
-          resources: [`arn:${this.partition}:ecr:*:*:repository/image-builder-*`],
-          conditions: {
-            StringEquals: {
-              "ecr:ResourceTag/CreatedBy": "EC2 Image Builder",
-            },
-          },
-        }),
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            "events:DeleteRule",
-            "events:DescribeRule",
-            "events:PutRule",
-            "events:PutTargets",
-            "events:RemoveTargets",
-          ],
-          resources: [`arn:${this.partition}:events:*:*:rule/ImageBuilder-*`],
-        }),
-      ],
-    });
+    const imageBuilderServiceManagedPolicyDocumentOverflow = this.getImageBuilderServiceManagedPolicyDocumentOverflow();
 
     const imageBuilderServiceRole = new iam.Role(this, "ImageBuilderServiceRole", {
       roleName: "ImageBuilderCustomServiceRole",
@@ -490,6 +154,9 @@ export class StigEksImageBuilderStack extends Stack {
       role: imageBuilderRole,
     });
 
+    this.createStepsLogGroup();
+    this.createUpdateAmiLambdaFunction();
+
     for (const pipeline of pipelines) {
       const {
         ami: amiFilter,
@@ -506,6 +173,7 @@ export class StigEksImageBuilderStack extends Stack {
         enhancedImageMetadata: enableEnhancedImageMetadataEnabled = true,
         distributions = [],
       } = pipeline;
+
       const amiLookup = new ec2.LookupMachineImage({
         name: "*",
         filters: Object.fromEntries(Object.entries(amiFilter).map(([key, value]) => [key, [value]])),
@@ -778,7 +446,363 @@ export class StigEksImageBuilderStack extends Stack {
         },
         tags,
       });
+
+      // Create Step Function to execute pipeline if schedule is provided
+      if (pipeline.schedule) {
+        this.createScheduledPipeline(pipelineName, imageBuilderPipeline, pipeline.schedule, pipeline.ami);
+      }
     }
+  }
+
+  private getImageBuilderServiceManagedPolicyDocumentOverflow() {
+    return new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:CreateTags"],
+          resources: [`arn:${this.partition}:ec2:*::image/*`, `arn:${this.partition}:ec2:*:*:export-image-task/*`],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:CreateTags"],
+          resources: [`arn:${this.partition}:ec2:*::snapshot/*`, `arn:${this.partition}:ec2:*:*:launch-template/*`],
+          conditions: {
+            StringEquals: {
+              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["license-manager:UpdateLicenseSpecificationsForResource"],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["sns:Publish"],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "ssm:ListCommands",
+            "ssm:ListCommandInvocations",
+            "ssm:AddTagsToResource",
+            "ssm:DescribeInstanceInformation",
+            "ssm:GetAutomationExecution",
+            "ssm:StopAutomationExecution",
+            "ssm:ListInventoryEntries",
+            "ssm:SendAutomationSignal",
+            "ssm:DescribeInstanceAssociationsStatus",
+            "ssm:DescribeAssociationExecutions",
+            "ssm:GetCommandInvocation",
+          ],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ssm:SendCommand"],
+          resources: [
+            `arn:${this.partition}:ssm:*:*:document/AWS-RunPowerShellScript`,
+            `arn:${this.partition}:ssm:*:*:document/AWS-RunShellScript`,
+            `arn:${this.partition}:ssm:*:*:document/AWSEC2-RunSysprep`,
+            `arn:${this.partition}:s3:::*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ssm:SendCommand"],
+          resources: [`arn:${this.partition}:ec2:*:*:instance/*`],
+          conditions: {
+            StringEquals: {
+              "ssm:resourceTag/CreatedBy": ["EC2 Image Builder"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ssm:StartAutomationExecution"],
+          resources: [`arn:${this.partition}:ssm:*:*:automation-definition/ImageBuilder*`],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ssm:CreateAssociation", "ssm:DeleteAssociation"],
+          resources: [
+            `arn:${this.partition}:ssm:*:*:document/AWS-GatherSoftwareInventory`,
+            `arn:${this.partition}:ssm:*:*:association/*`,
+            `arn:${this.partition}:ec2:*:*:instance/*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncryptFrom",
+            "kms:ReEncryptTo",
+            "kms:GenerateDataKeyWithoutPlaintext",
+          ],
+          resources: ["*"],
+          conditions: {
+            "ForAllValues:StringEquals": {
+              "kms:EncryptionContextKeys": ["aws:ebs:id"],
+            },
+            StringLike: {
+              "kms:ViaService": ["ec2.*.amazonaws.com"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["kms:DescribeKey"],
+          resources: ["*"],
+          conditions: {
+            StringLike: {
+              "kms:ViaService": ["ec2.*.amazonaws.com"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["kms:CreateGrant"],
+          resources: ["*"],
+          conditions: {
+            Bool: {
+              "kms:GrantIsForAWSResource": "true",
+            },
+            StringLike: {
+              "kms:ViaService": ["ec2.*.amazonaws.com"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["sts:AssumeRole"],
+          resources: [`arn:${this.partition}:iam::*:role/EC2ImageBuilderDistributionCrossAccountRole`],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["logs:CreateLogStream", "logs:CreateLogGroup", "logs:PutLogEvents"],
+          resources: [`arn:${this.partition}:logs:*:*:log-group:/aws/imagebuilder/*`],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "ec2:CreateLaunchTemplateVersion",
+            "ec2:DescribeLaunchTemplates",
+            "ec2:ModifyLaunchTemplate",
+            "ec2:DescribeLaunchTemplateVersions",
+          ],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:ExportImage"],
+          resources: [`arn:${this.partition}:ec2:*::image/*`],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:ExportImage"],
+          resources: [`arn:${this.partition}:ec2:*:*:export-image-task/*`],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:CancelExportTask"],
+          resources: [`arn:${this.partition}:ec2:*:*:export-image-task/*`],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["iam:CreateServiceLinkedRole"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: {
+              "iam:AWSServiceName": ["ssm.amazonaws.com", "ec2fastlaunch.amazonaws.com"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:EnableFastLaunch"],
+          resources: [`arn:${this.partition}:ec2:*::image/*`, `arn:${this.partition}:ec2:*:*:launch-template/*`],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["inspector2:ListCoverage", "inspector2:ListFindings"],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ecr:CreateRepository"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: {
+              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ecr:TagResource"],
+          resources: [`arn:${this.partition}:ecr:*:*:repository/image-builder-*`],
+          conditions: {
+            StringEquals: {
+              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ecr:BatchDeleteImage"],
+          resources: [`arn:${this.partition}:ecr:*:*:repository/image-builder-*`],
+          conditions: {
+            StringEquals: {
+              "ecr:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "events:DeleteRule",
+            "events:DescribeRule",
+            "events:PutRule",
+            "events:PutTargets",
+            "events:RemoveTargets",
+          ],
+          resources: [`arn:${this.partition}:events:*:*:rule/ImageBuilder-*`],
+        }),
+      ],
+    });
+  }
+
+  private getImageBuilderServiceManagedPolicyDocument() {
+    return new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:RegisterImage"],
+          resources: [`arn:${this.partition}:ec2:*::image/*`],
+          conditions: {
+            StringEquals: {
+              "aws:RequestTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:RegisterImage"],
+          resources: [`arn:${this.partition}:ec2:*::snapshot/*`],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:RunInstances"],
+          resources: [
+            `arn:${this.partition}:ec2:*::image/*`,
+            `arn:${this.partition}:ec2:*::snapshot/*`,
+            `arn:${this.partition}:ec2:*:*:subnet/*`,
+            `arn:${this.partition}:ec2:*:*:network-interface/*`,
+            `arn:${this.partition}:ec2:*:*:security-group/*`,
+            `arn:${this.partition}:ec2:*:*:key-pair/*`,
+            `arn:${this.partition}:ec2:*:*:launch-template/*`,
+            `arn:${this.partition}:license-manager:*:*:license-configuration:*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:RunInstances"],
+          resources: [`arn:${this.partition}:ec2:*:*:volume/*`, `arn:${this.partition}:ec2:*:*:instance/*`],
+          conditions: {
+            StringEquals: {
+              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["iam:PassRole"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: {
+              "iam:PassedToService": ["ec2.amazonaws.com", "ec2.amazonaws.com.cn", "vmie.amazonaws.com"],
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:StopInstances", "ec2:StartInstances", "ec2:TerminateInstances"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "ec2:CopyImage",
+            "ec2:CreateImage",
+            "ec2:CreateLaunchTemplate",
+            "ec2:DeregisterImage",
+            "ec2:DescribeImages",
+            "ec2:DescribeInstanceAttribute",
+            "ec2:DescribeInstanceStatus",
+            "ec2:DescribeInstances",
+            "ec2:DescribeInstanceTypeOfferings",
+            "ec2:DescribeInstanceTypes",
+            "ec2:DescribeSubnets",
+            "ec2:DescribeTags",
+            "ec2:ModifyImageAttribute",
+            "ec2:DescribeImportImageTasks",
+            "ec2:DescribeExportImageTasks",
+            "ec2:DescribeSnapshots",
+            "ec2:DescribeHosts",
+          ],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:ModifySnapshotAttribute"],
+          resources: [`arn:${this.partition}:ec2:*::snapshot/*`],
+          conditions: {
+            StringEquals: {
+              "ec2:ResourceTag/CreatedBy": "EC2 Image Builder",
+            },
+          },
+        }),
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ec2:CreateTags"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: {
+              "ec2:CreateAction": ["RunInstances", "CreateImage"],
+              "aws:RequestTag/CreatedBy": ["EC2 Image Builder", "EC2 Fast Launch"],
+            },
+          },
+        }),
+      ],
+    });
   }
 
   private createComponent(
@@ -799,5 +823,129 @@ export class StigEksImageBuilderStack extends Stack {
       description,
     });
     return componentResource;
+  }
+
+  private createScheduledPipeline(
+    pipelineName: string,
+    pipeline: imageBuilder.CfnImagePipeline,
+    schedule: string,
+    amiFilter: Pipeline["ami"]
+  ) {
+    const pipelineArn = pipeline.attrArn;
+    const stepLogGroup = this.node.findChild("StepsLogGroup") as logs.LogGroup;
+    const updateAmiFunction = this.node.findChild("UpdateAmiFunction") as lambda.Function;
+
+    // Create IAM role for Step Function
+    const stepFunctionRole = new iam.Role(this, `${pipelineName}-StepFunctionRole`, {
+      assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
+      inlinePolicies: {
+        ImageBuilderPolicy: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["imagebuilder:StartImagePipelineExecution"],
+              resources: [pipelineArn],
+            }),
+          ],
+        }),
+      },
+    });
+
+    // Create Step Function task
+    /**
+     * TODO: Move to lambda function to handle client token
+     */
+    const startPipelineTask = new tasks.CallAwsService(this, `${pipelineName}-StartPipelineTask`, {
+      service: "imagebuilder",
+      action: "startImagePipelineExecution",
+      parameters: {
+        ImagePipelineArn: pipelineArn,
+        ClientToken: uuidv4(),
+      },
+      iamResources: [pipelineArn],
+    });
+
+    const definition = sfn.Chain.start(
+      new tasks.LambdaInvoke(this, `${pipelineName}-invoke-update-ami`, {
+        stateName: `${pipelineName}-invoke-update-ami`,
+        comment: `Update image ami for pipeline: ${pipelineName}`,
+        taskTimeout: sfn.Timeout.duration(Duration.minutes(2)),
+        lambdaFunction: updateAmiFunction,
+        payload: sfn.TaskInput.fromObject({
+          pipeline_name: pipelineName,
+          ami_filters: amiFilter,
+        }),
+      })
+    ).next(startPipelineTask);
+
+    // Create Step Function
+    const stateMachine = new sfn.StateMachine(this, `imagebuilder-pipeline-${pipelineName}-sm`, {
+      stateMachineName: `imagebuilder-pipeline-${pipelineName}`,
+      role: stepFunctionRole,
+      definitionBody: sfn.DefinitionBody.fromChainable(definition),
+      logs: {
+        destination: stepLogGroup,
+        level: sfn.LogLevel.ALL,
+      },
+    });
+
+    // Create EventBridge rule with cron schedule. Cron expression has 6 fields
+    new events.Rule(this, `${pipelineName}-ScheduleRule`, {
+      // ruleName: `imagebuilder-pipeline-${pipelineName}-Schedule`,
+      schedule: events.Schedule.expression(`cron(${schedule})`),
+      targets: [new targets.SfnStateMachine(stateMachine)],
+      description: `Rule to trigger update and build image builder pipeline: ${pipelineName}`,
+    });
+  }
+
+  private createStepsLogGroup() {
+    const logGroup = new logs.LogGroup(this, "StepsLogGroup", {
+      logGroupName: "/aws/pipeline-step-function",
+      retention: logs.RetentionDays.FIVE_MONTHS,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    return logGroup;
+  }
+
+  private createUpdateAmiLambdaFunction() {
+    const stepLogGroup = this.node.findChild("StepsLogGroup") as logs.LogGroup;
+
+    // Define the Lambda function
+    const updateAmiFunction = new lambda.Function(this, "UpdateAmiFunction", {
+      description: "Function to update AMI ID in SSM Parameter Store based on AMI filters",
+      logGroup: stepLogGroup,
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "index.lambda_handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/update-ami")),
+      deadLetterQueueEnabled: false,
+      timeout: Duration.minutes(1),
+      role: new iam.Role(this, "UpdateAmiFunctionRole", {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
+        inlinePolicies: {
+          "Allow-SSM-Access": new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ["ssm:GetParameter", "ssm:PutParameter"],
+                resources: ["arn:*:ssm:*:*:parameter/image-builder/*/target-ami-image-id"],
+              }),
+            ],
+          }),
+          "Allow-EC2-Access": new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ["ec2:DescribeImages"],
+                resources: ["*"],
+              }),
+            ],
+          }),
+        },
+      }),
+    });
+
+    return updateAmiFunction;
   }
 }
