@@ -23,7 +23,6 @@
   "dependencies": {
     "aws-cdk-lib": "2.208.0",
     "constructs": "10.4.2",
-    "js-yaml": "4.1.0",
-    "uuid": "^11.1.0"
+    "js-yaml": "4.1.0"
   }
 }

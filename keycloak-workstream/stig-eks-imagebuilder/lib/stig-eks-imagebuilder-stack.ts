@@ -155,6 +155,7 @@ export class StigEksImageBuilderStack extends Stack {
     });
 
     this.createStepsLogGroup();
+    this.createTriggerImageBuilderPipelineLambdaFunction();
     this.createUpdateAmiLambdaFunction();
 
     for (const pipeline of pipelines) {
@@ -834,6 +835,9 @@ export class StigEksImageBuilderStack extends Stack {
     const pipelineArn = pipeline.attrArn;
     const stepLogGroup = this.node.findChild("StepsLogGroup") as logs.LogGroup;
     const updateAmiFunction = this.node.findChild("UpdateAmiFunction") as lambda.Function;
+    const triggerImageBuilderPipelineFunction = this.node.findChild(
+      "TriggerImageBuilderPipelineFunction"
+    ) as lambda.Function;
 
     // Create IAM role for Step Function
     const stepFunctionRole = new iam.Role(this, `${pipelineName}-StepFunctionRole`, {
@@ -852,22 +856,24 @@ export class StigEksImageBuilderStack extends Stack {
     });
 
     // Create Step Function task
-    /**
-     * TODO: Move to lambda function to handle client token
-     */
-    const startPipelineTask = new tasks.CallAwsService(this, `${pipelineName}-StartPipelineTask`, {
-      service: "imagebuilder",
-      action: "startImagePipelineExecution",
-      parameters: {
-        ImagePipelineArn: pipelineArn,
-        ClientToken: uuidv4(),
-      },
-      iamResources: [pipelineArn],
-    });
+
+    const startPipelineTask = new tasks.LambdaInvoke(
+      this,
+      `${pipelineName}-invoke-trigger-image-builder-pipeline-task`,
+      {
+        stateName: `${pipelineName} Start Build`,
+        comment: `Trigger image builder pipeline: ${pipelineName}`,
+        taskTimeout: sfn.Timeout.duration(Duration.minutes(2)),
+        lambdaFunction: triggerImageBuilderPipelineFunction,
+        payload: sfn.TaskInput.fromObject({
+          image_pipeline_arn: pipelineArn,
+        }),
+      }
+    );
 
     const definition = sfn.Chain.start(
-      new tasks.LambdaInvoke(this, `${pipelineName}-invoke-update-ami`, {
-        stateName: `${pipelineName}-invoke-update-ami`,
+      new tasks.LambdaInvoke(this, `${pipelineName}-invoke-update-ami-task`, {
+        stateName: `${pipelineName} Invoke Update AMI`,
         comment: `Update image ami for pipeline: ${pipelineName}`,
         taskTimeout: sfn.Timeout.duration(Duration.minutes(2)),
         lambdaFunction: updateAmiFunction,
@@ -906,6 +912,41 @@ export class StigEksImageBuilderStack extends Stack {
     });
 
     return logGroup;
+  }
+
+  private createTriggerImageBuilderPipelineLambdaFunction() {
+    const stepLogGroup = this.node.findChild("StepsLogGroup") as logs.LogGroup;
+
+    const triggerImageBuilderPipelineFunction = new lambda.Function(this, "TriggerImageBuilderPipelineFunction", {
+      description: "Function to trigger image builder pipeline execution",
+      logGroup: stepLogGroup,
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "index.lambda_handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/trigger-imagebuilder-pipeline")),
+      deadLetterQueueEnabled: false,
+      timeout: Duration.minutes(1),
+      role: new iam.Role(this, "TriggerImageBuilderPipelineFunctionRole", {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
+        inlinePolicies: {
+          "Allow-ImageBuilder-Access": new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "imagebuilder:StartImagePipelineExecution",
+                  "imagebuilder:ListImagePipelineExecutions",
+                  "imagebuilder:ListImages",
+                ],
+                resources: ["*"],
+              }),
+            ],
+          }),
+        },
+      }),
+    });
+
+    return triggerImageBuilderPipelineFunction;
   }
 
   private createUpdateAmiLambdaFunction() {
