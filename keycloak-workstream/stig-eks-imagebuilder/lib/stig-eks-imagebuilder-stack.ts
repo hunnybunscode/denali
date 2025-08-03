@@ -32,7 +32,6 @@ import { Construct } from "constructs";
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
-import { v4 as uuidv4 } from "uuid";
 
 export interface StigEksImageBuilderStackProps extends StackProps, ConfigurationDocument {}
 
@@ -861,7 +860,7 @@ export class StigEksImageBuilderStack extends Stack {
       this,
       `${pipelineName}-invoke-trigger-image-builder-pipeline-task`,
       {
-        stateName: `${pipelineName} Start Build`,
+        stateName: `Start Build`,
         comment: `Trigger image builder pipeline: ${pipelineName}`,
         taskTimeout: sfn.Timeout.duration(Duration.minutes(2)),
         lambdaFunction: triggerImageBuilderPipelineFunction,
@@ -873,7 +872,7 @@ export class StigEksImageBuilderStack extends Stack {
 
     const definition = sfn.Chain.start(
       new tasks.LambdaInvoke(this, `${pipelineName}-invoke-update-ami-task`, {
-        stateName: `${pipelineName} Invoke Update AMI`,
+        stateName: `Update AMI ID`,
         comment: `Update image ami for pipeline: ${pipelineName}`,
         taskTimeout: sfn.Timeout.duration(Duration.minutes(2)),
         lambdaFunction: updateAmiFunction,
@@ -933,11 +932,7 @@ export class StigEksImageBuilderStack extends Stack {
             statements: [
               new iam.PolicyStatement({
                 effect: iam.Effect.ALLOW,
-                actions: [
-                  "imagebuilder:StartImagePipelineExecution",
-                  "imagebuilder:ListImagePipelineExecutions",
-                  "imagebuilder:ListImages",
-                ],
+                actions: ["imagebuilder:StartImagePipelineExecution"],
                 resources: ["*"],
               }),
             ],
