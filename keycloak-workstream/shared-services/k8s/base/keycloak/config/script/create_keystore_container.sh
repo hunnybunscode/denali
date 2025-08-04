@@ -13,15 +13,15 @@ microdnf install --assumeyes wget unzip openssl
 
 echo "Downloading Certificates from DISA..."
 # Location of bundle from DISA site
-url='https://public.cyber.mil/pki-pke/pkipke-document-library/'
-bundle=$(curl --silent $url | awk -F '"' 'tolower($2) ~ /dod.zip/ {print $2}')
+# url='https://public.cyber.mil/pki-pke/pkipke-document-library/'
+# bundle=$(curl --silent $url | awk -F '"' 'tolower($2) ~ /dod.zip/ {print $2}')
 # bundle="https://dl.cyber.mil/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
-
-mkdir -p tmp
+bundle="https://public.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
 # Extract the bundle
 echo "  Download file: $bundle"
-wget --quiet --directory-prefix tmp $bundle
+curl --silent --location --remote-name --remote-header-name --create-dirs --output-dir tmp $bundle
+
 echo "  Unziping..."
 unzip -qj tmp/${bundle##*/} -d tmp
 
