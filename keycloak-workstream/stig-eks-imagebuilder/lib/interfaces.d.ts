@@ -283,6 +283,11 @@ interface Pipeline {
       targetAccountIds?: string[];
     };
   }[];
+  /**
+   * The cron expression determines how often EC2 Image Builder evaluates
+   * EventBridge cron expressions require 6 fields: minute hour day-of-month month day-of-week year
+   */
+  schedule?: string
 }
 
 interface ConfigurationDocument {
