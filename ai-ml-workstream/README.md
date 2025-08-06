@@ -32,8 +32,35 @@ networking:
 
 ### Deploy
 
-The deployment expects a config file, defined above, to be provided via the context at deployment time as follows:
+#### Using Makefile (Recommended)
+The project includes a Makefile for simplified deployment:
+
+```bash
+# Deploy with default config (uses config/deployment_config.yaml)
+make deploy
+
+# Deploy with custom config file
+make deploy CONFIG_FILE=path/to/your/config.yaml
+
+# Synthesize CloudFormation templates
+make synth
+
+# Bootstrap CDK (first time only)
+make bootstrap
+
+# Clean up/destroy resources
+make clean
 ```
+
+**First-time deployment:**
+```bash
+make bootstrap  # One-time CDK setup
+make deploy     # Deploy the infrastructure
+```
+
+#### Using CDK directly
+Alternatively, you can use CDK commands directly:
+```bash
 cdk synth --context config_file=path/to/config.yaml
 cdk deploy --context config_file=path/to/config.yaml
 ```
