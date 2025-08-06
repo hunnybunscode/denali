@@ -1,0 +1,2 @@
+boto3-stubs[imagebuilder]>=1.28
+boto3

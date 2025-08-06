@@ -5,12 +5,12 @@ environment:
   iam:
     prefix: AFC2S
     # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
-  proxy:
-    httpProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
-    httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
-    noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
+  # proxy:
+  #   httpProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+  #   httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+  #   noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
 
-.pipelineVersion: &pipeline-version 1.0.246
+.pipelineVersion: &pipeline-version 1.1.2
 
 .storage: &storage
   type: gp3
@@ -33,10 +33,14 @@ environment:
   - m5.xlarge
   - m5.large
 
+.schedule: &schedule
+  schedule: 0 10 1 * ? *
+
 pipelines:
   - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
     version: *pipeline-version
+    <<: *schedule
     scan: false
     vpc: *vpc
     instanceTypes: *instanceTypes
@@ -69,6 +73,7 @@ pipelines:
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
     version: *pipeline-version
+    <<: *schedule
     scan: false
     test: false
     enhancedImageMetadata: false
@@ -115,6 +120,7 @@ pipelines:
 
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
     description: "EKS Optimized Image with STIG High"
+    <<: *schedule
     version: *pipeline-version
     scan: false
     test: false
@@ -162,6 +168,7 @@ pipelines:
   - name: amazon-node-rhel9-x86_64-standard-stig-high
     description: "Optimized Image with STIG High"
     version: *pipeline-version
+    <<: *schedule
     scan: false
     test: false
     enhancedImageMetadata: false
@@ -197,6 +204,7 @@ pipelines:
   - name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
     version: *pipeline-version
+    <<: *schedule
     scan: false
     test: false
     enhancedImageMetadata: false
@@ -232,6 +240,7 @@ pipelines:
   - name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal
     description: "EKS Optimized Image"
     version: *pipeline-version
+    <<: *schedule
     scan: false
     test: false
     enhancedImageMetadata: false
