@@ -7,6 +7,7 @@ from aws_cdk import (
     aws_elasticloadbalancingv2 as elbv2,
     aws_rds as rds,
     aws_s3 as s3,
+    aws_iam as iam,
 )
 from constructs import Construct
 
@@ -100,6 +101,22 @@ class SpydorPythonStack(Stack):
             removal_policy=RemovalPolicy.RETAIN
         )
 
+        spydor_infra_efs.add_to_resource_policy(iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            principals=[iam.AnyPrincipal()],
+            actions=[
+                "elasticfilesystem:ClientMount",
+                "elasticfilesystem:ClientWrite", 
+                "elasticfilesystem:ClientRootAccess"
+            ],
+            resources=[spydor_infra_efs.file_system_arn],
+            conditions={
+                "Bool": {
+                    "elasticfilesystem:AccessedViaMountTarget": "true"
+                }
+            }
+        ))
+
         # RDS Database
         spydor_infra_db = rds.DatabaseInstance(
             self, "spydor_infra_db",
@@ -169,6 +186,11 @@ class SpydorPythonStack(Stack):
             vpc=spydor_infra_vpc,
             port=8080,
             targets=[spydor_infra_fargate_service]
+        )
+
+        target_group.configure_health_check(
+            path="/",
+            healthy_http_codes="404"
         )
 
         spydor_infra_alb.add_listener(
