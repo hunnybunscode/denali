@@ -83,16 +83,21 @@ ENVIRONMENT=dev-dynamic cdk deploy --all
 ## Step 6: Configure kubectl
 
 ```bash
-# Update kubeconfig for the new cluster
-aws eks update-kubeconfig --region $(aws configure get region) --name SharedServices
+# Configure cluster access (includes kubeconfig update and Admin role access)
+./scripts/configure-cluster-access.sh
 ```
 
 ## Step 7: Deploy Hardened Keycloak
 
 ```bash
-# Deploy Keycloak with Ironbank images
-kubectl apply -k k8s/overlay/dev/
+# Deploy Keycloak with hardened Ironbank images
+kubectl apply -k k8s/overlay/dev-dynamic/
 ```
+
+**Important:** Use `dev-dynamic` overlay, not `dev`. The `dev-dynamic` overlay contains the patches that configure:
+- ECR Ironbank FIPS images instead of public images
+- Hardened operator and Keycloak instances
+- All security init containers
 
 This deployment sets up Keycloak with government-grade security features. Here's what's included:
 
@@ -146,6 +151,16 @@ kubectl exec -n keycloak <keycloak-pod> -- java -version 2>&1 | grep -i fips
 ✅ **FIPS enabled:** Java output shows FIPS compliance
 
 ## Troubleshooting
+
+**EKS Cluster Access Issues:**
+- If kubectl commands fail with "server has asked for the client to provide credentials":
+  ```bash
+  # Add your Admin role to cluster access
+  aws eks create-access-entry --cluster-name SharedServices --principal-arn arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):role/Admin --region $(aws configure get region)
+  
+  # Grant cluster admin permissions
+  aws eks associate-access-policy --cluster-name SharedServices --principal-arn arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):role/Admin --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy --access-scope type=cluster --region $(aws configure get region)
+  ```
 
 **CAC Authentication Issues:**
 - Ensure CAC is properly inserted and certificates installed

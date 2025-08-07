@@ -51,8 +51,31 @@ spec:
           keycloak: keycloak-instance
       spec:
         initContainers:
+          - name: fips-initialize
+            image: registry.access.redhat.com/ubi9-minimal:latest
+            securityContext:
+              privileged: false
+              runAsUser: 0
+              runAsGroup: 0
+            command:
+              - /bin/bash
+              - "-c"
+            args:
+              - |
+                set -e
+                echo "Initializing FIPS"
+                ls -all /opt/scripts
+                cat /opt/scripts/create_fips.sh
+                cd /opt/keycloak/providers
+                bash /opt/scripts/create_fips.sh
+                echo "Initializing FIPS done"
+            volumeMounts:
+              - name: keycloak-provider-fips-plugins
+                mountPath: /opt/keycloak/providers
+              - name: keycloak-init-scripts
+                mountPath: /opt/scripts
           - name: pki-initialize
-            image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+            image: registry.access.redhat.com/ubi9/openjdk-21:latest
             securityContext:
               privileged: false
               runAsUser: 0
@@ -80,7 +103,7 @@ spec:
               #   mountPath: /home/default/tmp/unclass-certificates_pkcs7_DoD.zip
               #   subPath: unclass-certificates_pkcs7_DoD.zip
           - name: bcfks-initialize
-            image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+            image: registry.access.redhat.com/ubi9/openjdk-21:latest
             securityContext:
               privileged: false
               runAsUser: 0
@@ -108,7 +131,8 @@ spec:
               - name: keycloak-conf
                 mountPath: /opt/keycloak/conf/quarkus.properties
                 subPath: quarkus.properties
-
+              - name: keycloak-provider-fips-plugins
+                mountPath: /opt/keycloak/providers
               - name: keycloak-provider-plugins
                 mountPath: /opt/keycloak/providers/keycloak-spi-awsalb-mtls.jar
                 subPath: keycloak-spi-awsalb-mtls.jar

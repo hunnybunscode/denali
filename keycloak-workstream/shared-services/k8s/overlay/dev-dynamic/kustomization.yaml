@@ -10,4 +10,3 @@ resources:
 
 patchesStrategicMerge:
   - keycloak-operator-patch.yaml
-  - keycloak-instance-patch.yaml
