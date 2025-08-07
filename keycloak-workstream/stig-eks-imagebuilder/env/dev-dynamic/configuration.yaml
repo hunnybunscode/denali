@@ -43,6 +43,6 @@ pipelines:
           - name: SetDoDConsentBanner
             value:
               - "Yes"
-      - lib/component/eks/DODSTIGHardening.yml
+      - lib/component/DODSTIGHardening.yml
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/AllowEKSOperationalStatus.yml
