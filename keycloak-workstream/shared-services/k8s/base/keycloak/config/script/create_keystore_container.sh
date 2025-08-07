@@ -16,7 +16,7 @@ echo "Downloading Certificates from DISA..."
 # url='https://public.cyber.mil/pki-pke/pkipke-document-library/'
 # bundle=$(curl --silent $url | awk -F '"' 'tolower($2) ~ /dod.zip/ {print $2}')
 # bundle="https://dl.cyber.mil/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
-bundle="https://public.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
+bundle="https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip"
 
 # Extract the bundle
 echo "  Download file: $bundle"
