@@ -819,6 +819,11 @@ export class EKSClustersConstruct extends Construct {
         };
 
         blueprintsAddons.push(new blueprints.addons.NginxAddOn(nginxControllerConfig));
+      } else if (isClusterIsolated) {
+        // Add NGINX addon for isolated/high-side deployments where ALB is not available
+        blueprintsAddons.push(new blueprints.addons.NginxAddOn({
+          internetFacing: false,
+        }));
       }
     }
 

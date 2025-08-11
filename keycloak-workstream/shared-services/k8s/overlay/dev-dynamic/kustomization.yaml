@@ -7,6 +7,9 @@ resources:
   - ../../base/keycloak
   - ../../base/squid
   - ../../base/nifikop
+  - keycloak-nginx-ingress.yaml
 
 patchesStrategicMerge:
   - keycloak-operator-patch.yaml
+  - keycloak-instance-patch.yaml
+  - disable-alb-when-unavailable-patch.yaml
