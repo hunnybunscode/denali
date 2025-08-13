@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AFTAC One-to-Many Stack with EventBridge rule and Lambda function'
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Description: 'Source S3 bucket name that will trigger the Lambda function'
+  
+  LambdaCodeBucket:
+    Type: String
+    Description: 'S3 bucket containing the Lambda deployment package'
+  
+  LambdaCodeKey:
+    Type: String
+    Default: 'one-to-many.zip'
+    Description: 'S3 key for the Lambda deployment package'
+  RolePrefix:
+    Type: String
+    Default: 'AFC2S_'
+    Description: 'Prefix for IAM Roles'
+  PermissionsBoundaryARN:
+    Type: String
+    Default: 
+    Description: 'Permissions Boundary ARN to apply to all roles'
+
+Resources:
+  # IAM Role for Lambda Function
+  OneToManyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${RolePrefix}OneToManyLambdaRole'
+      PermissionsBoundary: !Ref PermissionsBoundaryARN
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                Resource: 
+                  - !Sub 'arn:${AWS::Partition}:s3:::${SourceBucket}/*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::*/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub 'arn:${AWS::Partition}:s3:::${SourceBucket}'
+                  - !Sub 'arn:${AWS::Partition}:s3:::*'
+        - PolicyName: ParameterStoreAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/pipeline/destination/*'
+
+  # Lambda Function
+  OneToManyLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: one-to-many-processor
+      Runtime: python3.9
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt OneToManyLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Timeout: 300
+      Environment:
+        Variables:
+          SOURCE_BUCKET: !Ref SourceBucket
+
+
+  # EventBridge Rule for CloudTrail S3 Events
+  S3ObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: s3-object-created-rule
+      Description: 'Triggers Lambda when object is created in source bucket via CloudTrail'
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - s3.amazonaws.com
+          eventName:
+            - PutObject
+            - CompleteMultipartUpload
+            - CopyObject
+          requestParameters:
+            bucketName:
+              - !Ref SourceBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt OneToManyLambdaFunction.Arn
+          Id: OneToManyLambdaTarget
+
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OneToManyLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt S3ObjectCreatedRule.Arn
+
+Outputs:
+  LambdaFunctionArn:
+    Description: 'ARN of the One-to-Many Lambda function'
+    Value: !GetAtt OneToManyLambdaFunction.Arn
+  
+  EventBridgeRuleArn:
+    Description: 'ARN of the EventBridge rule'
+    Value: !GetAtt S3ObjectCreatedRule.Arn
+  
+  LambdaRoleArn:
+    Description: 'ARN of the Lambda execution role'
+    Value: !GetAtt OneToManyLambdaRole.Arn

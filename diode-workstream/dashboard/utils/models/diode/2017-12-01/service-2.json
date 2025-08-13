@@ -1,0 +1,911 @@
+{
+  "version": "2.0",
+  "metadata": {
+    "apiVersion": "2017-12-01",
+    "endpointPrefix": "diode",
+    "jsonVersion": "1.1",
+    "protocol": "json",
+    "serviceFullName": "AWS Diode",
+    "serviceId": "Diode",
+    "signatureVersion": "v4",
+    "targetPrefix": "AWSDiodeFrontendService",
+    "uid": "diode-2017-12-01"
+  },
+  "operations": {
+    "AcceptAccountMapping": {
+      "name": "AcceptAccountMapping",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "AcceptAccountMappingRequest" },
+      "output": { "shape": "AcceptAccountMappingResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "MappingFailedException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "CreateAccountMapping": {
+      "name": "CreateAccountMapping",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "CreateAccountMappingRequest" },
+      "output": { "shape": "CreateAccountMappingResponse" },
+      "errors": [
+        { "shape": "ResourceAlreadyExistsException" },
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "ResourceLimitExceededException" },
+        { "shape": "TransientFailureException" }
+      ],
+      "idempotent": true
+    },
+    "CreateTransfer": {
+      "name": "CreateTransfer",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "CreateTransferRequest" },
+      "output": { "shape": "CreateTransferResponse" },
+      "errors": [
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "ResourceLimitExceededException" },
+        { "shape": "ResourceAlreadyExistsException" },
+        { "shape": "TransientFailureException" }
+      ],
+      "idempotent": true
+    },
+    "CreateTransferManifest": {
+      "name": "CreateTransferManifest",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "CreateTransferManifestRequest" },
+      "output": { "shape": "CreateTransferManifestResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "TransientFailureException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "OperationInvalidInRegionException" }
+      ]
+    },
+    "DeleteAccountMapping": {
+      "name": "DeleteAccountMapping",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "DeleteAccountMappingRequest" },
+      "output": { "shape": "DeleteAccountMappingResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "DescribeAccountMapping": {
+      "name": "DescribeAccountMapping",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "DescribeAccountMappingRequest" },
+      "output": { "shape": "DescribeAccountMappingResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "DescribeTransfer": {
+      "name": "DescribeTransfer",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "DescribeTransferRequest" },
+      "output": { "shape": "DescribeTransferResponse" },
+      "errors": [
+        { "shape": "InvalidRequestException" },
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "DescribeTransferManifest": {
+      "name": "DescribeTransferManifest",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "DescribeTransferManifestRequest" },
+      "output": { "shape": "DescribeTransferManifestResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "TransientFailureException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "OperationInvalidInRegionException" }
+      ]
+    },
+    "GetAccountMappingPin": {
+      "name": "GetAccountMappingPin",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "GetAccountMappingPinRequest" },
+      "output": { "shape": "GetAccountMappingPinResponse" },
+      "errors": [
+        { "shape": "InvalidRequestException" },
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "GetTransferManifest": {
+      "name": "GetTransferManifest",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "GetTransferManifestRequest" },
+      "output": { "shape": "GetTransferManifestResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "TransientFailureException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "OperationInvalidInRegionException" }
+      ]
+    },
+    "ListAccountMappings": {
+      "name": "ListAccountMappings",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "ListAccountMappingsRequest" },
+      "output": { "shape": "ListAccountMappingsResponse" },
+      "errors": [
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "ListTags": {
+      "name": "ListTags",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "ListTagsRequest" },
+      "output": { "shape": "ListTagsResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "ListTransfers": {
+      "name": "ListTransfers",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "ListTransfersRequest" },
+      "output": { "shape": "ListTransfersResponse" },
+      "errors": [
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "RejectAccountMapping": {
+      "name": "RejectAccountMapping",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "RejectAccountMappingRequest" },
+      "output": { "shape": "RejectAccountMappingResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "TagResource": {
+      "name": "TagResource",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "TagResourceRequest" },
+      "output": { "shape": "TagResourceResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "UntagResource": {
+      "name": "UntagResource",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "UntagResourceRequest" },
+      "output": { "shape": "UntagResourceResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "UpdateAccountMappingAlias": {
+      "name": "UpdateAccountMappingAlias",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "UpdateAccountMappingAliasRequest" },
+      "output": { "shape": "UpdateAccountMappingAliasResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "UpdateAccountMappingDeliveryS3BucketName": {
+      "name": "UpdateAccountMappingDeliveryS3BucketName",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "UpdateAccountMappingDeliveryS3BucketNameRequest" },
+      "output": { "shape": "UpdateAccountMappingDeliveryS3BucketNameResponse" },
+      "errors": [
+        { "shape": "InvalidRequestException" },
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "OperationInvalidInRegionException" },
+        { "shape": "TransientFailureException" }
+      ]
+    },
+    "UpdateAccountMappingRoleArn": {
+      "name": "UpdateAccountMappingRoleArn",
+      "http": {
+        "method": "POST",
+        "requestUri": "/"
+      },
+      "input": { "shape": "UpdateAccountMappingRoleArnRequest" },
+      "output": { "shape": "UpdateAccountMappingRoleArnResponse" },
+      "errors": [
+        { "shape": "ResourceNotFoundException" },
+        { "shape": "InvalidRequestException" },
+        { "shape": "TransientFailureException" }
+      ]
+    }
+  },
+  "shapes": {
+    "AcceptAccountMappingRequest": {
+      "type": "structure",
+      "required": ["mappingId", "pin"],
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "pin": { "shape": "MappingPin" },
+        "roleArn": { "shape": "MappingRoleArn" },
+        "alias": { "shape": "MappingAlias" },
+        "deliveryS3BucketName": { "shape": "S3BucketName" }
+      }
+    },
+    "AcceptAccountMappingResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "AccountMapping": {
+      "type": "structure",
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "mappingArn": { "shape": "DiodeResourceArn" },
+        "mappingAlias": { "shape": "MappingAlias" },
+        "sendingRegion": { "shape": "AwsRegion" },
+        "receivingRegion": { "shape": "AwsRegion" },
+        "mappingStatus": { "shape": "MappingStatus" },
+        "sendingAccountId": {
+          "shape": "SenderAccountId",
+          "deprecated": true,
+          "deprecatedMessage": "sendingAccountId has been replaced by remoteAccountId"
+        },
+        "remoteAccountId": { "shape": "RemoteAccountId" },
+        "remoteAccountReceiving": { "shape": "RemoteAccountReceiving" },
+        "dateMappingCreated": { "shape": "Timestamp" },
+        "deliveryS3BucketName": { "shape": "S3BucketName" },
+        "transferProfile": { "shape": "TransferProfile" },
+        "roleArn": { "shape": "MappingRoleArn" }
+      }
+    },
+    "AccountMappingFilter": {
+      "type": "structure",
+      "members": {
+        "mappingStatus": { "shape": "MappingStatus" },
+        "dateMappingCreated": { "shape": "DateRange" }
+      }
+    },
+    "AccountMappingList": {
+      "type": "list",
+      "member": { "shape": "AccountMapping" }
+    },
+    "AwsRegion": {
+      "type": "string",
+      "max": 100,
+      "min": 0,
+      "pattern": "^us-((iso(b)?-)?east|gov-west)?-[0-9]$"
+    },
+    "ClientRequestToken": {
+      "type": "string",
+      "max": 64,
+      "min": 1,
+      "pattern": "^[\\w:/-]+$"
+    },
+    "CreateAccountMappingRequest": {
+      "type": "structure",
+      "required": ["roleArn", "remoteRegion"],
+      "members": {
+        "senderAccountId": {
+          "shape": "SenderAccountId",
+          "deprecated": true,
+          "deprecatedMessage": "senderAccountId has been replaced by remoteAccountId"
+        },
+        "alias": { "shape": "MappingAlias" },
+        "deliveryS3BucketName": { "shape": "S3BucketName" },
+        "roleArn": { "shape": "MappingRoleArn" },
+        "remoteRegion": { "shape": "AwsRegion" },
+        "remoteAccountId": { "shape": "RemoteAccountId" },
+        "remoteAccountReceiving": { "shape": "RemoteAccountReceiving" },
+        "tags": { "shape": "TagKeyValueMap" },
+        "transferProfile": { "shape": "TransferProfile" },
+        "clientRequestToken": {
+          "shape": "ClientRequestToken",
+          "idempotencyToken": true
+        }
+      }
+    },
+    "CreateAccountMappingResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "CreateTransferManifestRequest": {
+      "type": "structure",
+      "required": [
+        "mappingId",
+        "manifestTemplate",
+        "payloadS3Bucket",
+        "payloadS3Key",
+        "manifestFormat"
+      ],
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "manifestTemplate": { "shape": "ManifestTemplate" },
+        "payloadS3Bucket": { "shape": "S3BucketName" },
+        "payloadS3Key": { "shape": "S3Key" },
+        "manifestFormat": { "shape": "ManifestFormat" },
+        "hashType": { "shape": "HashType" }
+      }
+    },
+    "CreateTransferManifestResponse": {
+      "type": "structure",
+      "members": {
+        "transferManifestId": { "shape": "TransferManifestId" }
+      }
+    },
+    "CreateTransferRequest": {
+      "type": "structure",
+      "required": ["description", "s3Bucket", "s3Key", "mappingId"],
+      "members": {
+        "description": { "shape": "TransferDescription" },
+        "s3Bucket": { "shape": "S3BucketName" },
+        "s3Key": { "shape": "S3Key" },
+        "mappingId": { "shape": "MappingId" },
+        "tags": { "shape": "TagKeyValueMap" },
+        "clientRequestToken": {
+          "shape": "ClientRequestToken",
+          "idempotencyToken": true
+        },
+        "includeS3ObjectTags": { "shape": "IncludeS3ObjectTagsBoolean" }
+      }
+    },
+    "CreateTransferResponse": {
+      "type": "structure",
+      "members": {
+        "transfer": { "shape": "Transfer" }
+      }
+    },
+    "DateRange": {
+      "type": "structure",
+      "members": {
+        "startDate": { "shape": "Timestamp" },
+        "endDate": { "shape": "Timestamp" }
+      }
+    },
+    "DeleteAccountMappingRequest": {
+      "type": "structure",
+      "required": ["mappingId"],
+      "members": {
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "DeleteAccountMappingResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "DescribeAccountMappingRequest": {
+      "type": "structure",
+      "required": ["mappingId"],
+      "members": {
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "DescribeAccountMappingResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "DescribeTransferManifestRequest": {
+      "type": "structure",
+      "required": ["transferManifestId", "mappingId"],
+      "members": {
+        "transferManifestId": { "shape": "TransferManifestId" },
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "DescribeTransferManifestResponse": {
+      "type": "structure",
+      "members": {
+        "transferManifestId": { "shape": "TransferManifestId" },
+        "mappingId": { "shape": "MappingId" },
+        "status": { "shape": "TransferManifestStatus" },
+        "statusReason": { "shape": "StatusReason" },
+        "payloadS3Bucket": { "shape": "S3BucketName" },
+        "payloadS3Key": { "shape": "S3Key" },
+        "manifestFormat": { "shape": "ManifestFormat" }
+      }
+    },
+    "DescribeTransferRequest": {
+      "type": "structure",
+      "required": ["transferId"],
+      "members": {
+        "transferId": { "shape": "TransferId" }
+      }
+    },
+    "DescribeTransferResponse": {
+      "type": "structure",
+      "members": {
+        "transfer": { "shape": "Transfer" }
+      }
+    },
+    "DiodeResourceArn": {
+      "type": "string",
+      "max": 128,
+      "min": 0,
+      "pattern": "^arn:aws((-iso(-b)?)|-us-gov)?:diode:us-((iso(b)?-)?east|gov-west)?-[0-9]:[0-9]{12}:(account-mapping|transfer)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "sensitive": true
+    },
+    "FileSizeInBytes": { "type": "long" },
+    "GetAccountMappingPinRequest": {
+      "type": "structure",
+      "required": ["mappingId"],
+      "members": {
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "GetAccountMappingPinResponse": {
+      "type": "structure",
+      "members": {
+        "mappingPin": { "shape": "MappingPin" }
+      }
+    },
+    "GetTransferManifestRequest": {
+      "type": "structure",
+      "required": ["transferManifestId", "mappingId"],
+      "members": {
+        "transferManifestId": { "shape": "TransferManifestId" },
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "GetTransferManifestResponse": {
+      "type": "structure",
+      "members": {
+        "transferManifestId": { "shape": "TransferManifestId" },
+        "manifestBody": { "shape": "ManifestBody" }
+      }
+    },
+    "HashType": {
+      "type": "string",
+      "enum": ["sha256", "sha384", "sha512"]
+    },
+    "IncludeS3ObjectTagsBoolean": { "type": "boolean" },
+    "InvalidRequestException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "ListAccountMappingsMaxResultsInteger": { "type": "integer" },
+    "ListAccountMappingsRequest": {
+      "type": "structure",
+      "members": {
+        "filter": { "shape": "AccountMappingFilter" },
+        "nextToken": { "shape": "String" },
+        "maxResults": {
+          "shape": "ListAccountMappingsMaxResultsInteger",
+          "box": true
+        }
+      }
+    },
+    "ListAccountMappingsResponse": {
+      "type": "structure",
+      "members": {
+        "accountMappingList": { "shape": "AccountMappingList" },
+        "nextToken": { "shape": "String" }
+      }
+    },
+    "ListTagsRequest": {
+      "type": "structure",
+      "required": ["resource"],
+      "members": {
+        "resource": { "shape": "DiodeResourceArn" }
+      }
+    },
+    "ListTagsResponse": {
+      "type": "structure",
+      "members": {
+        "tags": { "shape": "TagKeyValueMap" }
+      }
+    },
+    "ListTransfersMaxResultsInteger": { "type": "integer" },
+    "ListTransfersRequest": {
+      "type": "structure",
+      "members": {
+        "filter": { "shape": "TransferFilter" },
+        "nextToken": { "shape": "String" },
+        "maxResults": {
+          "shape": "ListTransfersMaxResultsInteger",
+          "box": true
+        }
+      }
+    },
+    "ListTransfersResponse": {
+      "type": "structure",
+      "members": {
+        "transferList": { "shape": "TransferList" },
+        "nextToken": { "shape": "String" }
+      }
+    },
+    "ManifestBody": {
+      "type": "string",
+      "max": 99999,
+      "min": 0,
+      "pattern": "^(\\S.*\\S|\\S)$"
+    },
+    "ManifestFormat": {
+      "type": "string",
+      "enum": ["TDF"]
+    },
+    "ManifestTemplate": {
+      "type": "string",
+      "max": 99999,
+      "min": 0
+    },
+    "MappingAlias": {
+      "type": "string",
+      "max": 100,
+      "min": 0,
+      "pattern": "^$|^(\\S.*\\S|\\S)$"
+    },
+    "MappingFailedException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "MappingId": {
+      "type": "string",
+      "max": 36,
+      "min": 0,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "MappingPin": {
+      "type": "string",
+      "max": 6,
+      "min": 0,
+      "pattern": "^[0-9]{6}$",
+      "sensitive": true
+    },
+    "MappingRoleArn": {
+      "type": "string",
+      "max": 128,
+      "min": 0,
+      "pattern": "^arn:aws((-iso(-b)?)?|-us-gov)?:iam::[0-9]{12}:role/.+$"
+    },
+    "MappingStatus": {
+      "type": "string",
+      "enum": [
+        "PENDING_ACCEPTANCE",
+        "ACCEPTED",
+        "DELETED",
+        "REJECTED",
+        "DEACTIVATED",
+        "FAILED",
+        "EXPIRED"
+      ]
+    },
+    "NonBlankString": {
+      "type": "string",
+      "max": 9999,
+      "min": 0,
+      "pattern": "^(\\S.*\\S|\\S)$"
+    },
+    "OperationInvalidInRegionException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "RejectAccountMappingRequest": {
+      "type": "structure",
+      "required": ["mappingId"],
+      "members": {
+        "mappingId": { "shape": "MappingId" }
+      }
+    },
+    "RejectAccountMappingResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "RemoteAccountId": {
+      "type": "string",
+      "max": 12,
+      "min": 12,
+      "pattern": "^[0-9]{12}$"
+    },
+    "RemoteAccountReceiving": { "type": "boolean" },
+    "ResourceAlreadyExistsException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "ResourceLimitExceededException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "ResourceNotFoundException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "S3BucketName": {
+      "type": "string",
+      "max": 256,
+      "min": 0,
+      "pattern": "^[\\w.-]{1,255}$"
+    },
+    "S3Key": {
+      "type": "string",
+      "max": 905,
+      "min": 1,
+      "pattern": "^(\\S.*\\S|\\S)$"
+    },
+    "SenderAccountId": {
+      "type": "string",
+      "max": 12,
+      "min": 12,
+      "pattern": "^[0-9]{12}$"
+    },
+    "StatusReason": {
+      "type": "string",
+      "max": 9999,
+      "min": 0,
+      "pattern": "^(\\S.*\\S|\\S)$"
+    },
+    "String": {
+      "type": "string",
+      "max": 9999,
+      "min": 0,
+      "pattern": "^$|^(\\S.*\\S|\\S)$"
+    },
+    "TagKey": {
+      "type": "string",
+      "max": 128,
+      "min": 1,
+      "pattern": "^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
+    },
+    "TagKeyList": {
+      "type": "list",
+      "member": { "shape": "TagKey" }
+    },
+    "TagKeyValueMap": {
+      "type": "map",
+      "key": { "shape": "TagKey" },
+      "value": { "shape": "TagValue" }
+    },
+    "TagResourceRequest": {
+      "type": "structure",
+      "required": ["resource", "tags"],
+      "members": {
+        "resource": { "shape": "DiodeResourceArn" },
+        "tags": { "shape": "TagKeyValueMap" }
+      }
+    },
+    "TagResourceResponse": {
+      "type": "structure",
+      "members": {
+        "tags": { "shape": "TagKeyValueMap" }
+      }
+    },
+    "TagValue": {
+      "type": "string",
+      "max": 256,
+      "min": 0,
+      "pattern": "^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-@]*)$"
+    },
+    "Timestamp": { "type": "timestamp" },
+    "Transfer": {
+      "type": "structure",
+      "members": {
+        "transferId": { "shape": "TransferId" },
+        "transferArn": { "shape": "DiodeResourceArn" },
+        "mappingArn": { "shape": "DiodeResourceArn" },
+        "mappingId": { "shape": "MappingId" },
+        "s3Uri": { "shape": "NonBlankString" },
+        "status": { "shape": "TransferStatus" },
+        "dateSent": { "shape": "Timestamp" },
+        "dateReceived": { "shape": "Timestamp" },
+        "description": { "shape": "TransferDescription" },
+        "errorMessage": { "shape": "String" },
+        "fileSizeInBytes": { "shape": "FileSizeInBytes" }
+      }
+    },
+    "TransferDescription": {
+      "type": "string",
+      "max": 100,
+      "min": 0,
+      "pattern": "^(\\S.*\\S|\\S)$"
+    },
+    "TransferFilter": {
+      "type": "structure",
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "s3Uri": { "shape": "NonBlankString" },
+        "status": { "shape": "TransferStatus" },
+        "dateSent": { "shape": "DateRange" },
+        "dateReceived": { "shape": "DateRange" },
+        "description": { "shape": "TransferDescription" }
+      }
+    },
+    "TransferId": {
+      "type": "string",
+      "max": 36,
+      "min": 0,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "TransferList": {
+      "type": "list",
+      "member": { "shape": "Transfer" }
+    },
+    "TransferManifestId": {
+      "type": "string",
+      "max": 36,
+      "min": 0,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "TransferManifestStatus": {
+      "type": "string",
+      "enum": ["CREATE_IN_PROGRESS", "CREATE_COMPLETE", "CREATE_FAILED"]
+    },
+    "TransferProfile": {
+      "type": "string",
+      "max": 54,
+      "min": 5,
+      "pattern": "^(TSABI_CDS|NCDSMO_CDS_1|CDS_([0-9A-Z_]{1,50}))$"
+    },
+    "TransferStatus": {
+      "type": "string",
+      "enum": ["IN_TRANSIT", "FAILED", "SUCCEEDED", "REJECTED"]
+    },
+    "TransientFailureException": {
+      "type": "structure",
+      "required": ["message"],
+      "members": {
+        "message": { "shape": "NonBlankString" }
+      },
+      "exception": true
+    },
+    "UntagResourceRequest": {
+      "type": "structure",
+      "required": ["resource", "tagKeys"],
+      "members": {
+        "resource": { "shape": "DiodeResourceArn" },
+        "tagKeys": { "shape": "TagKeyList" }
+      }
+    },
+    "UntagResourceResponse": {
+      "type": "structure",
+      "members": {
+        "tagKeys": { "shape": "TagKeyList" }
+      }
+    },
+    "UpdateAccountMappingAliasRequest": {
+      "type": "structure",
+      "required": ["mappingId", "alias"],
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "alias": { "shape": "MappingAlias" }
+      }
+    },
+    "UpdateAccountMappingAliasResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "UpdateAccountMappingDeliveryS3BucketNameRequest": {
+      "type": "structure",
+      "required": ["mappingId", "deliveryS3BucketName"],
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "deliveryS3BucketName": { "shape": "S3BucketName" }
+      }
+    },
+    "UpdateAccountMappingDeliveryS3BucketNameResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    },
+    "UpdateAccountMappingRoleArnRequest": {
+      "type": "structure",
+      "required": ["mappingId", "roleArn"],
+      "members": {
+        "mappingId": { "shape": "MappingId" },
+        "roleArn": { "shape": "MappingRoleArn" }
+      }
+    },
+    "UpdateAccountMappingRoleArnResponse": {
+      "type": "structure",
+      "members": {
+        "accountMapping": { "shape": "AccountMapping" }
+      }
+    }
+  }
+}
