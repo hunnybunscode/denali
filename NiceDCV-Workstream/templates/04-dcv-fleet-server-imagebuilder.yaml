@@ -1,0 +1,954 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates DCV Fleet Server ImageBuilder Pipeline Stack
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - EmailEndPoint
+
+      - Label:
+          default: Image Builder
+        Parameters:
+          - SemVer
+          - ParentImage
+          - ParentImageInstanceType
+          - VpcId
+          - SubnetId
+          - OutboundCidrIp
+          - ProxyServerAddress
+          - NoProxyList
+          - DcvResourceBucket
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
+  EmailEndPoint:
+    Type: String
+    Description: "The email address at which to receive notifications for ImageBuilder events"
+    AllowedPattern: ^$|^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be left blank or a valid email address
+
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the DCV Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+
+  ParentImage:
+    Type: String
+    Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+    AllowedPattern: ^(arn:(aws|aws-us-gov|aws-iso-b|aws-iso):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid Image ARN or AMI ID
+
+  ParentImageInstanceType:
+    Type: String
+    Description: The instance type to use for the parent image.
+    Default: g6.xlarge
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a VPC
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet
+
+  OutboundCidrIp:
+    Type: String
+    Description: Outbound CIDR block for ImageBuilder instances
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  NoProxyList:
+    Type: String
+    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
+    Default: 169.254.169.254,vi2e.io,s3.us-gov-west-1.amazonaws.com,secretsmanager.us-gov-west-1.amazonaws.com,ssm.us-gov-west-1.amazonaws.com,ssmmessages.us-gov-west-1.amazonaws.com,ec2messages.us-gov-west-1.amazonaws.com
+  
+  DcvResourceBucket:
+    Type: String
+    Description: The name of the S3 bucket where the DCV Resources are located
+    AllowedPattern: ^$|^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    ConstraintDescription: Bucket name can include numbers, lowercase letters, uppercase letters, and hyphens. Or blank
+
+Conditions:
+  HasDcvResourceBucket: !Not [!Equals [!Ref DcvResourceBucket, ""]]
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
+
+Resources:
+  DcvFleetServerPipelineKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for DCV Server Pipeline solution
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+
+  DcvFleetServerBaseComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-fleet-server-base-component
+      Description: Prepares the image for dcv server pipeline
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt DcvFleetServerPipelineKmsKey.Arn
+      Data: !Sub |-
+        name: DCVServerInstallBuildDocument
+        description: This is a build document for NICE DCV Server and Session Manager Agent installation.
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: DetermineSystemInfo
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting system information detection" | tee -a "$LOG_PATH"
+
+                      # Retrieve System Info
+                      read -r system version <<<$(echo $(cat /etc/os-release | grep "^ID=\|^VERSION_ID=" | sort | cut -d"=" -f2 | tr -d "\"" | tr '[:upper:]' '[:lower:]'))
+                      major_version=$(echo "$version" | cut -d. -f1)
+                      arch="$(arch)"
+
+                      echo "System: $system" | tee -a "$LOG_PATH"
+                      echo "Version: $version" | tee -a "$LOG_PATH"
+                      echo "Major Version: $major_version" | tee -a "$LOG_PATH"
+                      echo "Architecture: $arch" | tee -a "$LOG_PATH"
+
+                      # Determine package type and manager
+                      case $system in
+                          amzn )
+                              if [ "$major_version" = 2 ]; then
+                                  package_type="el7"
+                                  package_manager="yum"
+                              elif [ "$major_version" = 2023 ]; then
+                                  package_type="el9"
+                                  package_manager="dnf"
+                              fi
+                              ;;
+                          centos|rhel )
+                              if [[ "$major_version" =~ ^(7|8|9) ]]; then
+                                  package_type="el$major_version"
+                                  if [[ "$major_version" =~ ^(8|9) ]]; then
+                                      package_manager="dnf"
+                                  else
+                                      package_manager="yum"
+                                  fi
+                              fi
+                              ;;
+                          * )
+                              echo "Error: Unsupported system: $system" | tee -a "$LOG_PATH"
+                              exit 1
+                              ;;
+                      esac
+
+                      # Export variables for other steps
+                      cat > /etc/profile.d/dcv-vars.sh << EOF
+                      export major_version=$major_version
+                      export arch=$arch
+                      export package_type=$package_type
+                      export package_manager=$package_manager
+                      EOF
+
+                      chmod +x /etc/profile.d/dcv-vars.sh
+                      source /etc/profile.d/dcv-vars.sh
+
+                      echo "System information detection completed successfully" | tee -a "$LOG_PATH"
+
+              - name: InstallPrerequisites
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      # Source the system variables
+                      source /etc/profile.d/dcv-vars.sh
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting prerequisites installation" | tee -a "$LOG_PATH"
+
+                      # Update system
+                      echo "Updating system packages..." | tee -a "$LOG_PATH"
+                      $package_manager update -y
+
+                      # Remove the RHEL packages and Update SubscriptionManager values
+                      if [ "${AWS::Partition}" = "aws-iso-b" ] || [ "${AWS::Partition}" = "aws-iso" ]; then
+                          if [ -f /etc/yum/pluginconf.d/subscription-manager.conf ]; then
+                              echo "Updating subscription manager configuration..." | tee -a "$LOG_PATH"
+                              sed -i 's/enabled=1/enabled=0/g' /etc/yum/pluginconf.d/subscription-manager.conf
+                          fi
+                          echo "Removing RHEL repositories..." | tee -a "$LOG_PATH"
+                          rm -rf /etc/yum.repos.d/r* /etc/yum.repos.d/e*
+                      fi
+
+                      # Install required packages
+                      echo $(date -u) "Installing required packages..." | tee -a "$LOG_PATH"
+                      $package_manager install -y zip curl wget
+
+                      # Install AWS CLI
+                      echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+                      # Update PATH and create necessary directories
+                      export PATH=/usr/local/bin:/usr/bin:$PATH
+                      mkdir -p /usr/local/bin
+
+                      # Create temporary directory
+                      TEMP_DIR=$(mktemp -d)
+                      cd "$TEMP_DIR" || exit 1
+
+                      if [ "${AWS::Partition}" = "aws-iso-b" ] || [ "${AWS::Partition}" = "aws-iso" ]; then
+                          if [ "${AWS::Partition}" = "aws-iso-b" ]; then
+                              aws_region=lck
+                          else
+                              aws_region=dca
+                          fi
+                          
+                          echo "Downloading AWS CLI for high-side environment..." | tee -a "$LOG_PATH"
+                          if ! curl -o awscliv2.zip https://aws-sdk-common-infra-"$aws_region"-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/"$arch"/awscli-exe-linux-"$arch".zip --no-verify-ssl; then
+                              echo "Failed to download AWS CLI from high-side source" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      else
+                          echo "Downloading AWS CLI for commercial/GovCloud environment..." | tee -a "$LOG_PATH"
+                          if [ "$arch" = "x86_64" ]; then
+                              curl -o awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+                          else
+                              curl -o awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip
+                          fi
+                      fi
+
+                      echo "Unzipping awscliv2.zip..." | tee -a "$LOG_PATH"
+                      if ! unzip -q -o awscliv2.zip; then
+                          echo "Failed to unzip AWS CLI package" | tee -a "$LOG_PATH"
+                          exit 1
+                      fi
+
+                      echo "Installing AWS CLI..." | tee -a "$LOG_PATH"
+                      BINARY=/usr/local/aws-cli/v2/current/bin/aws
+                      if [ -x "$BINARY" ]; then
+                          echo "Updating existing AWS CLI installation..." | tee -a "$LOG_PATH"
+                          if ! ./aws/install --update --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; then
+                              echo "Failed to update AWS CLI" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      else
+                          echo "Performing fresh AWS CLI installation..." | tee -a "$LOG_PATH"
+                          if ! ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; then
+                              echo "Failed to install AWS CLI" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      fi
+
+                      # Clean up installation files
+                      cd /
+                      rm -rf "$TEMP_DIR"
+
+                      # Create symlinks if needed
+                      if [ ! -f "/usr/bin/aws" ]; then
+                          ln -s /usr/local/bin/aws /usr/bin/aws
+                      fi
+
+                      # Verify installation
+                      if ! command -v aws &> /dev/null; then
+                          echo "AWS CLI installation failed - command not found" | tee -a "$LOG_PATH"
+                          exit 1
+                      fi
+
+                      AWS_VERSION=$(aws --version 2>&1)
+                      echo "AWS CLI version: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+                      echo $(date -u) "AWS CLI installation completed successfully" | tee -a "$LOG_PATH"
+
+                      # Install base packages
+                      echo "Installing base packages..." | tee -a "$LOG_PATH"
+                      $package_manager install -y gdm gnome-classic-session gcc make kernel-devel vulkan-loader elfutils-libelf-devel libglvnd-devel curl wget zip tar glx-utils pulseaudio-utils kernel-devel-$(uname -r)
+
+                      # Install Desktop Environment based on OS
+                      if grep -q "Red Hat\|Rocky" /etc/os-release; then
+                          echo "Installing RHEL/Rocky Linux desktop environment..." | tee -a "$LOG_PATH"
+                          $package_manager groupinstall -y 'Server with GUI'
+                      elif grep -q "CentOS" /etc/os-release; then
+                          echo "Installing CentOS desktop environment..." | tee -a "$LOG_PATH"
+                          $package_manager groupinstall -y "GNOME Desktop"
+                      fi
+
+                      echo "Prerequisites installation completed" | tee -a "$LOG_PATH"
+
+              - name: Reboot
+                action: Reboot
+
+              - name: ConfigureXServer
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      # Source the system variables
+                      source /etc/profile.d/dcv-vars.sh
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting X Server configuration" | tee -a "$LOG_PATH"
+
+                      # Disable Wayland
+                      echo "Disabling Wayland..." | tee -a "$LOG_PATH"
+                      mkdir -p /etc/gdm
+                      cat > /etc/gdm/custom.conf << EOF
+                      [daemon]
+                      WaylandEnable=false
+                      EOF
+
+                      # Configure X Server
+                      echo "Configuring X Server..." | tee -a "$LOG_PATH"
+                      current_target=$(systemctl get-default)
+                      if [ "$current_target" != "graphical.target" ]; then
+                          systemctl set-default graphical.target
+                      fi
+
+                      # Start X Server
+                      echo "Starting X Server..." | tee -a "$LOG_PATH"
+                      sudo systemctl isolate graphical.target
+
+                      # Download NVIDIA driver
+                      if lspci | grep -i nvidia > /dev/null; then
+                          echo $(date -u) "NVIDIA GPU detected - installing driver..." | tee -a "$LOG_PATH"
+                          TEMP_DIR=$(mktemp -d)
+                          cd "$TEMP_DIR"
+
+                          # Specific NVIDIA driver version
+                          NVIDIA_DRIVER="NVIDIA-Linux-x86_64-570.133.20-grid-aws.run"
+
+                          echo $(date -u) "Downloading NVIDIA driver..." | tee -a "$LOG_PATH"
+                          if [[ "${AWS::Partition}" == "aws-iso" || "${AWS::Partition}" == "aws-iso-b" ]]; then
+                              echo $(date -u) "Running in Secret/Top Secret region, using S3 bucket for resources..." | tee -a "$LOG_PATH"
+                              RESOURCE_PATH="s3://${DcvResourceBucket}"
+                              aws s3 cp "$RESOURCE_PATH/ec2-linux-nvidia-drivers/$NVIDIA_DRIVER" . --no-verify-ssl
+                          else
+                              echo "Running in commercial/GovCloud region, using amazon managed resources..." | tee -a "$LOG_PATH"
+                              aws s3 cp --recursive s3://ec2-linux-nvidia-drivers/latest/ .
+                          fi
+
+                          # Install driver
+                          echo $(date -u) "Installing NVIDIA driver..." | tee -a "$LOG_PATH"
+                          $package_manager update -y
+                          chmod +x NVIDIA-Linux-x86_64*.run
+                          ./NVIDIA-Linux-x86_64*.run --silent --accept-license --no-questions --ui=none --install-libglvnd
+
+                          # Verify installation
+                          echo $(date -u) "Verifying NVIDIA driver installation..." | tee -a "$LOG_PATH"
+                          if ! nvidia-smi; then
+                              echo $(date -u) "NVIDIA driver verification failed" | tee -a "$LOG_PATH"
+                          fi
+
+                          # Clean up
+                          cd /
+                          rm -rf "$TEMP_DIR"
+
+                          echo $(date -u) "NVIDIA driver installation completed successfully" | tee -a "$LOG_PATH"
+                      else
+                          echo "No NVIDIA GPU detected - configuring XDummy driver..." | tee -a "$LOG_PATH"
+
+                          # Install XDummy driver
+                          $package_manager install -y xorg-x11-drv-dummy
+
+                          # Configure XDummy
+                          sudo tee /etc/X11/xorg.conf > /dev/null << EOF
+                      Section "Device"
+                          Identifier "DummyDevice"
+                          Driver "dummy"
+                          Option "UseEDID" "false"
+                          VideoRam 512000
+                      EndSection
+
+                      Section "Monitor"
+                          Identifier "DummyMonitor"
+                          HorizSync   5.0 - 1000.0
+                          VertRefresh 5.0 - 200.0
+                          Option "ReducedBlanking"
+                      EndSection
+
+                      Section "Screen"
+                          Identifier "DummyScreen"
+                          Device "DummyDevice"
+                          Monitor "DummyMonitor"
+                          DefaultDepth 24
+                          SubSection "Display"
+                              Viewport 0 0
+                              Depth 24
+                              Virtual 4096 2160
+                          EndSubSection
+                      EndSection
+                      EOF
+
+                          # Verify OpenGL rendering
+                          echo "Verifying OpenGL rendering..." | tee -a "$LOG_PATH"
+                          XAUTH=$(ps aux | grep "X.*\-auth" | grep -v Xdcv | grep -v grep | sed -n 's/.*-auth \([^ ]\+\).*/\1/p')
+                          if [ -n "$XAUTH" ]; then
+                              OPENGL_INFO=$(DISPLAY=:0 XAUTHORITY=$XAUTH glxinfo | grep -i "opengl.*version")
+                              echo "$OPENGL_INFO" | tee -a "$LOG_PATH"
+                          else
+                              echo "Warning: Could not find X authority file" | tee -a "$LOG_PATH"
+                          fi
+                      fi
+
+                      echo "X Server configuration completed" | tee -a "$LOG_PATH"
+
+  DcvFleetServerMainComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-fleet-server-main-component
+      Description: DCV Server and Session Manager installation
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt DcvFleetServerPipelineKmsKey.Arn
+      Data: !Sub |-
+        name: DCVServerInstall
+        description: DCV Server and Session Manager Agent installation
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: InstallDCVServer
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      # Source the system variables
+                      source /etc/profile.d/dcv-vars.sh
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting DCV Server installation" | tee -a "$LOG_PATH"
+
+                      # Download and extract DCV package
+                      echo "Downloading DCV packages..." | tee -a "$LOG_PATH"
+                      cd /tmp
+
+                      if [[ "${AWS::Partition}" == "aws-iso" || "${AWS::Partition}" == "aws-iso-b" ]]; then
+                          echo "Running in Secret/Top Secret region, using S3 bucket for resources..." | tee -a "$LOG_PATH"
+                          DCV_VERSION="2024.0"
+                          DCV_BUILD="17979"
+                          RESOURCE_PATH="s3://${DcvResourceBucket}"
+                          aws s3 cp "$RESOURCE_PATH/$DCV_VERSION/Servers/nice-dcv-$DCV_BUILD-$package_type-$arch.tgz" nice-dcv-$DCV_VERSION-$DCV_BUILD-$package_type-$arch.tgz --no-verify-ssl
+
+                      else
+                          echo "Running in Commercial/GovCloud region, using CloudFront for resources..." | tee -a "$LOG_PATH"
+                          DCV_VERSION="2024.0"
+                          DCV_BUILD="19030"
+                          CLOUDFRONT_PREFIX="https://d1uj6qtbmh3dt5.cloudfront.net"
+                          echo "Using CloudFront for GPG key..." | tee -a "$LOG_PATH"
+                          rpm --import $CLOUDFRONT_PREFIX/NICE-GPG-KEY
+                          echo "Downloading DCV Server packages..." | tee -a "$LOG_PATH"
+                          wget "$CLOUDFRONT_PREFIX/$DCV_VERSION/Servers/nice-dcv-2024.0-19030-$package_type-$arch.tgz"
+                      fi
+
+                      echo "Extracting DCV Server packages..." | tee -a "$LOG_PATH"
+                      tar -xzf "nice-dcv-$DCV_VERSION-$DCV_BUILD-$package_type-$arch.tgz"
+                      cd "nice-dcv-$DCV_VERSION-$DCV_BUILD-$package_type-$arch"
+
+                      # Install DCV Server packages
+                      echo "Installing DCV server packages..." | tee -a "$LOG_PATH"
+                      $package_manager install -y nice-dcv-server-$DCV_VERSION*.rpm --nogpgcheck
+                      $package_manager install -y nice-dcv-web-viewer-$DCV_VERSION*.rpm --nogpgcheck
+                      $package_manager install -y nice-xdcv-$DCV_VERSION*.rpm --nogpgcheck
+
+                      # Install GL packages if on x86_64
+                      if [ "$arch" = "x86_64" ]; then
+                          echo "Installing DCV GL packages..." | tee -a "$LOG_PATH"
+                          $package_manager install -y nice-dcv-gl-$DCV_VERSION*.rpm --nogpgcheck
+                          $package_manager install -y nice-dcv-gltest-$DCV_VERSION*.rpm --nogpgcheck
+                      fi
+
+                      # Install external authenticator
+                      echo "Installing external authenticator..." | tee -a "$LOG_PATH"
+                      $package_manager install -y nice-dcv-simple-external-authenticator-$DCV_VERSION*.rpm --nogpgcheck
+
+                      # Install EPEL and USB support
+                      echo "Installing USB support..." | tee -a "$LOG_PATH"
+                      # Enable EPEL repository based on major version
+                      $package_manager install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-$major_version.noarch.rpm && /usr/bin/crb enable && $package_manager config-manager --set-enabled codeready-builder-for-rhel-$major_version-$(arch)-rpms && $package_manager clean all && $package_manager makecache && $package_manager install -y dkms
+                      $package_manager clean all -y
+                      $package_manager makecache -y
+                      $package_manager install -y dkms
+                      # dcvusbdriverinstaller --quiet
+                      $package_manager install -y pulseaudio-utils
+
+
+                      # Clean up downloaded files
+                      cd /tmp
+                      rm -rf "nice-dcv-$DCV_VERSION-$DCV_BUILD-$package_type-$arch.tgz" "nice-dcv-$DCV_VERSION-$DCV_BUILD-$package_type-$arch"
+
+                      # Configure DCV Server
+                      echo "Configuring DCV server..." | tee -a "$LOG_PATH"
+
+                      # Create or modify dcv.conf
+                      sed -i -e "s/^#enable-quic-frontend=true/enable-quic-frontend=true/" \
+                          -e "/^\[connectivity\]/a web-port=8443\nquic-port=8443" \
+                          -e "/^\[display\]/a web-client-max-head-resolution=(4096, 2160)" \
+                          -e "/^\[session-management\/automatic-console-session\]/a owner=\"ec2-user\"\nstorage-root=\"%home%\"\nmax-concurrent-clients = -1" \
+                          -e '/^\[security\]/a authentication="system"\nadministrators=["dcvsmagent", "root", "ec2-user"]\nca-file="/etc/dcv-session-manager-agent/broker_cert.pem"\nno-tls-strict=true' \
+                          -e '/^\[log\]/a level = "DEBUG"' /etc/dcv/dcv.conf
+
+                      # Disable and stop firewalld
+                      echo "Disabling firewalld..." | sudo tee -a "$LOG_PATH"
+                      sudo systemctl disable firewalld
+                      sudo systemctl stop firewalld
+                      echo "Firewalld has been disabled" | sudo tee -a "$LOG_PATH"
+
+                      # Start and enable DCV service
+                      echo "Starting DCV service..." | tee -a "$LOG_PATH"
+                      systemctl enable dcvserver
+                      systemctl start dcvserver
+
+                      # Verify DCV service
+                      if systemctl is-active --quiet dcvserver; then
+                          echo "DCV server is running successfully" | tee -a "$LOG_PATH"
+                      else
+                          echo "ERROR: DCV server failed to start" | tee -a "$LOG_PATH"
+                          systemctl status dcvserver
+                      fi
+
+              - name: InstallSessionManagerAgent
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      # Source the system variables
+                      source /etc/profile.d/dcv-vars.sh
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Session Manager Agent installation" | tee -a "$LOG_PATH"
+
+                      # Download and install session manager agent
+                      DCV_VERSION="2024.0"
+                      echo "Downloading session manager agent..." | tee -a "$LOG_PATH"
+                      cd /tmp
+
+                      if [[ "${AWS::Partition}" == "aws-iso" || "${AWS::Partition}" == "aws-iso-b" ]]; then
+                          echo "Running in Secret/Top Secret region, using S3 bucket for resources..." | tee -a "$LOG_PATH"
+                          RESOURCE_PATH="s3://${DcvResourceBucket}"
+                          aws s3 cp "$RESOURCE_PATH/$DCV_VERSION/SessionManagerAgents/nice-dcv-session-manager-agent-$DCV_VERSION.781-1.$package_type.$arch.rpm" nice-dcv-session-manager-agent-$DCV_VERSION.781-1.$package_type.$arch.rpm --no-verify-ssl
+                      else
+                          echo "Running in commercial/GovCloud region, using CloudFront for resources..." | tee -a "$LOG_PATH"
+                          CLOUDFRONT_PREFIX="https://d1uj6qtbmh3dt5.cloudfront.net"
+                          wget "$CLOUDFRONT_PREFIX/$DCV_VERSION/SessionManagerAgents/nice-dcv-session-manager-agent-$DCV_VERSION.781-1.$package_type.$arch.rpm"
+                      fi
+
+                      echo "Installing session manager agent..." | tee -a "$LOG_PATH"
+                      $package_manager install -y "./nice-dcv-session-manager-agent-$DCV_VERSION.781-1.$package_type.$arch.rpm"
+
+                      # Clean up
+                      rm -f "./nice-dcv-session-manager-agent-$DCV_VERSION.781-1.$package_type.$arch.rpm"
+
+                      # Start and enable service
+                      echo "Starting DCV Session Manager Agent..." | tee -a "$LOG_PATH"
+                      systemctl enable dcv-session-manager-agent
+                      systemctl start dcv-session-manager-agent
+
+                      # Verify service status
+                      if systemctl is-active --quiet dcv-session-manager-agent; then
+                          echo "Session manager agent service started successfully" | tee -a "$LOG_PATH"
+                      else
+                          echo "ERROR: Failed to start session manager agent service" | tee -a "$LOG_PATH"
+                          systemctl status dcv-session-manager-agent
+                          exit 1
+                      fi
+
+                      echo "DCV Session Manager Agent installation completed successfully" | tee -a "$LOG_PATH"
+              
+  DcvFleetServerValidationComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-fleet-server-validation-component
+      Description: Validates system state after reboot
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt DcvFleetServerPipelineKmsKey.Arn
+      Data: |-
+        name: ValidateSystem
+        description: Validates system configuration after reboot
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: Reboot
+                action: Reboot
+              - name: ValidateSystem
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+                      
+                      # Source the system variables
+                      source /etc/profile.d/dcv-vars.sh
+
+                      # Set up logging
+                      LOG_PATH="/var/log/dcv-server-install.log"
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting validation after reboot" | tee -a "$LOG_PATH"
+                      
+                      # Wait for system to fully initialize
+                      echo "Waiting for system to fully start..." | tee -a "$LOG_PATH"
+                      sleep 30
+                      
+                      # Configure for vGPU
+                      echo $(date -u) "Configuring NVIDIA GPU..." | tee -a "$LOG_PATH"
+                      nvidia-xconfig --preserve-busid --enable-all-gpus
+                      sudo rm -rf /etc/X11/XF86Config*
+                      echo $(date -u) "NVIDIA GPU configured..." | tee -a "$LOG_PATH"
+
+                      # Restart X server
+                      echo $(date -u) "Restarting X server..." | tee -a "$LOG_PATH"
+                      sudo systemctl isolate multi-user.target
+                      sudo systemctl isolate graphical.target
+                      echo $(date -u) "X server restarted successfully..." | tee -a "$LOG_PATH"
+
+                      # Check NVIDIA driver
+                      echo "Checking NVIDIA driver..." | tee -a "$LOG_PATH"
+                      if ! nvidia-smi; then
+                          echo "NVIDIA driver not working" | tee -a "$LOG_PATH"
+                      else
+                          echo "NVIDIA driver working" | tee -a "$LOG_PATH"
+                          nvidia-smi -q | head | tee -a "$LOG_PATH"
+                      fi
+                      
+                      # Check X server
+                      echo "Checking X server..." | tee -a "$LOG_PATH"
+                      if systemctl is-active --quiet graphical.target; then
+                          echo "X server running" | tee -a "$LOG_PATH"
+                      else
+                          echo "X server not running" | tee -a "$LOG_PATH"
+                      fi
+                      
+                      # Check GPU detection
+                      echo "Checking GPU detection..." | tee -a "$LOG_PATH"
+                      XAUTH=$(ps aux | grep "X.*\-auth" | grep -v grep | sed -n 's/.*-auth \([^ ]\+\).*/\1/p')
+                      if [ -n "$XAUTH" ]; then
+                          if DISPLAY=:0 XAUTHORITY=$XAUTH glxinfo > /dev/null 2>&1; then
+                              OPENGL_INFO=$(DISPLAY=:0 XAUTHORITY=$XAUTH glxinfo | grep -i "opengl.*version")
+                              echo "OpenGL info: $OPENGL_INFO" | tee -a "$LOG_PATH"
+                          else
+                              echo "Error: Unable to get OpenGL information" | tee -a "$LOG_PATH"
+                          fi
+                      else
+                          echo "Error: X authority file not found" | tee -a "$LOG_PATH"
+                      fi
+                      
+                      echo "$(date '+%Y-%m-%d %H:%M:%S') - All validation checks passed" | tee -a "$LOG_PATH"
+
+  DcvFleetServerAmiRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Name: dcv-fleet-server-ami-recipe
+      ParentImage: !Ref ParentImage
+      Version: !Ref SemVer
+      Components:
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
+        - ComponentArn: !GetAtt DcvFleetServerBaseComponent.Arn
+        - ComponentArn: !GetAtt DcvFleetServerValidationComponent.Arn
+        - ComponentArn: !GetAtt DcvFleetServerMainComponent.Arn
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -e
+
+            # cat >/etc/environment <<EOF
+            # HTTP_PROXY=${ProxyServerAddress}:3128
+            # HTTPS_PROXY=${ProxyServerAddress}:3128
+            # NO_PROXY=${NoProxyList}
+            # http_proxy=${ProxyServerAddress}:3128
+            # https_proxy=${ProxyServerAddress}:3128
+            # no_proxy=${NoProxyList}
+            # EOF
+            # source /etc/environment
+
+            # mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            # cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            # [Service]
+            # EnvironmentFile=/etc/environment
+            # PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy
+            # EOF
+
+            # cat >> /etc/yum.conf <<EOF
+            # proxy=$https_proxy
+            # EOF
+
+            # [ansible-2-for-rhel-8-rhui-rpms]
+            # name=RPMs on S3 bucket ansible-2-for-rhel-8-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/ansible-2-for-rhel-8-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhel-8-appstream-rhui-rpms]
+            # name=RPMs on S3 bucket rhel-8-appstream-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/rhel-8-appstream-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhel-8-baseos-rhui-rpms]
+            # name=RPMs on S3 bucket rhel-8-baseos-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/rhel-8-baseos-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhui-client-config-server-8]
+            # name=RPMs on S3 bucket rhui-client-config-server-8 - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/rhui-client-config-server-8
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [epel-modular]
+            # name=RPMs on S3 bucket epel-modular - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/epel-modular
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [epel]
+            # name=RPMs on S3 bucket epel - $basearch
+            # baseurl=https://vi2e-yum.s3-us-gov-west-1.amazonaws.com/RHEL8/epel
+            # enabled=1
+            # gpgcheck=1
+
+            # Install SSM Agent
+            arch=$(arch)
+            if [ "$arch" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm --nogpgcheck
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm --nogpgcheck
+            fi
+
+            # Start SSM Agent
+            systemctl daemon-reload
+            systemctl restart amazon-ssm-agent
+
+  DcvFleetServerAmiDistConfig:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: dcv-fleet-server-ami-dist-config
+      Distributions:
+        - Region: !Ref AWS::Region
+          AmiDistributionConfiguration:
+            Name: dcv-server-ami-{{ imagebuilder:buildDate }}
+            Description: NICE DCV AMI
+            TargetAccountIds:
+              - !Ref AWS::AccountId
+
+  DcvFleetServerAmiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}_dcv-fleet-server-ami-role
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: !Sub ${IamPrefix}-dcv-session-manager-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+        - PolicyName: NvidiaDriverAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::ec2-linux-nvidia-drivers
+                  - !Sub arn:${AWS::Partition}:s3:::ec2-linux-nvidia-drivers/*
+        - !If
+          - HasDcvResourceBucket
+          - PolicyName: CustomBucketAccess
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}
+                    - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}/*
+          - !Ref AWS::NoValue
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowKMS
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !GetAtt DcvFleetServerPipelineKmsKey.Arn
+
+  DcvFleetServerAmiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-dcv-fleet-server-ami-instance-profile
+      Roles:
+        - !Ref DcvFleetServerAmiRole
+
+  DcvAmiCreationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG default ports for DCV
+      SecurityGroupEgress:
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow outbound traffic on 443
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          Description: Allow outbound traffic on 3128
+      VpcId: !Ref VpcId
+
+  DcvFleetServerAmiInfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      InstanceProfileName: !Ref DcvFleetServerAmiInstanceProfile
+
+      InstanceTypes:
+        - !Ref ParentImageInstanceType
+      Name: dcv-fleet-server-ami-infra-config
+      SecurityGroupIds:
+        - !GetAtt DcvAmiCreationSecurityGroup.GroupId
+      SubnetId: !Ref SubnetId
+
+  DcvFleetServerAmiPipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: dcv-fleet-server-ami
+      ImageRecipeArn: !GetAtt DcvFleetServerAmiRecipe.Arn
+      InfrastructureConfigurationArn: !GetAtt DcvFleetServerAmiInfraConfig.Arn
+      DistributionConfigurationArn: !GetAtt DcvFleetServerAmiDistConfig.Arn
+
+  DcvFleetServerAmiNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: DCV Connection Gateway AMI Creation Notification Topic
+      TopicName: dcv-fleet-server-ami-notification-topic
+      KmsMasterKeyId: alias/aws/sns
+
+  DcvFleetServerAmiNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref DcvFleetServerAmiNotificationTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
