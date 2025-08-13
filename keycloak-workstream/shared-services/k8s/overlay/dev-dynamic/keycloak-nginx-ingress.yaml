@@ -7,10 +7,10 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     
-    # mTLS Configuration using DoD certificates from hardening process
-    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
-    nginx.ingress.kubernetes.io/auth-tls-secret: "keycloak/dod-ca-bundle"
-    nginx.ingress.kubernetes.io/auth-tls-verify-depth: "3"
+    # mTLS Configuration - pass client certificates to upstream for Keycloak validation
+    # Note: Not restricting to specific CA bundle to allow PIV, ECA, and other gov certs
+    # Keycloak handles certificate validation internally
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "optional"
     nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true"
     
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"

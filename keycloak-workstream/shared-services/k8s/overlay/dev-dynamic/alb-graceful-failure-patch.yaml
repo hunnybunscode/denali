@@ -1,0 +1,24 @@
+# This file patches the existing ALB ingresses from k8s/base/keycloak/
+# to make them fail gracefully when ALB controller is unavailable (high-side)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-keycloak-app
+  namespace: keycloak
+  annotations:
+    # Patch: Add graceful failure annotation for high-side deployment
+    kubernetes.io/ingress.class: "alb"
+spec:
+  ingressClassName: alb
+---
+# Patch for the x509 mTLS ALB ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-keycloak-app-x509
+  namespace: keycloak
+  annotations:
+    # Patch: Add graceful failure annotation for high-side deployment
+    kubernetes.io/ingress.class: "alb"
+spec:
+  ingressClassName: alb

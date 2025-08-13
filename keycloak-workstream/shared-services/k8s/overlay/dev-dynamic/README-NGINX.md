@@ -14,17 +14,15 @@ The dev-dynamic overlay now automatically:
    kubectl apply -k k8s/overlay/dev-dynamic/
    ```
 
-2. **Create DoD CA secret for mTLS**:
-   ```bash
-   ./scripts/create-dod-ca-secret.sh
-   ```
+2. **Certificate validation**: Handled automatically by Keycloak's internal trust store
 
 ## What This Provides
 
 ✅ **Dual ingress support** (ALB + NGINX)  
 ✅ **Automatic high-side detection** (ALB fails gracefully)  
-✅ **DoD certificate mTLS** via NGINX  
-✅ **No manual configuration** required  
+✅ **Certificate pass-through** to Keycloak for validation  
+✅ **Supports all gov certificates** (PIV, ECA, DoD CAC)  
+✅ **No manual certificate configuration** required  
 
 ## DNS Configuration
 
