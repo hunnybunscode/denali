@@ -1,0 +1,1203 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates DCV Access Console ImageBuilder Pipeline Stack
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - EmailEndPoint
+
+      - Label:
+          default: Image Builder
+        Parameters:
+          - SemVer
+          - ParentImage
+          - ParentImageInstanceType
+          - VpcId
+          - SubnetId
+          - OutboundCidrIp
+          - ProxyServerAddress
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+    Default: arn:aws-us-gov:iam::aws:policy/AdministratorAccess
+
+  EmailEndPoint:
+    Type: String
+    Description: "The email address at which to receive notifications for ImageBuilder events"
+    AllowedPattern: ^$|^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be left blank or a valid email address
+
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the DCV Image Recipe and other associated resources. Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+
+  ParentImage:
+    Type: String
+    Description: The parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+    AllowedPattern: ^(arn:(aws|aws-us-gov|aws-iso-b|aws-iso):ec2:\S{1,30}::image\/)?ami-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid Image ARN or AMI ID
+    Default: ami-030d1cf861950bc2b
+
+  ParentImageInstanceType:
+    Type: String
+    Description: The instance type to use for the parent image.
+    Default: g6.xlarge
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a VPC
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The ID of the subnet in which EC2 instances launched by the image pipeline will run.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet
+
+  OutboundCidrIp:
+    Type: String
+    Description: Outbound CIDR block for ImageBuilder instances
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  DcvResourceBucket:
+    Type: String
+    Description: The name of the S3 bucket where the DCV Resources are located
+    AllowedPattern: ^$|^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    ConstraintDescription: Bucket name can include numbers, lowercase letters, uppercase letters, and hyphens. Or blank
+
+Conditions:
+  HasDcvResourceBucket: !Not [!Equals [!Ref DcvResourceBucket, ""]]
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
+Resources:
+  DcvAccessConsolePipelineKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for DCV Server Pipeline solution
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+
+  DcvAccessConsoleBaseComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-access-console-base-component
+      Description: Prepares the image for dcv access console
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt DcvAccessConsolePipelineKmsKey.Arn
+      Data: !Sub |
+        name: DCVAccessConsoleBuildDocument
+        description: This is a build document for NICE DCV Access Console installation.
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: InstallAccessConsolePackages
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      LOG_PATH="/var/log/dcv-access-console-install.log"
+                      LOG_DIR=$(dirname "$LOG_PATH")
+                      echo $(date -u) "Starting DCV Access Console Base Installation" | tee -a "$LOG_PATH"
+
+                      # Retrieve System Info
+                      read -r system version <<<$(echo $(cat /etc/os-release | grep "^ID=\|^VERSION_ID=" | sort | cut -d"=" -f2 | tr -d "\"" | tr '[:upper:]' '[:lower:]'))
+                      major_version=$(echo "$version" | cut -d. -f1)
+                      arch="$(arch)"
+
+                      echo "System: $system" | tee -a "$LOG_PATH"
+                      echo "Version: $version" | tee -a "$LOG_PATH"
+                      echo "Major Version: $major_version" | tee -a "$LOG_PATH"
+                      echo "Architecture: $arch" | tee -a "$LOG_PATH"
+
+                      # Set up installation directory for access console packages
+                      echo $(date -u) "Creating and configuring installation directories..." | tee -a "$LOG_PATH"
+
+                      PKGS_DIR="/dcv-access-console-install"
+
+                      # Create directories and set permissions
+                      for dir in "$PKGS_DIR" "/etc/dcv-access-console"; do
+                          sudo mkdir -p "$dir" && \
+                          sudo chown root:root "$dir" && \
+                          sudo chmod 755 "$dir" || {
+                              echo $(date -u) "Error: Failed to create or configure $dir" | tee -a "$LOG_PATH"
+                              exit 1
+                          }
+                      done
+
+                      echo $(date -u) "Successfully created and configured directories" | tee -a "$LOG_PATH"
+
+                      # Determine package type and manager
+                      case $system in
+                          amzn )
+                              if [ "$major_version" = 2 ]; then
+                                  package_type="el7"
+                                  package_manager="yum"
+                              elif [ "$major_version" = 2023 ]; then
+                                  package_type="el9"
+                                  package_manager="dnf"
+                              fi
+                              ;;
+                          centos|rhel )
+                              if [[ "$major_version" =~ ^(7|8|9) ]]; then
+                                  package_type="el$major_version"
+                                  if [[ "$major_version" =~ ^(8|9) ]]; then
+                                      package_manager="dnf"
+                                  else
+                                      package_manager="yum"
+                                  fi
+                              fi
+                              ;;
+                          * )
+                              echo "Error: Unsupported system: $system" | tee -a "$LOG_PATH"
+                              exit 1
+                              ;;
+                      esac
+
+                      if [ -z "$package_type" ]; then
+                          echo $(date -u) "Error: system '$system' with version '$version' is not supported for arch '$arch'" | tee -a "$LOG_PATH"
+                          exit 1
+                      fi
+
+                      echo $(date -u) "System Info detected:" | tee -a "$LOG_PATH"
+                      echo $(date -u) "OS Type: $package_type" | tee -a "$LOG_PATH"
+                      echo $(date -u) "Package Manager: $package_manager" | tee -a "$LOG_PATH"
+
+                      # Install Dependencies
+                      echo $(date -u) "Installing Dependencies...." | tee -a "$LOG_PATH"
+                      $package_manager install -y jq curl zip wget
+
+                      # Install AWS CLI
+                      echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+                      # Update PATH and create necessary directories
+                      export PATH=/usr/local/bin:/usr/bin:$PATH
+                      mkdir -p /usr/local/bin
+
+                      # Create temporary directory
+                      TEMP_DIR=$(mktemp -d)
+                      cd "$TEMP_DIR" || exit 1
+
+                      if [ "${AWS::Partition}" = "aws-iso-b" ] || [ "${AWS::Partition}" = "aws-iso" ]; then
+                          if [ "${AWS::Partition}" = "aws-iso-b" ]; then
+                              aws_region=lck
+                          else
+                              aws_region=dca
+                          fi
+                          
+                          echo "Downloading AWS CLI for high-side environment..." | tee -a "$LOG_PATH"
+                          if ! curl -o awscliv2.zip https://aws-sdk-common-infra-"$aws_region"-prod-deployment-bucket.s3.${AWS::Region}.${AWS::URLSuffix}/aws-cli-v2/linux/"$arch"/awscli-exe-linux-"$arch".zip --no-verify-ssl; then
+                              echo "Failed to download AWS CLI from high-side source" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      else
+                          echo "Downloading AWS CLI for commercial/GovCloud environment..." | tee -a "$LOG_PATH"
+                          if [ "$arch" = "x86_64" ]; then
+                              curl -o awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+                          else
+                              curl -o awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip
+                          fi
+                      fi
+
+                      echo "Unzipping awscliv2.zip..." | tee -a "$LOG_PATH"
+                      if ! unzip -q -o awscliv2.zip; then
+                          echo "Failed to unzip AWS CLI package" | tee -a "$LOG_PATH"
+                          exit 1
+                      fi
+
+                      echo "Installing AWS CLI..." | tee -a "$LOG_PATH"
+                      BINARY=/usr/local/aws-cli/v2/current/bin/aws
+                      if [ -x "$BINARY" ]; then
+                          echo "Updating existing AWS CLI installation..." | tee -a "$LOG_PATH"
+                          if ! ./aws/install --update --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; then
+                              echo "Failed to update AWS CLI" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      else
+                          echo "Performing fresh AWS CLI installation..." | tee -a "$LOG_PATH"
+                          if ! ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; then
+                              echo "Failed to install AWS CLI" | tee -a "$LOG_PATH"
+                              exit 1
+                          fi
+                      fi
+
+                      # Clean up installation files
+                      cd /
+                      rm -rf "$TEMP_DIR"
+
+                      # Create symlinks if needed
+                      if [ ! -f "/usr/bin/aws" ]; then
+                          ln -s /usr/local/bin/aws /usr/bin/aws
+                      fi
+
+                      # Verify installation
+                      if ! command -v aws &> /dev/null; then
+                          echo "AWS CLI installation failed - command not found" | tee -a "$LOG_PATH"
+                          exit 1
+                      fi
+
+                      AWS_VERSION=$(aws --version 2>&1)
+                      echo "AWS CLI version: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+                      # Install Python 3 and dependencies
+                      echo $(date -u) "Checking if Python 3 is installed." | tee -a "$LOG_PATH"
+                      if ! command -v python3 &> /dev/null; then
+                          echo $(date -u) "Python 3 not found. Installing..." | tee -a "$LOG_PATH"
+                          case $system in
+                              amzn|centos|rhel|rocky )
+                                  $package_manager install -y python3 python3-pip python3-devel gcc || {
+                                      echo $(date -u) "Error: Failed to install Python 3 and dependencies" | tee -a "$LOG_PATH"
+                                      exit 1
+                                  }
+                                  ;;
+                              ubuntu )
+                                  sudo apt-get update || {
+                                      echo $(date -u) "Error: Failed to update package lists" | tee -a "$LOG_PATH"
+                                      exit 1
+                                  }
+                                  sudo apt-get install -y python3 python3-pip python3-dev build-essential || {
+                                      echo $(date -u) "Error: Failed to install Python 3 and dependencies" | tee -a "$LOG_PATH"
+                                      exit 1
+                                  }
+                                  ;;
+                              * )
+                                  echo $(date -u) "Error: Unsupported system for Python 3 installation" | tee -a "$LOG_PATH"
+                                  exit 1
+                                  ;;
+                          esac
+                      else
+                          echo $(date -u) "Python 3 is already installed." | tee -a "$LOG_PATH"
+                      fi
+
+                      # Verify Python installation
+                      python3_version=$(python3 --version 2>&1) || {
+                          echo $(date -u) "Error: Failed to get Python version" | tee -a "$LOG_PATH"
+                          exit 1
+                      }
+                      echo $(date -u) "Python 3 installation verified: $python3_version" | tee -a "$LOG_PATH"
+
+                      # Configure SELinux if enabled
+                      if command -v sestatus >/dev/null 2>&1; then
+                          if sestatus | grep -q "SELinux status:\s*enabled"; then
+                              echo $(date -u) "SELinux is enabled. Setting httpd_can_network_connect boolean..." | tee -a "$LOG_PATH"
+                              if ! sudo setsebool -P httpd_can_network_connect 1; then
+                                  echo $(date -u) "Warning: Failed to set httpd_can_network_connect boolean. This might cause issues with network connections." | tee -a "$LOG_PATH"
+                              else
+                                  echo $(date -u) "Successfully set httpd_can_network_connect boolean." | tee -a "$LOG_PATH"
+                              fi
+                          else
+                              echo $(date -u) "SELinux is disabled. Skipping SELinux boolean setting." | tee -a "$LOG_PATH"
+                          fi
+                      else
+                          echo $(date -u) "SELinux is not installed. Skipping SELinux configuration." | tee -a "$LOG_PATH"
+                      fi
+
+                      # Download and Install DCV Access Console packages
+                      cd /$PKGS_DIR
+                      if [[ "${AWS::Partition}" == "aws-iso" || "${AWS::Partition}" == "aws-iso-b" ]]; then
+                          echo "Running in TS/Secret region, using S3 bucket for resources..." | tee -a "$LOG_PATH"
+                          RESOURCE_PATH="s3://${DcvResourceBucket}"
+
+                          # Download Packages from S3
+                          aws s3 cp "$RESOURCE_PATH/2024.0/AccessConsole/nice-dcv-access-console-2024.0-73-$package_type-aarch64.tgz" "/nice-dcv-access-console.tgz" --no-verify-ssl
+                          tar -xvzf "nice-dcv-access-console.tgz"
+                          echo $(date -u) "DCV Access Console packages downloaded" | tee -a "$LOG_PATH"
+
+                      else
+                          echo "Running in Commercial/GovCloud region, using CloudFront for resources..."
+                          CLOUDFRONT_PREFIX="https://d1uj6qtbmh3dt5.cloudfront.net"
+
+                          # Download Packages from CloudFront
+                          if [ "$package_manager" = apt ]; then
+                              curl -o "$PKGS_DIR/NICE-GPG-KEY" "$CLOUDFRONT_PREFIX/NICE-GPG-KEY"
+                              gpg --import "$PKGS_DIR/NICE-GPG-KEY"
+                              if [ $arch != "x86_64" ]; then
+                                  curl -o "nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-aarch64.tgz"
+                              else
+                                  curl -o "nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-x86_64.tgz"
+                              fi
+                          else
+                              rpm --import "$CLOUDFRONT_PREFIX/NICE-GPG-KEY"
+                              curl -o "nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-$arch.tgz"
+                          fi
+                          tar -xvzf "nice-dcv-access-console.tgz"
+                          echo $(date -u) "DCV Access Console packages downloaded" | tee -a "$LOG_PATH"
+                      fi
+
+                      echo $(date -u) "Completed DCV Access Console Base Installation" | tee -a "$LOG_PATH"
+
+  DcvAccessConsoleStigComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-session-mgr-stig-build-linux-high
+      Description: Implement STIG security controls for DCV Session Manager Instance
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      Data: !Sub |-
+        name: 'STIG-Build-Linux-High'
+        description: 'Applies the high, medium, and low severity STIG settings for Red Hat Enterprise Linux (RHEL) 8/9 instances. For more information, see https://docs.aws.amazon.com/imagebuilder/latest/userguide/toe-stig.html.'
+        schemaVersion: 1.0
+        constants:
+          - FileName:
+              type: string
+              value: 'LinuxAWSConfigureSTIG_2025_Q1_3.tgz'
+          - Level:
+              type: string
+              value: 'High'
+
+        parameters:
+          - InstallPackages:
+              type: string
+              default: "No"
+              description: "(Optional) Installs the required STIG packages for maximum compliance."
+          - SetDoDConsentBanner:
+              type: string
+              default: "No"
+              description: "(Optional) Sets the Department of Defense (DoD) consent banner to display at login."
+
+        phases:
+          - name: build
+            steps:
+              - name: ValidateInstallPackagesInput
+                action: Assert
+                onFailure: Abort
+                inputs:
+                  patternMatches: '^[Yy][eE][sS]$|^[nN][oO]$'
+                  value: '{{ InstallPackages }}'
+
+              - name: ValidateSetDoDConsentBannerInput
+                action: Assert
+                onFailure: Abort
+                inputs:
+                  patternMatches: '^[Yy][eE][sS]$|^[nN][oO]$'
+                  value: '{{ SetDoDConsentBanner }}'
+
+              - name: MakeStagingDIR
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      mktemp -d
+
+              - name: SettingStagingDirPermissions
+                action: SetFolderPermissions
+                inputs:
+                  - path: '{{build.MakeStagingDIR.outputs.stdout}}'
+                    permissions: 0700
+
+              - name: SetUpSourceFile
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - |
+                      FILE=/etc/os-release
+                      if [ -e "$FILE" ]; then
+                        . "$FILE"
+                        RELEASE="$ID$VERSION_ID"
+                      else
+                        echo "The file $FILE does not exist. Exiting."
+                        exit 1
+                      fi
+
+                      sourceFile='{{build.MakeStagingDIR.outputs.stdout}}/releaseinfo.cfg'
+
+                      case "$RELEASE" in
+                        amzn2023|centos8*|rhel8*)
+                          echo 'PACKAGE_MANAGER=yum' >> "$sourceFile"
+                          echo 'SCRIPT=RHEL8stigconfig.sh' >> "$sourceFile"
+                          echo 'SEARCH="rpm -q"' >> "$sourceFile"
+                          echo 'SHELL_CMD=sh' >> "$sourceFile"
+                          ;;
+                        centos9*|rhel9*)
+                          echo 'PACKAGE_MANAGER=dnf' >> "$sourceFile"
+                          echo 'SCRIPT=RHEL9stigconfig.sh' >> "$sourceFile"
+                          echo 'SEARCH="rpm -q"' >> "$sourceFile"
+                          echo 'SHELL_CMD=sh' >> "$sourceFile"
+                          ;;
+                        *)
+                          echo "Operating System '$RELEASE' is not supported. Exiting."
+                          exit 1
+                          ;;
+                      esac
+
+
+              - name: VerifyPrerequisite
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - |
+                      sourceFile='{{build.MakeStagingDIR.outputs.stdout}}'/releaseinfo.cfg
+                      source "$sourceFile"
+                      if ! eval $SEARCH tar; then
+                        $PACKAGE_MANAGER install -y tar
+                        echo INSTALLED_TAR=true >> "$sourceFile"
+                      else
+                        echo INSTALLED_TAR=false >> "$sourceFile"
+                      fi
+
+              - name: DownloadSTIG
+                action: S3Download
+                inputs:
+                  - source: s3://${DcvResourceBucket}/{{ FileName }}
+                    destination: '{{build.MakeStagingDIR.outputs.stdout}}/{{ FileName }}'
+
+              - name: UnzipSTIG
+                action: ExecuteBash
+                onFailure: Continue
+                inputs:
+                  commands:
+                    - |
+                      source '{{build.MakeStagingDIR.outputs.stdout}}'/releaseinfo.cfg
+                      sudo tar -xvf '{{build.MakeStagingDIR.outputs.stdout}}/{{ FileName }}' -C '{{build.MakeStagingDIR.outputs.stdout}}/'
+
+                      if [ $(echo $?) = 0 ]; then
+                        $INSTALLED_TAR && $PACKAGE_MANAGER remove -y tar
+                        exit 0
+                      else
+                        echo "File extraction failed. Exiting"
+                        $INSTALLED_TAR && $PACKAGE_MANAGER remove -y tar
+                        exit 1
+                      fi
+
+              - name: ConfigureSTIG
+                action: ExecuteBash
+                onFailure: Continue
+                maxAttempts: 5
+                inputs:
+                  commands:
+                    - |
+                      source '{{build.MakeStagingDIR.outputs.stdout}}'/releaseinfo.cfg
+                      ($SHELL {{build.MakeStagingDIR.outputs.stdout}}/$SCRIPT "{{ Level }}" "{{ InstallPackages }}" "{{ SetDoDConsentBanner }}" && exit 0) || {
+                        echo "Failed to run STIG"
+                        exit 1
+                      }
+
+              - name: Cleanup
+                action: DeleteFolder
+                inputs:
+                  - path: '{{build.MakeStagingDIR.outputs.stdout}}'
+                    force: true
+
+  DcvAccessConsoleCustomStigComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: stig-security-remediation
+      Description: Implements STIG security remediations for RHEL 9
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 9
+      Data: |-
+        name: STIGSecurityRemediation
+        description: Implements STIG security remediations for RHEL 9
+        schemaVersion: 1.0
+
+        phases:
+          - name: build
+            steps:
+              - name: ApplySTIGRemediations
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      set -e
+
+                      echo "Applying all additional Stig Remediaitions"
+
+                      echo "Configuring init_on_free kernel parameter..."
+                      grubby --update-kernel=ALL --args="init_on_free=1"
+                      
+                      # Regenerate GRUB configuration
+                      echo "Regenerating GRUB configuration..."
+                      grub2-mkconfig -o /boot/grub2/grub.cfg
+                      
+                      # V-258035, V-258036 - USBGuard
+                      dnf install -y usbguard
+                      systemctl enable usbguard.service
+                      systemctl start usbguard.service
+
+                      # Create USBGuard rules file
+                      mkdir -p /etc/usbguard/rules.d
+                      cat > /etc/usbguard/rules.conf << EOF
+                      allow with-interface equals { 08:*:* }
+                      block
+                      EOF
+
+                      chmod 600 /etc/usbguard/rules.conf
+
+                      # Configure USBGuard AuditBackend
+                      if grep -q "^AuditBackend=" /etc/usbguard/usbguard-daemon.conf; then
+                          sed -i 's/^AuditBackend=.*/AuditBackend=LinuxAudit/' /etc/usbguard/usbguard-daemon.conf
+                      else
+                          echo "AuditBackend=LinuxAudit" >> /etc/usbguard/usbguard-daemon.conf
+                      fi
+
+                      # Restart USBGuard to apply changes
+                      systemctl restart usbguard.service
+
+                      # V-258121, V-258122, V-258123, V-258124, V-258125, V-258126 - Smart Card
+                      dnf -y install pcsc-lite pcsc-lite-ccid nss-tools
+                      systemctl enable pcscd.socket
+                      systemctl start pcscd.socket
+
+                      dnf -y install opensc
+
+                      # V-258134 - AIDE
+                      dnf install -y aide
+                      aide --init
+                      cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+
+                      # Configure daily AIDE check
+                      echo "0 5 * * * root /usr/sbin/aide --check" > /etc/cron.daily/aide
+
+                      # V-258137 - Audit Tool Protection
+                      for TOOL in /sbin/auditctl /sbin/aureport /sbin/ausearch /sbin/autrace /sbin/auditd
+                      do
+                          if [ -e "$TOOL" ]; then
+                              chmod 0755 "$TOOL"
+                              chown root:root "$TOOL"
+                              file "$TOOL" | grep -q "linked" || sha256sum "$TOOL" >> /var/log/audit/audit-tools.txt
+                          fi
+                      done
+
+                      # V-258141, V-258175 - Audit plugins
+                      dnf install -y audispd-plugins
+                      dnf install -y rsyslog-gnutls
+
+                      # Verify all remediations
+                      echo "Verifying installations and configurations..."
+
+                      # Check services
+                      services_to_check=("usbguard" "pcscd.socket")
+                      for service in "${services_to_check[@]}"; do
+                          if ! systemctl is-active --quiet "$service"; then
+                              echo "Error: $service is not running"
+                              exit 1
+                          fi
+                      done
+
+                      # Check installed packages
+                      packages_to_check=(
+                          "usbguard"
+                          "pcsc-lite"
+                          "pcsc-lite-ccid"
+                          "nss-tools"
+                          "opensc"
+                          "aide"
+                          "audispd-plugins"
+                          "rsyslog-gnutls"
+                      )
+                      for package in "${packages_to_check[@]}"; do
+                          if ! rpm -q "$package" > /dev/null; then
+                              echo "Error: $package is not installed"
+                              exit 1
+                          fi
+                      done
+
+                      # Check configurations
+                      if [ ! -f /etc/usbguard/rules.conf ]; then
+                          echo "Error: USBGuard rules not found"
+                          exit 1
+                      fi
+
+                      if [ ! -f /var/lib/aide/aide.db.gz ]; then
+                          echo "Error: AIDE database not found"
+                          exit 1
+                      fi
+
+                      if ! grep -q "AuditBackend=LinuxAudit" /etc/usbguard/usbguard-daemon.conf; then
+                          echo "Error: USBGuard audit not properly configured"
+                          exit 1
+                      fi
+
+                      echo "All STIG remediations completed and verified successfully"
+
+  DcvAccessConsoleScapComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: dcv-session-mgr-scap-compliance-checker
+      Description: SCAP Compliance Checker (SCC) for RHEL with STIG Q1 2025 Benchmarks
+      Platform: Linux
+      Version: !Ref SemVer
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      Data: !Sub |-
+        name: 'SCAP Compliance Checker (SCC) 5.10.2 with all current STIG Q1 2025 Benchmarks'
+        description: 'Installs and runs SCAP Compliance Checker (SCC) 5.10.2 for Red Hat Enterprise Linux (RHEL) 8/9 with all current STIG Q1 2025 benchmarks. SCC supports the AMD64 architecture. Other architectures are not currently supported or contain issues within the EC2 environment. For more information, see https://docs.aws.amazon.com/imagebuilder/latest/userguide/toe-stig.html.'
+        schemaVersion: 1.0
+        constants:
+          - SCCFileName:
+              type: string
+              value: 'scc-5.10.2_rhel9_x86_64.tar.gz'
+          - BenchmarksFileName:
+              type: string
+              value: 'benchmarks_2025_Q1.zip'
+          - SCCVersion:
+              type: string
+              value: '5.10.2'
+          - SCCExe:
+              type: string
+              value: '/opt/scc/cscc'
+          - SCCResultsDir:
+              type: string
+              value: '/opt/scc/SCCResults'
+          - SupportedVersions:
+              type: string
+              value: 'rhel8x86_64,rhel9x86_64'
+          - OSFile:
+              type: string
+              value: '/etc/os-release'
+
+        phases:
+          - name: build
+            steps:
+              - name: RebootStep
+                if:
+                  and:
+                      - binaryExists: 'apt-get'
+                action: Reboot
+                maxAttempts: 2
+
+              - name: DetermineArchitecture
+                action: ExecuteBash
+                onFailure: Abort
+                if:
+                  fileExists: '{{ OSFile }}'
+                  else: Abort
+                inputs:
+                  commands:
+                    - |
+                      ARCH=$(uname -m)
+                      if [[ $ARCH != "x86_64" ]]; then
+                        echo "Architecture is currently not supported, or has bugs preventing installation. Failing."
+                        exit 1
+                      elif [[ $(grep -i "ubuntu" '{{ OSFile }}') ]]; then
+                        [[ $ARCH == "x86_64" ]] && ARCH="amd64"
+                        echo $ARCH
+                      else
+                        echo $ARCH
+                      fi
+
+              - name: OperatingSystemRelease
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - |
+                      ARCH='{{ build.DetermineArchitecture.outputs.stdout }}'
+                      SUPPORTED_VERSIONS=('{{ SupportedVersions }}')
+                      . '{{ OSFile }}'
+                      OS_VERSION=$(echo "$ID$VERSION_ID" | cut -d"." -f 1)
+                      IFS=","
+                      if [[ $SUPPORTED_VERSIONS[*] =~ "$OS_VERSION$ARCH" ]]; then
+                        echo $OS_VERSION
+                      else
+                        echo "The SCAP Compliance Checker {{ SCCVersion }} doesn't support $OS_VERSION. Exiting."
+                        exit 1
+                      fi
+
+              - name: StagingPath
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - mktemp -d
+
+              - name: SetUpSourceFile
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - |
+                      RELEASE='{{ build.OperatingSystemRelease.outputs.stdout }}'
+                      STAGING_PATH="{{build.StagingPath.outputs.stdout}}"
+                      sourceFile=$STAGING_PATH/releaseinfo.cfg
+
+                      case "$RELEASE" in
+                        rhel*)
+                          sccInstaller="scc-{{ SCCVersion }}.$RELEASE.$(uname -m).rpm"
+                          echo "INSTALLER_PATH=$STAGING_PATH/$sccInstaller" >> "$sourceFile"
+                          echo 'PACKAGE_MANAGER=yum' >> "$sourceFile"
+                          echo "SEARCH=\"rpm -q\"" >> "$sourceFile"
+                          echo "INSTALL_CMD=\"rpm -ivh\"" >> "$sourceFile"
+                          ;;
+                        ubuntu*)
+                          [[ $(uname -m) == "x86_64" ]] && ARCH="amd64" || ARCH="arm64"
+                          sccInstaller="scc-{{ SCCVersion }}.$RELEASE.$ARCH.deb"
+                          echo "INSTALLER_PATH=$STAGING_PATH/$sccInstaller" >> "$sourceFile"
+                          echo 'PACKAGE_MANAGER=apt-get' >> "$sourceFile"
+                          echo "SEARCH=\"dpkg -l\"" >> "$sourceFile"
+                          echo "INSTALL_CMD=\"dpkg -i -E\"" >> "$sourceFile"
+                          ;;
+                        *)
+                          echo "Operating System '$RELEASE' is not supported. Exiting."
+                          exit 1
+                          ;;
+                      esac
+
+              - name: VerifyPrerequisite
+                action: ExecuteBash
+                onFailure: Abort
+                inputs:
+                  commands:
+                    - |
+                      sourceFile='{{build.StagingPath.outputs.stdout}}'/releaseinfo.cfg
+                      source "$sourceFile"
+                      if ! eval $SEARCH tar; then
+                        $PACKAGE_MANAGER install -y tar
+                        echo INSTALLED_TAR=true >> "$sourceFile"
+                      else
+                        echo INSTALLED_TAR=false >> "$sourceFile"
+                      fi
+
+              - name: DownloadSCCAndBenchmarks
+                action: S3Download
+                inputs:
+                  - source: s3://${DcvResourceBucket}/{{ SCCFileName }}
+                    destination: '{{ build.StagingPath.outputs.stdout }}/{{ SCCFileName }}'
+                    overwrite: true
+          
+                  - source: s3://${DcvResourceBucket}/{{ BenchmarksFileName }}
+                    destination: '{{ build.StagingPath.outputs.stdout }}/{{ BenchmarksFileName }}'
+                    overwrite: true
+
+              - name: DecompressSCC
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - tar -xvf '{{ build.StagingPath.outputs.stdout }}/{{ SCCFileName }}' -C '{{ build.StagingPath.outputs.stdout }}/' || ( echo "File failed to extract properly. Unable to continue." ; exit 1; )
+
+              - name: InstallSCC
+                action: ExecuteBash
+                maxAttempts: 20
+                inputs:
+                  commands:
+                    - |
+                      sourceFile='{{build.StagingPath.outputs.stdout}}'/releaseinfo.cfg
+                      source "$sourceFile"
+
+                      echo "Attempting to install SCAP Compliance Checker {{ SCCVersion }}"
+                      eval $INSTALL_CMD $INSTALLER_PATH || {
+                          echo 'Failed to install SCAP Compliance Checker. Exiting.'
+                          exit 1
+                      }
+
+              - name: InstallSCCBenchmarks
+                action: ExecuteBash
+                maxAttempts: 20
+                inputs:
+                  commands:
+                    - |
+                      sccBenchmark='{{ build.StagingPath.outputs.stdout }}/{{ BenchmarksFileName }}'
+                      {{ SCCExe }} -ua || {
+                          echo "Failed to remove the preinstalled benchmarks and load the new ones. Exiting."
+                          exit 1
+                      }
+
+                      {{ SCCExe }} -is --force $sccBenchmark || {
+                          echo "Failed to install the SCC benchmarks. Exiting."
+                          exit 1
+                      }
+
+              - name: UpdateSCCBenchmarks
+                action: ExecuteBash
+                maxAttempts: 20
+                onFailure: Continue
+                inputs:
+                  commands:
+                    - |
+                      {{ SCCExe }} --checkForContentUpdates --installUpdates || {
+                        echo "Failed to update SCC Benchmarks"
+                        exit 1
+                      }
+
+              - name: MakeSCCResultsDIR
+                action: CreateFolder
+                inputs:
+                  - path: '{{ SCCResultsDir }}'
+                    permissions: 755
+
+              - name: InvokeSCC
+                action: ExecuteBash
+                onFailure: Continue
+                maxAttempts: 20
+                inputs:
+                  commands:
+                    - |
+                      {{ SCCExe }} -q -u {{ SCCResultsDir }} || {
+                        echo 'Failed to run SCAP Compliance Checker. Exiting.'
+                        exit 1
+                      }
+
+              - name: GetSCCResults
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      RELEASE='{{ build.OperatingSystemRelease.outputs.stdout }}'
+                      xmlPath={{ SCCResultsDir }}/Sessions/$(date "+%Y-%m-%d*")/Results/SCAP/XML
+                      resultFile=$(find $xmlPath -type f -name "*_XCCDF-Results_*")
+                      if [ $resultFile ]; then
+                        score=$(grep -P 'spawar-adjusted">' $resultFile | awk -F"[<>]" '{print $3}')
+                        if [ "$score" ]; then
+                          echo "SCC gave {{ build.OperatingSystemRelease.outputs.stdout }} a compliance score of $score%."
+                        else
+                          echo "SCC didn't generate a score. Failing"
+                          exit 1
+                        fi
+                      else
+                        echo "Did not find any SCAP results files. Failing."
+                        exit 1
+                      fi
+
+              - name: TarCleanup
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      sourceFile='{{build.StagingPath.outputs.stdout}}'/releaseinfo.cfg
+                      source "$sourceFile"
+                      $INSTALLED_TAR && $PACKAGE_MANAGER remove -y tar
+                      exit 0
+
+              - name: Cleanup
+                action: DeleteFolder
+                inputs:
+                  - path: '{{ build.StagingPath.outputs.stdout }}'
+                    force: true
+
+  DcvAccessConsoleAmiRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: dcv-access-console-ami-recipe
+      ParentImage: !Ref ParentImage
+      Version: !Ref SemVer
+      Components:
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
+        - ComponentArn: !GetAtt DcvAccessConsoleBaseComponent.Arn
+        - ComponentArn: !GetAtt DcvAccessConsoleStigComponent.Arn
+        - ComponentArn: !GetAtt DcvAccessConsoleCustomStigComponent.Arn
+        - ComponentArn: !GetAtt DcvAccessConsoleScapComponent.Arn
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -e
+
+            # cat >/etc/environment <<EOF
+            # HTTP_PROXY=${ProxyServerAddress}:3128
+            # HTTPS_PROXY=${ProxyServerAddress}:3128
+            # NO_PROXY='${AWS::Region}.compute.internal,localhost,127.0.0.1,s3.${AWS::Region}.${AWS::URLSuffix},169.254.169.254,v12e.io'
+            # http_proxy=${ProxyServerAddress}:3128
+            # https_proxy=${ProxyServerAddress}:3128
+            # no_proxy='${AWS::Region}.compute.internal,localhost,127.0.0.1,s3.${AWS::Region}.${AWS::URLSuffix},169.254.169.254,v12e.io'
+            # EOF
+
+            # source /etc/environment
+
+            # mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            # cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            # [Service]
+            # EnvironmentFile=/etc/environment
+            # PassEnvironment=HTTP_PROXY,HTTPS_PROXY,NO_PROXY,http_proxy,https_proxy,no_proxy
+            # EOF
+
+            # cat >> /etc/yum.conf <<EOF
+            # proxy=$https_proxy
+            # EOF
+
+            #Remove the RHEL packages
+            # ls -al /etc/yum.repos.d/
+            # rm -rf /etc/yum.repos.d/e*
+            # rm -rf /etc/yum.repos.d/r*
+            # ls -al etc/yum.repos.d/
+
+            # #Update SubscriptionManager values
+            # sed -i 's/enabled=1/enabled=0/g' "/etc/yum/pluginconf.d/subscription-manager.conf"
+
+            # # Add Customer Repos
+            # cat > /etc/yum.repos.d/yum-s3.rep << EOF
+            # [rhel-9-appstream-rhui-rpms]
+            # name=RPMs on S3 bucket rhel-9-appstream-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/rhel-9-appstream-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhel-9-baseos-rhui-rpms]
+            # name=RPMs on S3 bucket rhel-9-baseos-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/rhel-9-baseos-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhel-9-supplementary-rhui-rpms]
+            # name=RPMs on S3 bucket rhel-9-supplementary-rhui-rpms - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/rhel-9-supplementary-rhui-rpms
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [rhui-client-config-server-9]
+            # name=RPMs on S3 bucket rhui-client-config-server-9 - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/rhui-client-config-server-9
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [epel-cisco-openh264]
+            # name=RPMs on S3 bucket epel-cisco-openh264 - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/epel-cisco-openh264
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+
+            # [epel]
+            # name=RPMs on S3 bucket epel - $basearch
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/epel
+            # enabled=1
+            # gpgcheck=1
+            # proxy=_none_
+            # EOF
+
+            # cat > /etc/yum.repos.d/vi2e-hosted-gc.repo << EOF
+            # [vi2e-hosted]
+            # name=vi2e-hosted
+            # baseurl=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/vi2e-hosted
+            # enabled=1
+            # gpgcheck=1
+            # gpgkey=https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/gpg/tenable-4096.gpg
+            #       https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/gpg/RPM-GPG-KEY-scc-5.x
+            #       https://vi2e-yum.${AWS::Region}.${AWS::URLSuffix}/RHEL9/gpg/amazon-ssm-agent.gpg
+            # EOF
+
+            # Install SSM Agent
+            arch=$(arch)
+            if [ "$arch" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm --nogpgcheck
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm --nogpgcheck
+            fi
+
+            # Start SSM Agent
+            systemctl daemon-reload
+            systemctl enable amazon-ssm-agent
+            systemctl start amazon-ssm-agent
+
+  DcvAccessConsoleAmiDistConfig:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: dcv-access-console-ami-dist-config
+      Distributions:
+        - Region: !Ref AWS::Region
+          AmiDistributionConfiguration:
+            Name: dcv-server-ami-{{ imagebuilder:buildDate }}
+            Description: DCV Access Console AMI
+            TargetAccountIds:
+              - !Ref AWS::AccountId
+
+  DcvAccessConsoleAmiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}_dcv-access-console-pipeline-role
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: !Sub ${IamPrefix}-dcv-session-manager-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+        - PolicyName: NvidiaDriverAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::ec2-linux-nvidia-drivers
+                  - !Sub arn:${AWS::Partition}:s3:::ec2-linux-nvidia-drivers/*
+        - !If
+          - HasDcvResourceBucket
+          - PolicyName: CustomBucketAccess
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}
+                    - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}/*
+          - !Ref AWS::NoValue
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowKMS
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource: !GetAtt DcvAccessConsolePipelineKmsKey.Arn
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}
+                  - !Sub arn:${AWS::Partition}:s3:::${DcvResourceBucket}/*
+
+  DcvAccessConsoleAmiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-dcv-access-console-pipeline-profile
+      Roles:
+        - !Ref DcvAccessConsoleAmiRole
+
+  DcvAmiCreationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG default ports for DCV
+      SecurityGroupEgress:
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow outbound traffic on 443
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          Description: Allow outbound traffic on 3128
+      VpcId: !Ref VpcId
+
+  DcvAccessConsoleAmiInfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      InstanceProfileName: !Ref DcvAccessConsoleAmiInstanceProfile
+
+      InstanceTypes:
+        - !Ref ParentImageInstanceType
+      Name: dcv-access-console-ami-infra-config
+      SecurityGroupIds:
+        - !GetAtt DcvAmiCreationSecurityGroup.GroupId
+      SubnetId: !Ref SubnetId
+
+  DcvAccessConsoleAmiPipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: dcv-access-console-ami
+      ImageRecipeArn: !GetAtt DcvAccessConsoleAmiRecipe.Arn
+      InfrastructureConfigurationArn: !GetAtt DcvAccessConsoleAmiInfraConfig.Arn
+      DistributionConfigurationArn: !GetAtt DcvAccessConsoleAmiDistConfig.Arn
+
+  DcvAccessConsoleAmiNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: DCV Access Console AMI Notification Topic
+      TopicName: dcv-access-console-ami-notification-topic
+      KmsMasterKeyId: alias/aws/sns
+
+  DcvAccessConsoleAmiNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref DcvAccessConsoleAmiNotificationTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
