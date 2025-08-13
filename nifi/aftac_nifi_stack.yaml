@@ -431,7 +431,7 @@ Resources:
 
                       echo "Gathering yum packages to install..."
                       # https://docs.redhat.com/en/documentation/red_hat_build_of_openjdk/11/html-single/installing_and_using_red_hat_build_of_openjdk_11_on_rhel/index
-                      packages="java-21-openjdk unzip wget"
+                      packages="java-21-openjdk-devel unzip"
                       packages_to_install=""
                       for package in $packages; do
                           if ! is_installed "$package"; then
@@ -870,7 +870,7 @@ Resources:
             echo "Creating keystore and adding the node key and cert with alias of nifi"
             keystore_file="$NIFI_HOME"/conf/keystore.p12
             nifi_user=$(stat -c "%U" "$NIFI_HOME")
-            openssl pkcs12 -export -out "$keystore_file" -inkey "$key_file" -in "$cert_file" -passout pass:$keystore_password -name nifi
+            openssl pkcs12 -export -out "$keystore_file" -inkey "$key_file" -in "$cert_file" -passout pass:$keystore_password -name nifi -keypbe AES-256-CBC -certpbe AES-256-CBC
             chown "$nifi_user":"$nifi_user" "$keystore_file"
 
             nifi_prop_file="$NIFI_HOME"/conf/nifi.properties
