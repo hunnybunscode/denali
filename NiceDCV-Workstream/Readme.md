@@ -21,11 +21,11 @@ The solution is comprised of five CloudFormation Stacks:
 5. The Access Console Image Builder stack creates an AWS Image Builder pipeline for building DCV Access Console AMIs. The pipeline includes components for installing and configuring the DCV Access Console software, implementing STIG (Security Technical Implementation Guide) controls, applying custom STIG remediations, and running SCAP (Security Content Automation Protocol) Compliance Checker. The resulting AMI includes the DCV Access Console with enhanced security features, STIG compliance, and systems management capabilities through AWS Systems Manager.
 
 ## Prerequistes for High Side Deployment
-1. In the Account were DCV workstation solution will be deployed:
+1. In the Account where DCV workstation solution will be deployed:
    1. Create an S3 bucket 
-   2. Download DCV resources from highside buckets and store locally in S3 abucket above
-   3. Download the SCAP bundle and benchmarks and store at the root of the S3
-   4. Download the Stig "LinuxAWSConfigureSTIG_2025_Q1_3.tgz" and store at the root of the S3
+   2. Download DCV resources from highside buckets and store locally in S3 bucket created above
+   3. Download the bundle and benchmarks from SCAP folder and store at the root of the S3
+   4. Download the "LinuxAWSConfigureSTIG_2025_Q1_3.tgz" from STIGs folder and store at the root of the S3
 
 ## Deployment Steps
 
