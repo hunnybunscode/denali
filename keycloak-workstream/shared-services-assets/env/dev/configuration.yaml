@@ -1,0 +1,105 @@
+environment:
+  name: dev
+  region: us-east-1
+  account: "908027385618"
+  iam:
+    prefix: AWSAccelerator
+
+vpc:
+  id: vpc-0e1d48e9ef7763fb5
+  isolated: true
+  subnets:
+    - id: subnet-01be2680db3cd06ce
+    - id: subnet-074cc732e9251f7e8
+
+docker:
+  images:
+    - repository: public.ecr.aws/aws-cli/aws-cli
+      tag: latest
+    - repository: registry.access.redhat.com/ubi9-minimal
+      tag: latest
+    - repository: registry.access.redhat.com/ubi9/openjdk-21
+      tag: latest
+    - repository: quay.io/keycloak/keycloak-operator
+      tag: 26.2.5
+    - repository: public.ecr.aws/bitnami/keycloak
+      tag: 26.2.5-debian-12-r3
+    - repository: quay.io/keycloak/keycloak
+      tag: 26.2.5
+    - repository: public.ecr.aws/docker/library/postgres
+      tag: 16
+    - repository: public.ecr.aws/lts/squid
+      tag: latest
+
+helm:
+  charts:
+    - chartName: cert-manager
+      repositoryUrl: https://charts.jetstack.io
+      version: v1.17.2
+      images:
+        - repository: quay.io/jetstack/cert-manager-cainjector
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-controller
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-webhook
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-startupapicheck
+          tag: v1.17.2
+    - chartName: external-dns
+      repositoryUrl: https://kubernetes-sigs.github.io/external-dns
+      version: 1.16.1
+      images:
+        - repository: registry.k8s.io/external-dns/external-dns
+          tag: v0.16.1
+    - chartName: aws-efs-csi-driver
+      repositoryUrl: https://kubernetes-sigs.github.io/aws-efs-csi-driver
+      version: 3.1.8
+      images:
+        - repository: public.ecr.aws/efs-csi-driver/amazon/aws-efs-csi-driver
+          tag: v2.1.7
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe
+          tag: v2.14.0-eks-1-32-6
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar
+          tag: v2.13.0-eks-1-32-6
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/external-provisioner
+          tag: v5.2.0-eks-1-32-6
+    - chartName: aws-load-balancer-controller
+      repositoryUrl: https://aws.github.io/eks-charts
+      version: 1.12.0
+      images:
+        - repository: public.ecr.aws/eks/aws-load-balancer-controller
+          tag: v2.12.0
+    - chartName: cluster-autoscaler
+      repositoryUrl: https://kubernetes.github.io/autoscaler
+      version: 9.34.0
+      images:
+        - repository: public.ecr.aws/bitnami/cluster-autoscaler
+          tag: 1.28.2
+    - chartName: metrics-server
+      repositoryUrl: https://kubernetes-sigs.github.io/metrics-server
+      version: 3.12.2
+      images:
+        - repository: public.ecr.aws/bitnami/metrics-server
+          tag: 0.7.2
+        - repository: registry.k8s.io/autoscaling/addon-resizer
+          tag: 1.8.21
+    - chartName: secrets-store-csi-driver
+      repositoryUrl: https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+      version: 1.4.6
+      images:
+        - repository: public.ecr.aws/aws-secrets-manager/secrets-store-csi-driver-provider-aws
+          tag: 1.0.r2-80-g8244505-2025.02.10.18.44
+        - repository: registry.k8s.io/csi-secrets-store/driver
+          tag: v1.4.6
+        - repository: registry.k8s.io/csi-secrets-store/driver-crds
+          tag: v1.4.6
+        - repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
+          tag: v2.11.1
+        - repository: registry.k8s.io/sig-storage/livenessprobe
+          tag: v2.13.1
+    - chartName: nginx-ingress
+      repositoryUrl: https://helm.nginx.com/stable
+      version: 2.1.0
+      images:
+        - repository: public.ecr.aws/nginx/nginx-ingress
+          tag: 5.0.0

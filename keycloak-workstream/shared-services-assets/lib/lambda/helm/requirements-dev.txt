@@ -1,0 +1,2 @@
+boto3-stubs[s3,ecr]>=1.28
+boto3
