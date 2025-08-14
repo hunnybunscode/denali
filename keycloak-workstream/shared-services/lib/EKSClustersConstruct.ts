@@ -242,6 +242,23 @@ export class EKSClustersConstruct extends Construct {
       }),
     ];
 
+    if (this.props.environment.proxy) {
+      const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
+
+      const noProxyStr = this.createNoProxyString(noProxy);
+
+      const proxyAddonConfig: VpcCniProxyPatchAddonProps = {
+        proxy: {
+          httpProxy,
+          httpsProxy,
+          noProxy: noProxyStr,
+        },
+      };
+
+      blueprintsAddons.push(new VpcCniProxyPatchAddon(proxyAddonConfig));
+      console.warn("Adding Proxy Patch");
+    }
+
     // Add each addons based on options
     /**
      * Metric Server
@@ -821,27 +838,12 @@ export class EKSClustersConstruct extends Construct {
         blueprintsAddons.push(new blueprints.addons.NginxAddOn(nginxControllerConfig));
       } else if (isClusterIsolated) {
         // Add NGINX addon ONLY for isolated clusters where ALB is not available
-        blueprintsAddons.push(new blueprints.addons.NginxAddOn({
-          internetFacing: false,
-        }));
+        blueprintsAddons.push(
+          new blueprints.addons.NginxAddOn({
+            internetFacing: false,
+          })
+        );
       }
-    }
-
-    if (this.props.environment.proxy) {
-      const { httpProxy = "", httpsProxy = "", noProxy } = this.props.environment.proxy;
-
-      const noProxyStr = this.createNoProxyString(noProxy);
-
-      const proxyAddonConfig: VpcCniProxyPatchAddonProps = {
-        proxy: {
-          httpProxy,
-          httpsProxy,
-          noProxy: noProxyStr,
-        },
-      };
-
-      blueprintsAddons.push(new VpcCniProxyPatchAddon(proxyAddonConfig));
-      console.warn("Adding Proxy Patch");
     }
 
     const dynamicAddons: blueprints.ClusterAddOn[] = [
