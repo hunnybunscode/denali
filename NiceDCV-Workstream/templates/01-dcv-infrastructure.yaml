@@ -1,0 +1,2491 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Amazon DCV Infrastructure with DCV-Session Manager, DCV-Connection Gateway, DCV Fleet Server and DCV Access Console.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - ProxyServerAddress
+      - Label:
+          default: Create VPC or Use Existing
+        Parameters:
+          - CreateNewVPC
+      - Label:
+          default: Existing VPC Configuration [required only if Create New VPC is false]
+        Parameters:
+          - ExistingVPCId
+          - ExistingVPCCidr
+          - ExistingPublicSubnet1Id
+          - ExistingPublicSubnet2Id
+          - ExistingPrivateSubnet1Id
+          - ExistingPrivateSubnet2Id
+      - Label:
+          default: New VPC Configuration [required only if Create New VPC is true]
+        Parameters:
+          - VpcCidr
+          - PublicSubnet1Cidr
+          - PublicSubnet2Cidr
+          - PrivateSubnet1Cidr
+          - PrivateSubnet2Cidr
+          - AvailabilityZone1
+          - AvailabilityZone2
+      - Label:
+          default: VPC Endpoint Configuration
+        Parameters:
+          - CreateVPCEndpoints
+      - Label:
+          default: DCV Session Manager Configuration
+        Parameters:
+          - KeyName
+          - SessionManagerBrokerInstanceType
+          - SessionManagerBrokerAmiId
+      - Label:
+          default: DCV Connection Gateway Configuration
+        Parameters:
+          - ConnectionGatewayInstanceType
+          - ConnectionGatewayAmiId
+      - Label:
+          default: DCV Fleet Server Configuration
+        Parameters:
+          - DCVServerInstanceType
+          - DCVServerAmiId
+          - AutoScalingMinSize
+          - AutoScalingMaxSize
+          - AutoScalingDesiredCapacity
+          - CpuUtilizationTarget
+      - Label:
+          default: Deploy Access Console Configuration
+        Parameters:
+          - DeployAccessConsole
+      - Label:
+          default: DCV Access Console Configuration
+        Parameters:
+          - AccessConsoleInstanceType
+          - AccessConsoleAmiId
+      - Label:
+          default: EBS Volume Configuration
+        Parameters:
+          - EbsVolumeSize
+          - EbsVolumeType
+      - Label:
+          default: EFS Configuration
+        Parameters:
+          - EFSConfigurations
+
+
+    ParameterLabels:
+      IamPrefix:
+        default: IAM Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
+      ProxyServerAddress:
+        default: Proxy Server Address
+      CreateNewVPC:
+        default: Create New VPC
+      ExistingVPCId:
+        default: Existing VPC ID
+      ExistingPublicSubnet1Id:
+        default: Existing Public Subnet 1 ID
+      ExistingPublicSubnet2Id:
+        default: Existing Public Subnet 2 ID
+      ExistingPrivateSubnet1Id:
+        default: Existing Private Subnet 1 ID
+      ExistingPrivateSubnet2Id:
+        default: Existing Private Subnet 2 ID
+      VpcCidr:
+        default: VPC CIDR
+      PrivateSubnet1Cidr:
+        default: Private Subnet 1 CIDR
+      PrivateSubnet2Cidr:
+        default: Private Subnet 2 CIDR
+      PublicSubnet1Cidr:
+        default: Public Subnet 1 CIDR
+      PublicSubnet2Cidr:
+        default: Public Subnet 2 CIDR
+      AvailabilityZone1:
+        default: Availability Zone 1
+      AvailabilityZone2:
+        default: Availability Zone 2
+      CreateVPCEndpoints:
+        default: Create VPC Endpoints
+      KeyName:
+        default: Key Pair Name
+      SessionManagerBrokerInstanceType:
+        default: Session Manager Broker Instance Type
+      SessionManagerBrokerAmiId:
+        default: Session Manager AMI ID
+      ConnectionGatewayInstanceType:
+        default: Connection Gateway Instance Type
+      ConnectionGatewayAmiId:
+        default: Connection Gateway AMI ID
+      DCVServerInstanceType:
+        default: DCV Server Instance Type
+      DCVServerAmiId:
+        default: DCV Server AMI ID
+      DeployAccessConsole:
+        default: Create DCV Access Console
+      EbsVolumeSize:
+        default: EBS Volume Size
+      EbsVolumeType:
+        default: EBS Volume Type
+      AutoScalingMinSize:
+        default: Auto Scaling Group Min Size
+      AutoScalingMaxSize:
+        default: Auto Scaling Group Max Size
+      AutoScalingDesiredCapacity:
+        default: Auto Scaling Group Desired Capacity
+      CpuUtilizationTarget:
+        default: CPU Utilization Target
+      EFSConfigurations:
+        default: EFS File System IDs and Mount Points
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues:
+      - AFC2S
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description:
+      ARN of the policy that is used to set the permissions boundary for
+      IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+    Default: arn:aws-us-gov:iam::aws:policy/AdministratorAccess
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  CreateNewVPC:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Choose whether to create a new VPC or use an existing one
+
+  ExistingVPCId:
+    Type: String
+    Default: ""
+    Description: ID of existing VPC (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^vpc-([0-9a-f]{8}|[0-9a-f]{17})$
+    ConstraintDescription: Must be empty or a valid VPC ID starting with 'vpc-'
+      followed by either 8 or 17 hexadecimal characters
+
+  ExistingVPCCidr:
+    Type: String
+    Description: CIDR block for the existing VPC (required only if CreateNewVPC is false)
+    Default: ""
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  ExistingPublicSubnet1Id:
+    Type: String
+    Default: ""
+    Description: ID of existing public subnet 1 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  ExistingPublicSubnet2Id:
+    Type: String
+    Default: ""
+    Description: ID of existing public subnet 2 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  ExistingPrivateSubnet1Id:
+    Type: String
+    Default: ""
+    Description: ID of existing private subnet 1 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  ExistingPrivateSubnet2Id:
+    Type: String
+    Default: ""
+    Description: ID of existing private subnet 2 (required only if CreateNewVPC is false)
+    AllowedPattern: ^$|^subnet-[a-z0-9]{8,}$
+    ConstraintDescription: Must be empty or a valid subnet ID
+
+  VpcCidr:
+    Type: String
+    Default: 10.40.0.0/16
+    Description: CIDR block for the VPC
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.40.0.0/24
+    Description: CIDR block for the public subnet in AZ1
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.40.1.0/24
+    Description: CIDR block for the public subnet in AZ2
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: 10.40.2.0/24
+    Description: CIDR block for the private subnet in AZ1
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: 10.40.3.0/24
+    Description: CIDR block for the private subnet in AZ2
+    AllowedPattern: ^$|(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be empty or a valid CIDR block format (e.g., 10.0.0.0/16)
+
+  AvailabilityZone1:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: us-gov-west-1a
+    Description: Availability Zone 1
+
+  AvailabilityZone2:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: us-gov-west-1b
+    Description: Availability Zone 2
+
+  CreateVPCEndpoints:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+    Description: Choose whether to create VPC Endpoints
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair
+
+  SessionManagerBrokerInstanceType:
+    Type: String
+    Default: t3.2xlarge
+    Description: Instance type for the Session Manager Broker
+
+  SessionManagerBrokerAmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-008177b99929ea0db
+    Description: AMI ID for the Session Manager Broker
+
+  ConnectionGatewayInstanceType:
+    Type: String
+    Default: t3.2xlarge
+    Description: Instance type for the Connection Gateway
+
+  ConnectionGatewayAmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-008177b99929ea0db
+    Description: AMI ID for the Connection Gateway
+
+  DCVServerInstanceType:
+    Type: String
+    Default: t3.2xlarge
+    Description: Instance type for the DCV Server
+
+  DCVServerAmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-008177b99929ea0db
+    Description: AMI ID for for the DCV Server
+
+  EFSConfigurations:
+    Type: String
+    Description: >-
+      Comma-separated list of EFS configurations. Format: 
+      'fs-id1:/mount/point1,fs-id2:/mount/point2,fs-id3:/mount/point3,fs-id4:/mount/point4'
+    Default: "fs-12345678:/home,fs-23456789:/data,fs-34567890:/apps,fs-45678901:/usndc"
+
+  
+
+  EbsVolumeSize:
+    Type: Number
+    Default: 100
+    Description: Size of the EBS volume in GB
+
+  EbsVolumeType:
+    Type: String
+    Default: gp3
+    Description: Type of the EBS volume
+    AllowedValues:
+      - gp3
+      - gp2
+
+  AutoScalingMinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum size for Auto Scaling Group
+
+  AutoScalingMaxSize:
+    Type: Number
+    Default: 5
+    Description: Maximum size for Auto Scaling Group
+
+  AutoScalingDesiredCapacity:
+    Type: Number
+    Default: 1
+    Description: Desired capacity for Auto Scaling Group
+
+  CpuUtilizationTarget:
+    Type: Number
+    Default: 75
+    Description: Target CPU Utilization percentage for Auto Scaling
+
+  DeployAccessConsole:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+    Description: Choose whether to create DCV Access Console
+
+  AccessConsoleInstanceType:
+    Type: String
+    Default: t3.2xlarge
+    Description: Instance type for the Connection Gateway
+
+  AccessConsoleAmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-045a012096d84fb13
+    Description: AMI ID for the Connection Gateway
+
+Rules:
+  NewVPCValidation:
+    RuleCondition: !Equals
+      - !Ref CreateNewVPC
+      - "true"
+    Assertions:
+      - Assert: !Not
+          - !Equals
+            - !Ref VpcCidr
+            - ""
+        AssertDescription: VPC CIDR is required when creating a new VPC
+      - Assert: !Not
+          - !Equals
+            - !Ref PrivateSubnet1Cidr
+            - ""
+        AssertDescription: Private Subnet 1 CIDR is required when creating a new VPC
+      - Assert: !Not
+          - !Equals
+            - !Ref PrivateSubnet2Cidr
+            - ""
+        AssertDescription: Private Subnet 2 CIDR is required when creating a new VPC
+      - Assert: !Equals
+          - !Ref ExistingVPCId
+          - ""
+        AssertDescription: ExistingVPCId must be empty when creating a new VPC
+      - Assert: !Equals
+          - !Ref ExistingVPCCidr
+          - ""
+        AssertDescription: ExistingVPCCidr must be empty when creating a new VPC
+      - Assert: !Equals
+          - !Ref ExistingPrivateSubnet1Id
+          - ""
+        AssertDescription: ExistingPrivateSubnet1Id must be empty when creating a new VPC
+      - Assert: !Equals
+          - !Ref ExistingPrivateSubnet2Id
+          - ""
+        AssertDescription: ExistingPrivateSubnet2Id must be empty when creating a new VPC
+
+  ExistingVPCValidation:
+    RuleCondition: !Equals
+      - !Ref CreateNewVPC
+      - "false"
+    Assertions:
+      - Assert: !Not
+          - !Equals
+            - !Ref ExistingVPCId
+            - ""
+        AssertDescription: ExistingVPCId is required when using an existing VPC
+      - Assert: !Not
+          - !Equals
+            - !Ref ExistingVPCCidr
+            - ""
+        AssertDescription: ExistingVPCCidr is required when using an existing VPC
+      - Assert: !Not
+          - !Equals
+            - !Ref ExistingPrivateSubnet1Id
+            - ""
+        AssertDescription: ExistingPrivateSubnet1Id is required when using an existing VPC
+      - Assert: !Not
+          - !Equals
+            - !Ref ExistingPrivateSubnet2Id
+            - ""
+        AssertDescription: ExistingPrivateSubnet2Id is required when using an existing VPC
+      - Assert: !Equals
+          - !Ref VpcCidr
+          - ""
+        AssertDescription: VPC CIDR must be empty when using an existing VPC
+      - Assert: !Equals
+          - !Ref PrivateSubnet1Cidr
+          - ""
+        AssertDescription: Private Subnet 1 CIDR must be empty when using an existing VPC
+      - Assert: !Equals
+          - !Ref PrivateSubnet2Cidr
+          - ""
+        AssertDescription: Private Subnet 2 CIDR must be empty when using an existing VPC
+
+Conditions:
+  CreateVPC: !Equals
+    - !Ref CreateNewVPC
+    - "true"
+  CreateVPCEndpoints: !Equals
+    - !Ref CreateVPCEndpoints
+    - "true"
+  UsePermissionsBoundary: !Not
+    - !Equals
+      - !Ref PermissionsBoundaryPolicyArn
+      - ""
+  DeployAccessConsole: !Equals
+    - !Ref DeployAccessConsole
+    - "true"
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Condition: CreateVPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !Ref PublicSubnet1Cidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet1
+
+  PublicSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet1/RTB
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PublicSubnet1RouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet1DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PublicSubnet1RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+    DependsOn:
+      - IGWGatewayAttachment
+
+  PublicSubnet1EIP:
+    Type: AWS::EC2::EIP
+    Condition: CreateVPC
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet1/EIP
+
+  PublicSubnet1NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateVPC
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      AllocationId: !GetAtt PublicSubnet1EIP.AllocationId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet1/NATGateway
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !Ref PublicSubnet2Cidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet2
+
+  PublicSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet2/RTB
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PublicSubnet2RouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PublicSubnet2DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PublicSubnet2RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+    DependsOn:
+      - IGWGatewayAttachment
+
+  PublicSubnet2EIP:
+    Type: AWS::EC2::EIP
+    Condition: CreateVPC
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet2/EIP
+
+  PublicSubnet2NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateVPC
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      AllocationId: !GetAtt PublicSubnet2EIP.AllocationId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PublicSubnet2/NATGateway
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PrivateSubnet1
+
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PrivateSubnet1/RTB
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PrivateSubnet1RouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnet1DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PrivateSubnet1RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref PublicSubnet1NatGateway
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PrivateSubnet2
+
+  PrivateSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC/PrivateSubnet2/RTB
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PrivateSubnet2RouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateSubnet2DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    Properties:
+      RouteTableId: !Ref PrivateSubnet2RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref PublicSubnet1NatGateway
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Condition: CreateVPC
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DcvInfraStack/VPC
+
+  IGWGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateVPC
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateVPCEndpoints
+    Properties:
+      GroupDescription: Security Group for VPC Endpoints
+      SecurityGroupEgress:
+        - CidrIp: 127.0.0.1/32
+          Description: No outbound traffic allowed
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !If
+            - CreateVPC
+            - !Ref VpcCidr
+            - !Ref ExistingVPCCidr
+          Description: Allows inbound HTTPS traffic
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  # VPC Endpoints
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  SsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  SqsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sqs
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  LogsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  SnsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  ImagebuilderVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVPCEndpoints
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.imagebuilder
+      SubnetIds:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      VpcEndpointType: Interface
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  # Security Groups
+  SMSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Default ports for DCV Session, Gateway, and Broker
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DCV-Session-Manager-SG
+
+  SMSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: "-1"
+      CidrIp: 0.0.0.0/0
+      Description: Allow all outbound traffic by default
+
+  SMSecurityGroupIngressBrokerTCP8443:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      CidrIp: 0.0.0.0/0
+      Description: allow CLI to Broker communication
+
+  SMSecurityGroupIngressBrokerTCP8447:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 8447
+      ToPort: 8447
+      CidrIp: 0.0.0.0/0
+      Description: allow Gateway to Broker resolver communication
+
+  SMSecurityGroupIngressBrokerTCP8445:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 8445
+      ToPort: 8445
+      CidrIp: 0.0.0.0/0
+      Description: allow Agent to Broker communication
+
+  SMSecurityGroupIngressBrokerTCP443:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !If
+        - CreateVPC
+        - !Ref VpcCidr
+        - !Ref ExistingVPCCidr
+      Description: allow SSM to Broker communication
+
+  SMSecurityGroupEgressBroker:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SMSecurityGroup.GroupId
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !GetAtt SMSecurityGroup.GroupId
+      Description: allow Broker to Broker communication
+
+  ConnectionGatewaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG default ports for DCV Connection Gateway
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DCV-Connection-Gateway-SG
+
+  ConnectionGatewaySecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+      IpProtocol: "-1"
+      CidrIp: 0.0.0.0/0
+      Description: Allow all outbound traffic by default
+
+  ConnectionGatewaySecurityGroupIngressTCP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      CidrIp: 0.0.0.0/0
+      Description: allow TCP DCV access from public internet
+
+  ConnectionGatewaySecurityGroupIngressTCPfromNLB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 8989
+      ToPort: 8989
+      CidrIp: 0.0.0.0/0
+      Description: allow health check for NLB targets
+
+  ConnectionGatewaySecurityGroupIngressUDP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+      IpProtocol: udp
+      FromPort: 8443
+      ToPort: 8443
+      CidrIp: 0.0.0.0/0
+      Description: allow UDP DCV access from public internet
+
+  ConnectionGatewaySecurityGroupIngressTCP443:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !If
+        - CreateVPC
+        - !Ref VpcCidr
+        - !Ref ExistingVPCCidr
+      Description: allow SSM to Connection Gateway communication
+
+  # IAM Roles and Policies
+  DCVFleetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-${AWS::StackName}-dcv-fleet-role
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonElasticFileSystemsUtils
+      Policies:
+        - PolicyName: DCV-Fleet-Policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::dcv-license.${AWS::Region}/*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:DescribeParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/fs-*"
+
+  DCVSessionMgrRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-${AWS::StackName}-dcv-session-mgr-role
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: DCV-SessionMgr-Policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*
+
+  DCVConnectionGwyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-${AWS::StackName}-DCV-Connection-Gateway-Role
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: DCV-ConnectionGwy-Policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+
+  # Instance Profiles
+  DCVFleetServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-${AWS::StackName}-dcv-fleet-role-instance-profile
+      Roles:
+        - !Ref DCVFleetRole
+
+  SessionMgrInstanceInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-${AWS::StackName}-dcv-session-mgr-role-instance-profile
+      Roles:
+        - !Ref DCVSessionMgrRole
+
+  ConnectionGwyLaunchTemplateProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-${AWS::StackName}-DCV-Connection-Gateway-Role-instance-profile
+      Roles:
+        - !Ref DCVConnectionGwyRole
+
+  # EC2 Instances and Launch Templates
+  SessionMgrInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone2
+      IamInstanceProfile: !Ref SessionMgrInstanceInstanceProfile
+      ImageId: !Ref SessionManagerBrokerAmiId
+      InstanceType: !Ref SessionManagerBrokerInstanceType
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !GetAtt SMSecurityGroup.GroupId
+      SubnetId: !If
+        - CreateVPC
+        - !Ref PrivateSubnet2
+        - !Ref ExistingPrivateSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DcvInfraStack/SessionMgrInstance
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref EbsVolumeSize
+            VolumeType: !Ref EbsVolumeType
+            Encrypted: true
+            KmsKeyId: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ebs
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e
+
+        # Set up logging
+        LOG_PATH="/var/log/dcv-session-mgr-broker.log"
+        LOG_DIR=$(dirname "$LOG_PATH")
+        echo $(date -u) "*****START USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+        # Retrieve System Info
+        read -r system version <<<$(echo $(cat /etc/os-release | grep "^ID=\|^VERSION_ID=" | sort | cut -d"=" -f2 | tr -d "\"" | tr '[:upper:]' '[:lower:]'))
+        major_version="${version%.*}"
+        arch="$(arch)"
+
+        # Update system packages
+        echo $(date -u) "Updating system packages..." | tee -a "$LOG_PATH"
+        dnf update -y
+
+        # Install required packages
+        echo $(date -u) "Installing required packages..." | tee -a "$LOG_PATH"
+        dnf install -y zip curl wget
+
+        # Install AWS CLI
+        echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+        # Update PATH to include AWS CLI location
+        export PATH=/usr/local/bin:$PATH
+
+        if ! command -v aws &> /dev/null; then
+            echo $(date -u) "AWS CLI not found. Installing..." | tee -a "$LOG_PATH"
+
+            # Create temporary directory for AWS CLI installation
+            AWS_CLI_TMP="$(mktemp -d /tmp/aws-cli-XXXXXX)"
+            trap 'rm -rf -- "$AWS_CLI_TMP"' ERR
+
+            if [ "$arch" = "x86_64" ]; then
+                curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+            else
+                curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+            fi
+
+            unzip -q "$AWS_CLI_TMP/awscliv2.zip" -d "$AWS_CLI_TMP"
+            "$AWS_CLI_TMP/aws/install" --update
+            rm -rf "$AWS_CLI_TMP"
+
+            # Create symlink if needed
+            if [ -f "/usr/local/aws-cli/v2/current/bin/aws" ] && [ ! -f "/usr/local/bin/aws" ]; then
+                ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
+            fi
+
+            echo $(date -u) "AWS CLI installation completed" | tee -a "$LOG_PATH"
+        else
+            echo $(date -u) "AWS CLI already installed" | tee -a "$LOG_PATH"
+        fi
+
+        # Verify AWS CLI
+        if ! command -v aws &> /dev/null; then
+            echo $(date -u) "Error: AWS CLI not accessible after installation" | tee -a "$LOG_PATH"
+            exit 1
+        fi
+
+        AWS_VERSION=$(aws --version 2>&1)
+        echo $(date -u) "AWS CLI verified: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+        # Get the private IP for connection gateway to use during configuration
+        echo $(date -u) "Retrieving private broker DNS..." | tee -a "$LOG_PATH"
+        TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+        MAC=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/network/interfaces/macs/`
+        PRIVATE_DNS=`curl -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}local-hostname"`
+        echo $(date -u) "Using private DNS $PRIVATE_DNS" | tee -a "$LOG_PATH"
+        echo "PRIVATE_DNS=$PRIVATE_DNS" > /tmp/dcv-credentials
+
+        # Get current region
+        REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+        echo $(date -u) "Current Region: $REGION" | tee -a "$LOG_PATH"
+
+        # Store the private private DNS name in SSM Parameter Store
+        echo $(date -u) "Storing broker private DNS name in AWS SSM Parameter Store..." | tee -a "$LOG_PATH"
+        aws ssm put-parameter --name dcv-broker-private-dns --value "$PRIVATE_DNS" --type String --overwrite --region "$REGION"
+
+        # Store dcvsmbroker_ca.pem in SSM Parameter Store
+        echo $(date -u) "Storing dcvsmbroker_ca.pem in AWS SSM Parameter Store..." | tee -a "$LOG_PATH"
+        # Read the content of the CA certificate
+        CA_CERT_CONTENT=$(sudo cat /var/lib/dcvsmbroker/security/dcvsmbroker_ca.pem)
+        # Store the CA certificate content in SSM Parameter Store
+        aws ssm put-parameter --name dcv-broker-ca-cert --value "$CA_CERT_CONTENT" --type SecureString --overwrite --region "$REGION"
+
+        # Log if successful installation
+        if [[ $? -eq 0 ]]; then
+            echo $(date -u) "Stored private DNS name $PRIVATE_DNS in Parameter Store" | tee -a "$LOG_PATH"
+            echo $(date -u) "Successfully stored dcvsmbroker_ca.pem in Parameter Store" | tee -a "$LOG_PATH"
+        else
+            echo $(date -u) "There was an error during DCV Session Manager installation" | tee -a "$LOG_PATH"
+            echo $(date -u) "Failed to store dcvsmbroker_ca.pem in Parameter Store" | tee -a "$LOG_PATH"
+        fi
+
+        # Install wget and other dependencies
+        echo "$(date -u) Installing required packages..." | tee -a "$LOG_PATH"
+        if command -v apt-get &> /dev/null; then
+            apt-get update
+            apt-get install -y wget zip
+        elif command -v yum &> /dev/null; then
+            yum install -y wget zip
+        elif command -v dnf &> /dev/null; then
+            dnf install -y wget zip
+        else
+            echo "$(date -u) No supported package manager found" | tee -a "$LOG_PATH"
+            exit 1
+        fi
+
+        # Register API Client and save credentials
+        API_CLIENT_OUTPUT=$(sudo -u root dcv-session-manager-broker register-api-client --client-name "dcv-api-client" 2>&1)
+        if [ $? -eq 0 ]; then
+            echo "$(date -u) API client registration output:" | tee -a "$LOG_PATH"
+
+            # Extract and save credentials
+            CLIENT_ID=$(echo "$API_CLIENT_OUTPUT" | grep "client-id:" | cut -d':' -f2 | tr -d ' ')
+            CLIENT_SECRET=$(echo "$API_CLIENT_OUTPUT" | grep "client-password:" | cut -d':' -f2 | tr -d ' ')
+
+            # Create directory structure
+            mkdir nice-dcv-cli
+            cd nice-dcv-cli
+
+            # Download and extract CLI
+            wget https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-cli.zip
+            unzip nice-dcv-session-manager-cli.zip
+
+            # Navigate to CLI directory and conf folder
+            cd nice-dcv-session-manager-cli-1*
+            cd conf
+
+            # Create configuration file with proper variable expansion
+            cat > dcvsmcli.conf << EOF
+        [output]
+        output-format = json
+
+        [security]
+        no-verify-ssl = true
+
+        [authentication]
+        client-id = $CLIENT_ID
+        client-password = $CLIENT_SECRET
+
+        [broker]
+        url = https://$PRIVATE_DNS:8443
+        EOF
+
+            # Set permissions
+            chmod 644 dcvsmcli.conf
+
+            # Add CLI to PATH (using absolute paths)
+            CLI_PATH=$(pwd)/..
+            CONF_PATH=$(pwd)/dcvsmcli.conf
+
+            cat > /etc/profile.d/dcv-sm-cli.sh << EOF
+        export PATH=\$PATH:$CLI_PATH
+        export DCVSM_CONF=$CONF_PATH
+        EOF
+
+            chmod +x /etc/profile.d/dcv-sm-cli.sh
+
+            # Source the path
+            source /etc/profile.d/dcv-sm-cli.sh
+
+            # Verify CLI configuration
+            if [ -f "$CONF_PATH" ]; then
+                echo "$(date -u) CLI configuration created successfully" | tee -a "$LOG_PATH"
+
+            else
+                echo "$(date -u) Failed to create CLI configuration" | tee -a "$LOG_PATH"
+            fi
+            # Save credentials to Parameter Store
+            if [ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ]; then
+                echo "$(date -u) Saving DCV Session Manager credentials to Parameter Store..." | tee -a "$LOG_PATH"
+
+                # Combine credentials with colon separator
+                CREDENTIALS_VALUE="${CLIENT_ID}:${CLIENT_SECRET}"
+
+                # Save to Parameter Store (encrypted using SecureString)
+                aws ssm put-parameter \
+                    --name "dcv-session-manager-credentials" \
+                    --value "$CREDENTIALS_VALUE" \
+                    --type "SecureString" \
+                    --overwrite \
+                    --region "$REGION"
+
+                if [ $? -eq 0 ]; then
+                    echo "$(date -u) Successfully saved credentials to Parameter Store" | tee -a "$LOG_PATH"
+                else
+                    echo "$(date -u) Failed to save credentials to Parameter Store" | tee -a "$LOG_PATH"
+                    exit 1
+                fi
+            else
+                echo "$(date -u) CLIENT_ID or CLIENT_SECRET not set, cannot save to Parameter Store" | tee -a "$LOG_PATH"
+                exit 1
+            fi
+
+        else
+            echo "$(date -u) Failed to register API client" | tee -a "$LOG_PATH"
+            exit 1
+        fi
+
+        # Restart the broker service
+        systemctl restart dcv-session-manager-broker.service
+
+        echo $(date -u) "*****END USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+  ConnectionGwyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      # LaunchTemplateName: !Sub ${AWS::StackName}-DCVConnectionGwyLaunchTemplate
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt ConnectionGwyLaunchTemplateProfile.Arn
+        ImageId: !Ref ConnectionGatewayAmiId
+        InstanceType: !Ref ConnectionGatewayInstanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !GetAtt ConnectionGatewaySecurityGroup.GroupId
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref EbsVolumeSize
+              VolumeType: !Ref EbsVolumeType
+              Encrypted: true
+              KmsKeyId: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ebs
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${AWS::StackName}-DcvInfraStack/ConnectionGateway
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub ${AWS::StackName}-DcvInfraStack/ConnectionGateway
+        UserData: !Base64 |
+          #!/bin/bash
+          set -e
+          LOG_PATH="/var/log/dcv-connection-gateway-install.log"
+          echo $(date -u) "*****START USER DATA SCRIPT*****" | tee -a $LOG_PATH
+
+          # Install AWS CLI
+          echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+          # Update PATH to include AWS CLI location
+          export PATH=/usr/local/bin:$PATH
+
+          if ! command -v aws &> /dev/null; then
+              echo $(date -u) "AWS CLI not found. Installing..." | tee -a "$LOG_PATH"
+
+              # Create temporary directory for AWS CLI installation
+              AWS_CLI_TMP="$(mktemp -d /tmp/aws-cli-XXXXXX)"
+              trap 'rm -rf -- "$AWS_CLI_TMP"' ERR
+
+              if [ "$arch" = "x86_64" ]; then
+                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+              else
+                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+              fi
+
+              unzip -q "$AWS_CLI_TMP/awscliv2.zip" -d "$AWS_CLI_TMP"
+              "$AWS_CLI_TMP/aws/install" --update
+              rm -rf "$AWS_CLI_TMP"
+
+              # Create symlink if needed
+              if [ -f "/usr/local/aws-cli/v2/current/bin/aws" ] && [ ! -f "/usr/local/bin/aws" ]; then
+                  ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
+              fi
+
+              echo $(date -u) "AWS CLI installation completed" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "AWS CLI already installed" | tee -a "$LOG_PATH"
+          fi
+
+          # Verify AWS CLI
+          if ! command -v aws &> /dev/null; then
+              echo $(date -u) "Error: AWS CLI not accessible after installation" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          AWS_VERSION=$(aws --version 2>&1)
+          echo $(date -u) "AWS CLI verified: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+          # Get current region
+          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+          REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+          echo $(date -u) "Current Region: $REGION" | tee -a "$LOG_PATH"
+
+          # Retrieve Broker Private DNS from SSM Parameter Store with retries
+          echo $(date -u) "Retrieving broker private DNS from SSM Parameter Store" | tee -a "$LOG_PATH"
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+          BROKER_PRIVATE_DNS=""
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+              # Source the updated PATH to ensure AWS CLI is available
+              source /etc/profile
+              export PATH=/usr/local/bin:$PATH
+
+              if SSM_RESULT=$(/usr/local/bin/aws ssm get-parameter \
+                  --name dcv-broker-private-dns \
+                  --region "$REGION" \
+                  --with-decryption 2>&1); then
+
+                  BROKER_PRIVATE_DNS=$(echo "$SSM_RESULT" | grep -Po '"Value": "\K[^"]*')
+                  if [ ! -z "$BROKER_PRIVATE_DNS" ]; then
+                      echo $(date -u) "Successfully retrieved broker private DNS: $BROKER_PRIVATE_DNS" | tee -a "$LOG_PATH"
+                      break
+                  fi
+              else
+                  echo $(date -u) "Attempt $ATTEMPT/$MAX_ATTEMPTS: Failed to retrieve broker DNS" | tee -a "$LOG_PATH"
+                  echo $(date -u) "Error: $SSM_RESULT" | tee -a "$LOG_PATH"
+              fi
+
+              if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                  echo $(date -u) "Error: Maximum attempts reached. Could not retrieve broker DNS." | tee -a "$LOG_PATH"
+                  exit 1
+              fi
+
+              ATTEMPT=$((ATTEMPT + 1))
+              sleep 15
+          done
+          echo $(date -u) "Broker private DNS found $BROKER_PRIVATE_DNS" | tee -a "$LOG_PATH"
+
+          # Port Configuration. Using hex to escape double quotes: \x22 = "
+          echo $(date -u) "Configuring Connection Gateway..." | tee -a "$LOG_PATH"
+          sed -i "s/^#\[health-check\]/\[health-check\]/g" /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+          sed -i --expression 's|#bind-addr = "::"|bind-addr = "::"|' /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+          sed -i --expression 's|#tls-strict = false|tls-strict = false|' /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+          sed -i "/\[resolver\]/a tls-strict = false" /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+          sed -i "/bind-addr = \"::\"/a port = 8989" /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+          sed -i "s|url = \"https://localhost:8081\"|url = \"https://$BROKER_PRIVATE_DNS:8447\"|" /etc/dcv-connection-gateway/dcv-connection-gateway.conf
+
+          # Start DCV Connection Gateway Service
+          echo $(date -u) "Starting and Enabling Connection Gateway service..." | tee -a "$LOG_PATH"
+          systemctl restart dcv-connection-gateway.service
+
+          # Log if successful installation
+          if [[ $? -eq 0 ]]; then
+              echo $(date -u) "Successfully installed DCV Connection Gateway" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "There was an error during DCV Connection Gateway installation" | tee -a "$LOG_PATH"
+          fi
+          echo $(date -u) "*****END USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+  # Auto Scaling Group and Load Balancer
+  ConnectionGwyASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: SessionMgrInstance
+    Properties:
+      VPCZoneIdentifier:
+        - !If
+          - CreateVPC
+          - !Ref PublicSubnet1
+          - !Ref ExistingPublicSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PublicSubnet2
+          - !Ref ExistingPublicSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ConnectionGwyLaunchTemplate
+        Version: !GetAtt ConnectionGwyLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 2
+      DesiredCapacity: 2
+      TargetGroupARNs:
+        - !Ref ConnectionGwyNLBTargetGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+
+  ConnectionGwyASGScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ConnectionGwyASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref CpuUtilizationTarget
+
+  ConnectionGwyNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      Scheme: internet-facing
+      Subnets:
+        - !If
+          - CreateVPC
+          - !Ref PublicSubnet1
+          - !Ref ExistingPublicSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PublicSubnet2
+          - !Ref ExistingPublicSubnet2Id
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "false"
+        - Key: load_balancing.cross_zone.enabled
+          Value: "true"
+      Name: !Sub ${AWS::StackName}-nlb
+
+  ConnectionGwyNLBConnectionGwyNLBListener9EA5A2A4:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ConnectionGwyNLBTargetGroup
+      LoadBalancerArn: !Ref ConnectionGwyNLB
+      Port: 8443
+      Protocol: TCP_UDP
+
+  ConnectionGwyNLBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: "8989"
+      HealthCheckProtocol: TCP
+      HealthyThresholdCount: 5
+      Port: 8443
+      Protocol: TCP_UDP
+      TargetType: instance
+      UnhealthyThresholdCount: 5
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  ConnectionGatewayDnsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Reachable DNS of DCV Connection Gateway
+      Name: dcv-connection-gwy-dns
+      Tier: Standard
+      Type: String
+      Value: !GetAtt ConnectionGwyNLB.DNSName
+
+  DCVServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for DCV Fleet Servers
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+      SecurityGroupIngress:
+        - Description: Allow DCV streaming traffic from Gateway
+          FromPort: 8443
+          ToPort: 8443
+          IpProtocol: tcp
+          SourceSecurityGroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+        - Description: Allow DCV streaming traffic (UDP)
+          FromPort: 8443
+          ToPort: 8443
+          IpProtocol: udp
+          SourceSecurityGroupId: !GetAtt ConnectionGatewaySecurityGroup.GroupId
+        - Description: allow Gateway to Broker resolver communication
+          FromPort: 8445
+          ToPort: 8445
+          IpProtocol: tcp
+          CidrIp: !If
+            - CreateVPC
+            - !Ref VpcCidr
+            - !Ref ExistingVPCCidr
+        - Description: allow agent to Broker resolver communication
+          FromPort: 8447
+          ToPort: 8447
+          IpProtocol: tcp
+          CidrIp: !If
+            - CreateVPC
+            - !Ref VpcCidr
+            - !Ref ExistingVPCCidr
+        - Description: Allow EFS traffic
+          FromPort: 2049
+          ToPort: 2049
+          IpProtocol: tcp
+          CidrIp: !If
+            - CreateVPC
+            - !Ref VpcCidr
+            - !Ref ExistingVPCCidr
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DCVServerSecurityGroup
+
+  DCVFleetServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${AWS::StackName}-DCVFleetServerLaunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref DCVServerAmiId
+        InstanceType: !Ref DCVServerInstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt DCVFleetServerInstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref DCVServerSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref EbsVolumeSize
+              VolumeType: !Ref EbsVolumeType
+              Encrypted: true
+              KmsKeyId: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ebs
+        KeyName: !Ref KeyName
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${AWS::StackName}-DcvInfraStack/DCVFleetServer
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub ${AWS::StackName}-DcvInfraStack/DCVFleetServer
+        UserData: 
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -e
+            LOG_PATH="/var/log/dcv-server-install.log"
+            echo $(date -u) "*****START USER DATA SCRIPT*****" | tee -a $LOG_PATH
+
+            # Retrieve System Info
+            read -r system version <<<$(echo $(cat /etc/os-release | grep "^ID=\|^VERSION_ID=" | sort | cut -d"=" -f2 | tr -d "\"" | tr '[:upper:]' '[:lower:]'))
+            major_version=$(echo "$version" | cut -d. -f1)
+            arch="$(arch)"
+
+            # Install AWS CLI
+            echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+            # Update PATH to include AWS CLI location
+            export PATH=/usr/local/bin:$PATH
+
+            if ! command -v aws &> /dev/null; then
+                echo $(date -u) "AWS CLI not found. Installing..." | tee -a "$LOG_PATH"
+
+                # Create temporary directory for AWS CLI installation
+                AWS_CLI_TMP="$(mktemp -d /tmp/aws-cli-XXXXXX)"
+                trap 'rm -rf -- "$AWS_CLI_TMP"' ERR
+
+                if [ "$arch" = "x86_64" ]; then
+                    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+                else
+                    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+                fi
+
+                unzip -q "$AWS_CLI_TMP/awscliv2.zip" -d "$AWS_CLI_TMP"
+                "$AWS_CLI_TMP/aws/install" --update
+                rm -rf "$AWS_CLI_TMP"
+
+                # Create symlink if needed
+                if [ -f "/usr/local/aws-cli/v2/current/bin/aws" ] && [ ! -f "/usr/local/bin/aws" ]; then
+                    ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
+                fi
+
+                echo $(date -u) "AWS CLI installation completed" | tee -a "$LOG_PATH"
+            else
+                echo $(date -u) "AWS CLI already installed" | tee -a "$LOG_PATH"
+            fi
+
+            AWS_VERSION=$(aws --version 2>&1)
+            echo $(date -u) "AWS CLI verified: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+            # Get current region
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+            REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+            echo $(date -u) "Current Region: $REGION" | tee -a "$LOG_PATH"
+
+            # Retrieve Broker Private DNS from SSM Parameter Store with retries
+            echo $(date -u) "Retrieving broker private DNS and certificate from SSM Parameter Store" | tee -a "$LOG_PATH"
+            MAX_ATTEMPTS=3
+            ATTEMPT=1
+            BROKER_PRIVATE_DNS=""
+            BROKER_CERT=""
+
+            while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+                # Source the updated PATH to ensure AWS CLI is available
+                export PATH=/usr/local/bin:$PATH
+
+                # Try to get broker DNS
+                if BROKER_PRIVATE_DNS=$(/usr/local/bin/aws ssm get-parameter \
+                    --name dcv-broker-private-dns \
+                    --region "$REGION" \
+                    --with-decryption \
+                    --query 'Parameter.Value' \
+                    --output text 2>&1); then
+
+                    # If DNS retrieved successfully, try to get certificate
+                    if [ ! -z "$BROKER_PRIVATE_DNS" ]; then
+                        if BROKER_CERT=$(/usr/local/bin/aws ssm get-parameter \
+                            --name dcv-broker-ca-cert \
+                            --region "$REGION" \
+                            --with-decryption \
+                            --query 'Parameter.Value' \
+                            --output text 2>&1); then
+
+                            # Create directory and save certificate with proper formatting
+                            mkdir -p /etc/dcv-session-manager-agent
+                            BROKER_CERT_PATH="/etc/dcv-session-manager-agent/broker_cert.pem"
+                            echo "$BROKER_CERT" | sed 's/\\n/\n/g' > "$BROKER_CERT_PATH"
+
+                            if openssl x509 -in "$BROKER_CERT_PATH" -text -noout &>/dev/null; then
+                                echo $(date -u) "Successfully retrieved broker private DNS: $BROKER_PRIVATE_DNS" | tee -a "$LOG_PATH"
+                                echo $(date -u) "Successfully retrieved and formatted broker certificate" | tee -a "$LOG_PATH"
+                                break
+                            else
+                                echo $(date -u) "Error: Invalid certificate format" | tee -a "$LOG_PATH"
+                                rm -f "$BROKER_CERT_PATH"
+                                BROKER_CERT=""
+                            fi
+                        else
+                            echo $(date -u) "Attempt $ATTEMPT/$MAX_ATTEMPTS: Failed to retrieve broker certificate" | tee -a "$LOG_PATH"
+                            echo $(date -u) "Error: $BROKER_CERT" | tee -a "$LOG_PATH"
+                        fi
+                    fi
+                else
+                    echo $(date -u) "Attempt $ATTEMPT/$MAX_ATTEMPTS: Failed to retrieve broker DNS" | tee -a "$LOG_PATH"
+                    echo $(date -u) "Error: $BROKER_PRIVATE_DNS" | tee -a "$LOG_PATH"
+                fi
+
+                if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                    echo $(date -u) "Error: Maximum attempts reached. Could not retrieve broker DNS or certificate." | tee -a "$LOG_PATH"
+                    exit 1
+                fi
+
+                ATTEMPT=$((ATTEMPT + 1))
+                sleep 15
+            done
+
+            echo $(date -u) "Broker private DNS found: $BROKER_PRIVATE_DNS" | tee -a "$LOG_PATH"
+            echo $(date -u) "Broker certificate saved to: $BROKER_CERT_PATH" | tee -a "$LOG_PATH"
+
+            # DCV Server Configuration
+            echo $(date -u) "Configuring DCV Server" | tee -a "$LOG_PATH"
+            sed -i \
+                -e '/^auth-token-verifier/d' \
+                -e '/^\[security\]/a auth-token-verifier="https://'$BROKER_PRIVATE_DNS':8445/agent/validate-authentication-token"' \
+                /etc/dcv/dcv.conf
+
+
+            # DCV Session Manager Configuration
+            echo $(date -u) "Configuring Session Manager Agent" | tee -a "$LOG_PATH"
+            cat > /etc/dcv-session-manager-agent/agent.conf << EOF
+            version = "1.0"
+
+            [agent]
+            broker_host = "$BROKER_PRIVATE_DNS"
+            broker_port = 8445
+            tls_strict = false
+            ca_file = "$BROKER_CERT_PATH"
+
+            [session]
+            type = "console"
+            permissions_file = "/etc/dcv-session-manager-agent/permissions.conf"
+            storage_root = "%home%"
+            enable_auto_create_session = true
+
+            [log]
+            level = "debug"
+            rotation = "daily"
+            EOF
+
+            # Permission Configuration
+            echo $(date -u) "Configuring permissions configuration" | tee -a "$LOG_PATH"
+
+            # Create initial permissions.conf
+            cat > /etc/dcv-session-manager-agent/permissions.conf << EOF
+            [permissions]
+            allow_users = ["ec2-user"]
+            EOF
+
+            # Create dcv user and group
+            echo $(date -u) "Creating dcv user and group" | tee -a "$LOG_PATH"
+            getent group dcv >/dev/null || groupadd dcv
+            getent passwd dcv >/dev/null || useradd -r -g dcv -s /sbin/nologin dcv
+
+            # Set proper permissions for DCV files
+            echo $(date -u) "Setting proper permissions" | tee -a "$LOG_PATH"
+            chown -R dcv:dcv /etc/dcv-session-manager-agent
+            find /etc/dcv-session-manager-agent -type f -exec chmod 644 {} \;
+
+            # Configure ec2-user for DCV
+            echo $(date -u) "Configuring ec2-user for DCV..." | tee -a "$LOG_PATH"
+
+            # Add required groups and ec2-user to them
+            echo $(date -u) "Adding ec2-user to required groups..." | tee -a "$LOG_PATH"
+            for group in wheel dcv dcvsmagent adm systemd-journal; do
+                # Create group if it doesn't exist
+                getent group "$group" >/dev/null 2>&1 || groupadd "$group"
+
+                # Add ec2-user to group if not already a member
+                if ! groups ec2-user | grep -q "\b$group\b"; then
+                    echo $(date -u) "Adding ec2-user to group: $group" | tee -a "$LOG_PATH"
+                    usermod -aG "$group" ec2-user
+                fi
+            done
+
+            # Create/verify ec2-user account
+            if ! id ec2-user &>/dev/null; then
+                echo $(date -u) "Creating ec2-user account..." | tee -a "$LOG_PATH"
+                useradd -m -s /bin/bash ec2-user
+            fi
+
+            # Setup ec2-user home directory
+            echo $(date -u) "Setting up ec2-user home directory..." | tee -a "$LOG_PATH"
+            EC2_USER_HOME="/home/ec2-user"
+            chmod 750 "$EC2_USER_HOME"
+            chown ec2-user:ec2-user "$EC2_USER_HOME"
+
+            # Create and configure .dcv directory
+            DCV_DIR="$EC2_USER_HOME/.dcv"
+            if [ ! -d "$DCV_DIR" ]; then
+                echo $(date -u) "Creating .dcv directory..." | tee -a "$LOG_PATH"
+                mkdir -p "$DCV_DIR"
+                chown ec2-user:ec2-user "$DCV_DIR"
+                chmod 700 "$DCV_DIR"
+            fi
+
+            # Update DCV configurations
+            echo $(date -u) "Updating DCV permissions for ec2-user..." | tee -a "$LOG_PATH"
+
+            # Update permissions.conf if ec2-user not present
+            PERMISSIONS_CONF="/etc/dcv-session-manager-agent/permissions.conf"
+            if [ -f "$PERMISSIONS_CONF" ] && ! grep -q "\"ec2-user\"" "$PERMISSIONS_CONF"; then
+                echo $(date -u) "Adding ec2-user to DCV permissions..." | tee -a "$LOG_PATH"
+                sed -i '/allow_users/s/]/, "ec2-user"]/' "$PERMISSIONS_CONF"
+            fi
+
+            # Update dcv.conf if it exists and ec2-user not present
+            DCV_CONF="/etc/dcv/dcv.conf"
+            if [ -f "$DCV_CONF" ] && ! grep -q "\"ec2-user\"" "$DCV_CONF"; then
+                echo $(date -u) "Adding ec2-user as DCV administrator..." | tee -a "$LOG_PATH"
+                sed -i '/administrators/s/]/, "ec2-user"]/' "$DCV_CONF"
+            fi
+
+            # Verify configuration
+            echo $(date -u) "Verifying ec2-user DCV configuration..." | tee -a "$LOG_PATH"
+            {
+                echo "Group membership:"
+                groups ec2-user
+                echo "Home directory permissions:"
+                ls -la "$EC2_USER_HOME"
+                echo "DCV permissions:"
+                grep -r "ec2-user" /etc/dcv* || echo "No explicit mentions found"
+            } | tee -a "$LOG_PATH"
+
+            # Start and enable services
+            echo $(date -u) "Restarting DCV Server and Session Manager Agent..." | tee -a "$LOG_PATH"
+
+            # First stop both services
+            echo $(date -u) "Stopping DCV services..." | tee -a "$LOG_PATH"
+            systemctl stop dcvserver
+            systemctl stop dcv-session-manager-agent
+
+            # Wait for services to fully stop
+            sleep 5
+
+            # Start services in correct order
+            echo $(date -u) "Starting DCV Session Manager Agent..." | tee -a "$LOG_PATH"
+            systemctl start dcv-session-manager-agent
+            systemctl enable dcv-session-manager-agent
+
+            echo $(date -u) "Starting DCV Server..." | tee -a "$LOG_PATH"
+            systemctl start dcvserver
+            systemctl enable dcvserver
+
+            # Wait for services to fully start
+            sleep 5
+
+            # Verify services status
+            echo $(date -u) "Verifying DCV services status..." | tee -a "$LOG_PATH"
+            {
+                echo "DCV Server Status:"
+                systemctl status dcvserver --no-pager
+                echo "DCV Session Manager Agent Status:"
+                systemctl status dcv-session-manager-agent --no-pager
+            } | tee -a "$LOG_PATH"
+
+            # Install required packages
+            echo "Installing required packages..." | tee -a "$LOG_PATH"
+            yum install -y nfs-utils
+
+            # Start and enable the NFS service
+            echo "Starting and enabling NFS service..." | tee -a "$LOG_PATH"
+            systemctl start nfs-server
+            systemctl enable nfs-server
+            systemctl status nfs-server
+
+            # Debug: Print EFSConfigurations
+            echo "EFSConfigurations: ${EFSConfigurations}" | tee -a "$LOG_PATH"
+
+            # Parse and mount EFS filesystems
+            echo "Processing EFS configurations..." | tee -a "$LOG_PATH"
+            echo "${EFSConfigurations}" | tr ',' '\n' | while read -r config; do
+                # Debug: Print current config
+                echo "Processing config: $config" | tee -a "$LOG_PATH"
+
+                # Extract filesystem ID and mount point from config
+                filesystem_id=$(echo "$config" | cut -d: -f1)
+                mount_point=$(echo "$config" | cut -d: -f2)
+                
+                # Debug: Print extracted values
+                echo "Filesystem ID: $filesystem_id, Mount Point: $mount_point" | tee -a "$LOG_PATH"
+                
+                echo "Creating mount point $mount_point..." | tee -a "$LOG_PATH"
+                mkdir -p "$mount_point"
+
+                echo "Adding EFS mount $filesystem_id to fstab..." | tee -a "$LOG_PATH"
+                echo "$filesystem_id.efs.${AWS::Region}.${AWS::URLSuffix}:/ $mount_point nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0" >> /etc/fstab
+
+                # Mount EFS 
+                mount_attempts=0
+                max_attempts=3
+
+                until mountpoint -q "$mount_point" || [ $mount_attempts -eq $max_attempts ]; do
+                    mount_attempts=$((mount_attempts + 1))
+                    echo "Mount attempt $mount_attempts of $max_attempts for $filesystem_id" | tee -a "$LOG_PATH"
+                    
+                    mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport \
+                    "$filesystem_id.efs.${AWS::Region}.${AWS::URLSuffix}:/" "$mount_point"
+                    
+                    if [ $mount_attempts -lt $max_attempts ]; then
+                        sleep 10
+                    fi
+                done
+
+                # Set permissions
+                echo "Setting permissions for $mount_point..." | tee -a "$LOG_PATH"
+                chown ec2-user:ec2-user "$mount_point"
+                chmod 755 "$mount_point"
+                echo "EFS $filesystem_id mounted successfully at $mount_point" | tee -a "$LOG_PATH"
+            done
+
+            # Debug: List mounted filesystems
+            echo "Mounted filesystems:" | tee -a "$LOG_PATH"
+            mount | grep efs | tee -a "$LOG_PATH"
+    
+            echo $(date -u) "*****END USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+  DCVFleetServerASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: SessionMgrInstance
+    Properties:
+      VPCZoneIdentifier:
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet1
+          - !Ref ExistingPrivateSubnet1Id
+        - !If
+          - CreateVPC
+          - !Ref PrivateSubnet2
+          - !Ref ExistingPrivateSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref DCVFleetServerLaunchTemplate
+        Version: !GetAtt DCVFleetServerLaunchTemplate.LatestVersionNumber
+      MinSize: !Ref AutoScalingMinSize
+      MaxSize: !Ref AutoScalingMaxSize
+      DesiredCapacity: !Ref AutoScalingDesiredCapacity
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+
+  DCVFleetServerScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref DCVFleetServerASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref CpuUtilizationTarget
+
+  AccessConsoleRole:
+    Type: AWS::IAM::Role
+    Condition: DeployAccessConsole
+    Properties:
+      RoleName: !Sub ${IamPrefix}-${AWS::StackName}-access-console-role
+      PermissionsBoundary: !If
+        - UsePermissionsBoundary
+        - !Ref PermissionsBoundaryPolicyArn
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: DCV-Access-Console-Policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/dcv-*
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*
+
+  AccessConsoleSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: DeployAccessConsole
+    Properties:
+      GroupDescription: Security Group for the DCV Access Console
+      VpcId: !If
+        - CreateVPC
+        - !Ref VPC
+        - !Ref ExistingVPCId
+
+  AccessConsoleSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Condition: DeployAccessConsole
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: Allow all outbound traffic by default
+      GroupId: !GetAtt AccessConsoleSecurityGroup.GroupId
+      IpProtocol: "-1"
+
+  AccessConsoleSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: DeployAccessConsole
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: Allow HTTPS traffic to the DCV Access Console
+      FromPort: 443
+      GroupId: !GetAtt AccessConsoleSecurityGroup.GroupId
+      IpProtocol: tcp
+      ToPort: 443
+
+  AccessConsoleInstanceInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: DeployAccessConsole
+    Properties:
+      Roles:
+        - !Ref AccessConsoleRole
+
+  AccessConsoleEIP:
+    Type: AWS::EC2::EIP
+    Condition: DeployAccessConsole
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-AccessConsole-EIP
+
+  AccessConsoleEIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Condition: DeployAccessConsole
+    Properties:
+      AllocationId: !GetAtt AccessConsoleEIP.AllocationId
+      InstanceId: !Ref AccessConsoleInstance
+
+  AccessConsoleInstance:
+    Type: AWS::EC2::Instance
+    Condition: DeployAccessConsole
+    DependsOn: 
+      - SessionMgrInstance
+      - ConnectionGwyNLB
+      - AccessConsoleEIP
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone2
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Encrypted: true
+            KmsKeyId: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ebs
+            VolumeSize: !Ref EbsVolumeSize
+            VolumeType: !Ref EbsVolumeType
+      IamInstanceProfile: !Ref AccessConsoleInstanceInstanceProfile
+      ImageId: !Ref AccessConsoleAmiId
+      InstanceType: !Ref AccessConsoleInstanceType
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !GetAtt AccessConsoleSecurityGroup.GroupId
+      SubnetId: !If
+        - CreateVPC
+        - !Ref PublicSubnet2
+        - !Ref ExistingPublicSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DcvInfraStack/AccessConsoleInstance
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # # Configure proxy settings
+          # cat >/etc/environment <<EOF
+          # HTTP_PROXY=${ProxyServerAddress}:3128
+          # HTTPS_PROXY=${ProxyServerAddress}:3128
+          # NO_PROXY='${AWS::Region}.compute.internal,localhost,127.0.0.1,s3.${AWS::Region}.${AWS::URLSuffix},169.254.169.254,v12e.io'
+          # http_proxy=${ProxyServerAddress}:3128
+          # https_proxy=${ProxyServerAddress}:3128
+          # no_proxy='${AWS::Region}.compute.internal,localhost,127.0.0.1,s3.${AWS::Region}.${AWS::URLSuffix},169.254.169.254,v12e.io'
+          # EOF
+
+          # source /etc/environment
+
+          # # Configure SSM Agent proxy
+          # mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+          # cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+          # [Service]
+          # EnvironmentFile=/etc/environment
+          # PassEnvironment=HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy
+          # EOF
+
+          # # Configure yum proxy
+          # cat >> /etc/yum.conf <<EOF
+          # proxy=${ProxyServerAddress}:3128
+          # EOF
+
+          LOG_PATH="/var/log/dcv-access-console-install.log"
+          mkdir -p "$(dirname "$LOG_PATH")"
+          touch "$LOG_PATH"
+
+          echo $(date -u) "*****START USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+          # Retrieve System Info
+          read -r system version <<<$(echo $(cat /etc/os-release | grep "^ID=\|^VERSION_ID=" | sort | cut -d"=" -f2 | tr -d "\"" | tr '[:upper:]' '[:lower:]'))
+          major_version=$(echo "$version" | cut -d. -f1)
+          arch="$(arch)"
+
+          # Set up temporary directory based on OS
+          if [ "$system" = "ubuntu" ]; then
+              TMP_DIR="/etc/dcv-access-console-install"
+              mkdir -p "$TMP_DIR"
+          else
+              TMP_DIR="$(mktemp -d /tmp/XXXXXX)"
+          fi
+          echo $(date -u) "Created temp directory: $TMP_DIR" | tee -a "$LOG_PATH"
+
+          CLOUDFRONT_PREFIX="https://d1uj6qtbmh3dt5.cloudfront.net"
+
+          case $system in
+              amzn )
+                  if [ "$major_version" = 2023 ]; then
+                      package_type="el9"
+                      package_manager="yum"
+                      package_extension="rpm"
+                  elif [ "$major_version" = 2 ]; then
+                      package_type="el7"
+                      package_manager="yum"
+                      package_extension="rpm"
+                  fi
+                  ;;
+              centos|rhel|rocky )
+                  if [[ "$major_version" =~ ^(7|8|9) ]]; then
+                      package_type="el$major_version"
+                      if [[ "$major_version" =~ ^(8|9) ]]; then
+                          package_manager="dnf"
+                      else
+                          package_manager="yum"
+                      fi
+                      package_extension="rpm"
+                  fi
+                  ;;
+              ubuntu )
+                  if [ "$major_version" = 22 ] || [ "$major_version" = 20 ]; then
+                      package_type="ubuntu$(echo $version | tr -d '.')"
+                      package_manager="apt"
+                      package_extension="deb"
+                  fi
+                  ;;
+              * )
+                  echo $(date -u) "Error: system '$system' is not supported" | tee -a "$LOG_PATH"
+                  exit 1
+                  ;;
+          esac
+
+          if [ -z "$package_type" ]; then
+              echo $(date -u) "Error: system '$system' with version '$version' is not supported for arch '$arch'" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          echo $(date -u) "System Info detected:" | tee -a "$LOG_PATH"
+          echo $(date -u) "OS Type: $package_type" | tee -a "$LOG_PATH"
+          echo $(date -u) "Package Manager: $package_manager" | tee -a "$LOG_PATH"
+
+          # Install Dependencies
+          echo $(date -u) "Installing Dependencies...." | tee -a "$LOG_PATH"
+          "$package_manager" update -y
+          "$package_manager" install -y jq curl zip wget
+
+
+          echo $(date -u) "Installing AWS CLI..." | tee -a "$LOG_PATH"
+
+          # Update PATH to include AWS CLI location
+          export PATH=/usr/local/bin:$PATH
+
+          if ! command -v aws &> /dev/null; then
+              echo $(date -u) "AWS CLI not found. Installing..." | tee -a "$LOG_PATH"
+
+              # Create temporary directory for AWS CLI installation
+              AWS_CLI_TMP="$(mktemp -d /tmp/aws-cli-XXXXXX)"
+              trap 'rm -rf -- "$AWS_CLI_TMP"' ERR
+
+              if [ "$arch" = "x86_64" ]; then
+                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+              else
+                  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$AWS_CLI_TMP/awscliv2.zip"
+              fi
+
+              unzip -q "$AWS_CLI_TMP/awscliv2.zip" -d "$AWS_CLI_TMP"
+              "$AWS_CLI_TMP/aws/install" --update
+              rm -rf "$AWS_CLI_TMP"
+
+              # Create symlink if needed
+              if [ -f "/usr/local/aws-cli/v2/current/bin/aws" ] && [ ! -f "/usr/local/bin/aws" ]; then
+                  ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
+              fi
+
+              echo $(date -u) "AWS CLI installation completed" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "AWS CLI already installed" | tee -a "$LOG_PATH"
+          fi
+
+          # Verify AWS CLI
+          if ! command -v aws &> /dev/null; then
+              echo $(date -u) "Error: AWS CLI not accessible after installation" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          AWS_VERSION=$(aws --version 2>&1)
+          echo $(date -u) "AWS CLI verified: $AWS_VERSION" | tee -a "$LOG_PATH"
+
+          # Install SSM Agent
+          echo $(date -u) "Installing/Updating SSM Agent..." | tee -a "$LOG_PATH"
+          case $system in
+              amzn|centos|rhel )
+                  if ! systemctl status amazon-ssm-agent &> /dev/null; then
+                      if [ "$arch" = "x86_64" ]; then
+                          $package_manager install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+                      else
+                          $package_manager install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm
+                      fi
+                  else
+                      systemctl restart amazon-ssm-agent
+                  fi
+                  ;;
+              ubuntu )
+                  if ! systemctl status amazon-ssm-agent &> /dev/null; then
+                      mkdir -p /tmp/ssm
+                      if [ "$arch" = "x86_64" ]; then
+                          wget https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/debian_amd64/amazon-ssm-agent.deb -O /tmp/ssm/amazon-ssm-agent.deb
+                      else
+                          wget https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/debian_arm64/amazon-ssm-agent.deb -O /tmp/ssm/amazon-ssm-agent.deb
+                      fi
+                      dpkg -i /tmp/ssm/amazon-ssm-agent.deb
+                      rm -rf /tmp/ssm
+                  else
+                      systemctl restart amazon-ssm-agent
+                  fi
+                  ;;
+          esac
+
+          # Enable and start SSM Agent
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+          echo $(date -u) "SSM Agent installation/update completed" | tee -a "$LOG_PATH"
+
+          # Download Packages
+          if [ "$package_manager" = apt ]; then
+              curl -o "$TMP_DIR/NICE-GPG-KEY" "$CLOUDFRONT_PREFIX/NICE-GPG-KEY"
+              gpg --import "$TMP_DIR/NICE-GPG-KEY"
+              if [ $arch != "x86_64" ]; then
+                  curl -o "$TMP_DIR/nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-aarch64.tgz"
+              else
+                  curl -o "$TMP_DIR/nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-x86_64.tgz"
+              fi
+          else
+              rpm --import "$CLOUDFRONT_PREFIX"/NICE-GPG-KEY
+              curl -o "$TMP_DIR/nice-dcv-access-console.tgz" "$CLOUDFRONT_PREFIX/nice-dcv-access-console-$package_type-$arch.tgz"
+          fi
+
+          echo $(date -u) "DCV Access Console packages downloaded" | tee -a "$LOG_PATH"
+
+          tar -xvzf "$TMP_DIR/nice-dcv-access-console.tgz" -C "$TMP_DIR"
+
+          # Retrieve required setup information
+          TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          if [ -z "$TOKEN" ]; then
+              echo $(date -u) "Error: Failed to get IMDSv2 token" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          region=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+          if [ -z "$region" ]; then
+              echo $(date -u) "Error: Failed to get AWS region" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          metadata=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/)
+          if grep -q "public-hostname" <<< "$metadata"; then
+              acDns=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-hostname)
+          else
+              acDns=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-hostname)
+          fi
+
+          # Get Broker DNS
+          if ! smDns=$(aws ssm get-parameter --name dcv-broker-private-dns --region "$region" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null); then
+              echo $(date -u) "Error: Failed to get broker DNS from SSM" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          # Get admin user
+          adminUser="ec2-user"  # Default value
+          if admin_param=$(aws ssm get-parameter --name dcv-access-console-admin --region "$region" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null); then
+              adminUser="$admin_param"
+              echo $(date -u) "Found admin user: $adminUser" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "SSM Parameter for admin not found. Using default: $adminUser" | tee -a "$LOG_PATH"
+          fi
+
+          # Get Connection Gateway DNS
+          dcvConnGwyCheck=false
+          dcvConnGwy=""
+          if gw_param=$(aws ssm get-parameter --name dcv-connection-gwy-dns --region "$region" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null); then
+              dcvConnGwy="$gw_param"
+              dcvConnGwyCheck=true
+              echo $(date -u) "Found Connection Gateway DNS: $dcvConnGwy" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "SSM Parameter for DCV Connection Gateway not found. Gateway will be disabled." | tee -a "$LOG_PATH"
+          fi
+
+          # Generate database credentials
+          dbPwd=$(openssl rand -base64 12)
+          dbUser="maria"
+          pamAuth="system-auth"
+
+          # Get Session Manager credentials with error handling
+          if ! CREDS=$(aws ssm get-parameter --name dcv-session-manager-credentials --region "$region" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null); then
+              echo $(date -u) "Error: Failed to get session manager credentials from SSM" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          IFS=':'
+          read -r smClintId smClientPwd <<<"$CREDS"
+
+          # Log configuration
+          echo $(date -u) "Configuration discovered:" | tee -a "$LOG_PATH"
+          echo $(date -u) "AWS Region: $region" | tee -a "$LOG_PATH"
+          echo $(date -u) "Access Console DNS: $acDns" | tee -a "$LOG_PATH"
+          echo $(date -u) "Broker DNS: https://$smDns" | tee -a "$LOG_PATH"
+          echo $(date -u) "DCV Connection Gateway DNS: $dcvConnGwy" | tee -a "$LOG_PATH"
+          echo $(date -u) "Admin User: $adminUser" | tee -a "$LOG_PATH"
+
+          # Set configuration input
+          jsonPath=$(find "$TMP_DIR" | grep onebox_wizard_input.json)
+          basePath=$(dirname "$jsonPath")
+          json=$(cat "$jsonPath")
+          json=$(jq --arg acDns "$acDns" '."onebox-address" = $acDns' <<<"$json")
+          json=$(jq --arg smDns "$smDns" '."broker-address" = ("https://" + $smDns)' <<<"$json")
+          json=$(jq --arg smClintId "$smClintId" '."broker-client-id" = $smClintId' <<<"$json")
+          json=$(jq --arg smClientPwd "$smClientPwd" '."broker-client-password" = $smClientPwd' <<<"$json")
+          json=$(jq --arg dbUser "$dbUser" '."mariadb-username" = $dbUser' <<<"$json")
+          json=$(jq --arg dbPwd "$dbPwd" '."mariadb-password" = $dbPwd' <<<"$json")
+          json=$(jq --arg adminUser "$adminUser" '."admin-user" = $adminUser' <<<"$json")
+          if [ $dcvConnGwyCheck = true ]; then
+              json=$(jq -r '."enable-connection-gateway"=true' <<<"$json")
+              json=$(jq --arg dcvConnGwy "$dcvConnGwy" '."connection-gateway-host" = $dcvConnGwy' <<<"$json")
+          fi
+          json=$(jq --arg pamAuth $pamAuth '. + {"pam-service-name": $pamAuth}' <<<"$json")
+          echo "$json" > "$basePath/onebox-config-input.json"
+
+          # Install Python 3 and dependencies
+          echo $(date -u) "Checking is Python 3 is installed." | tee -a "$LOG_PATH"
+          if ! command -v python3 &> /dev/null; then
+              echo $(date -u) "Python 3 not found. Installing..." | tee -a "$LOG_PATH"
+              case $system in
+                  amzn|centos|rhel|rocky )
+                      sudo $package_manager install -y python3 python3-pip python3-devel gcc
+                      ;;
+                  ubuntu )
+                      sudo apt-get update
+                      sudo apt-get install -y python3 python3-pip python3-dev build-essential
+                      ;;
+                  * )
+                      echo $(date -u) "Error: Unsupported system for Python 3 installation" | tee -a "$LOG_PATH"
+                      exit 1
+                      ;;
+              esac
+          else
+              echo $(date -u) "Python 3 is already installed." | tee -a "$LOG_PATH"
+          fi
+
+          # Verify Python installation
+          python3_version=$(python3 --version 2>&1)
+          if [ $? -eq 0 ]; then
+              echo $(date -u) "Python 3 installation verified: $python3_version" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "Error: Python 3 installation failed" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+          # Install packages
+          if command -v sestatus >/dev/null 2>&1 && sestatus | grep -q "SELinux status:\s*enabled"; then
+              echo $(date -u) "SELinux is enabled. Setting httpd_can_network_connect boolean..." | tee -a "$LOG_PATH"
+              if ! sudo setsebool -P httpd_can_network_connect 1; then
+                  echo $(date -u) "Warning: Failed to set httpd_can_network_connect boolean. This might cause issues with network connections." | tee -a "$LOG_PATH"
+              else
+                  echo $(date -u) "Successfully set httpd_can_network_connect boolean." | tee -a "$LOG_PATH"
+              fi
+          else
+              echo $(date -u) "SELinux is not enabled or not installed. Skipping SELinux boolean setting." | tee -a "$LOG_PATH"
+          fi
+
+          wizardPath=$(find "$TMP_DIR" | grep wizard.py)
+          cd $basePath
+          echo $(date -u) "Initiating DCV Access Console installation wizard" | tee -a "$LOG_PATH"
+
+          if [ "$system" = "ubuntu" ]; then
+              echo $(date -u) "Ubuntu detected. Please run the following command manually:" | tee -a "$LOG_PATH"
+              echo "cd $basePath && sudo python3 wizard.py --is-onebox --input-json onebox-config-input.json --force" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "Running DCV Access Console wizard..." | tee -a "$LOG_PATH"
+              sudo python3 wizard.py --is-onebox --input-json onebox-config-input.json --force
+          fi
+
+          if [ $? -eq 0 ]; then
+              echo $(date -u) "DCV Access Console installation completed successfully" | tee -a "$LOG_PATH"
+          else
+              echo $(date -u) "Error: DCV Access Console installation failed" | tee -a "$LOG_PATH"
+              exit 1
+          fi
+
+
+          echo "$json" > /etc/dcv-access-console-auth-server/onebox-config-input-bak.json
+          echo $(date -u) "Created config backup at /etc/dcv-access-console-auth-server/onebox-config-input-bak.json" | tee -a "$LOG_PATH"
+
+          if [ "$system" != "ubuntu" ]; then
+              echo $(date -u) "Cleaning up temporary files..." | tee -a "$LOG_PATH"
+              rm -rf "$TMP_DIR"
+          fi
+
+          echo $(date -u) "*****END USER DATA SCRIPT*****" | tee -a "$LOG_PATH"
+
+Outputs:
+  AccessConsoleURL:
+    Condition: DeployAccessConsole
+    Description: URL for the DCV Access Console
+    Value: !GetAtt AccessConsoleInstance.PublicDnsName
