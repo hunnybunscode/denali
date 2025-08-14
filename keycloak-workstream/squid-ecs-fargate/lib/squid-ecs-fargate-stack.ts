@@ -40,7 +40,7 @@ export class SquidEcsFargateStack extends Stack {
     const squidIngressSecurityGroup = new ec2.SecurityGroup(this, "squid-ingress-security-group", {
       vpc,
       description: "Squid Ingress Security Group",
-      allowAllOutbound: false
+      allowAllOutbound: false,
     });
 
     squidIngressSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3128), "Allow Squid Ingress");
@@ -68,7 +68,7 @@ export class SquidEcsFargateStack extends Stack {
       executeCommandConfiguration: {
         logging: ecs.ExecuteCommandLogging.OVERRIDE,
         logConfiguration: {
-          cloudWatchLogGroup: clusterLogGroup,          
+          cloudWatchLogGroup: clusterLogGroup,
         },
       },
     });
