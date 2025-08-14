@@ -11,20 +11,21 @@ Parameters:
   HealthCheckSuccessCode:
     Type: String
     Description: The success code for the Container health check
-    Default: 404
+    Default: 200
   HealthCheckPath:
     Type: String
     Description: The path for the Container health check
     Default: /
+  spidorSslCertArn:
+    Type: String
+    Description: The ARN for the SSL certificate for the load balancer
 
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: The CIDR block to use for VPC.  It is recommended not to use a cidr block that overlaps with any existing CIDRs within the same account.
-
   PublicSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: The Subnet IDs (must select 2) that will be used for the Load Balancer.  These Subnets must exist in separate Availability Zones
-
   FargateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: The Subnet IDs (must select 2) that will be used for the Fargate Cluster.  These Subnets must exist in separate Availability Zones
@@ -32,6 +33,8 @@ Parameters:
   DatabaseSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: The Subnet IDs (must select 2) that will be used for the Database.  These Subnets must exist in separate Availability Zones
+
+
 
 
   TaskCpu:
@@ -85,6 +88,8 @@ Parameters:
     Type: String
     Description: The Oracle engine version for the Oracle RDS instance.
     Default: 19.0.0.0.ru-2025-07.rur-2025-07.r1
+
+
   PermissionsBoundaryArn:
     Type: String
     Description: The ARN of the IAM Permissions Boundary Policy to attach to all IAM Roles
@@ -93,9 +98,9 @@ Parameters:
     Description: The prefix for the IAM roles to be created as required by the Permissions Boundary
     Default: AFC2S_
 
-  SpydorSslCertArn:
+  spidorSslCertArn:
     Type: String
-    Description: Arn of the Spydor SSL Certificate
+    Description: Arn of the spidor SSL Certificate
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -112,7 +117,7 @@ Metadata:
           - ContainerPort
           - HealthCheckPath
           - HealthCheckSuccessCode
-          - SpydorSslCertArn
+          - spidorSslCertArn
       - Label:
           default: "Task Configuration"
         Parameters:
@@ -134,10 +139,10 @@ Metadata:
           - RdsProvisionedStorage
 Resources:
 
-  spydorinfraalbsg:
+  spidorinfraalbsg:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: SpydorInfraStack/spydor_infra_alb_sg
+      GroupDescription: spidorInfraStack/spidor_infra_alb_sg
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
@@ -156,10 +161,10 @@ Resources:
       VpcId:
         Ref: VpcId
 
-  spydorinfrafargatesg:
+  spidorinfrafargatesg:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: SpydorInfraStack/spydor_infra_fargate_sg
+      GroupDescription: spidorInfraStack/spidor_infra_fargate_sg
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
@@ -167,26 +172,26 @@ Resources:
       VpcId:
         Ref: VpcId
 
-  spydorinfrafargatesgfromSpydorInfraStackspydorinfraalbsg:
+  spidorinfrafargatesgfromspidorInfraStackspidorinfraalbsg:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
-      Description: 'from SpydorInfraStackspydorinfraalbsg:8080'
+      Description: 'from spidorInfraStackspidorinfraalbsg:8080'
       FromPort: 8080
       GroupId:
         'Fn::GetAtt':
-          - spydorinfrafargatesg
+          - spidorinfrafargatesg
           - GroupId
       IpProtocol: tcp
       SourceSecurityGroupId:
         'Fn::GetAtt':
-          - spydorinfraalbsg
+          - spidorinfraalbsg
           - GroupId
       ToPort: 8080
 
-  spydorinfradatabasesg:
+  spidorinfradatabasesg:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: SpydorInfraStack/spydor_infra_database_sg
+      GroupDescription: spidorInfraStack/spidor_infra_database_sg
       SecurityGroupEgress:
         - CidrIp: 255.255.255.255/32
           Description: Disallow all traffic
@@ -196,26 +201,26 @@ Resources:
       VpcId:
         Ref: VpcId
 
-  spydorinfradatabasesgfromSpydorInfraStackspydorinfrafargatesg:
+  spidorinfradatabasesgfromspidorInfraStackspidorinfrafargatesg:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
-      Description: 'from SpydorInfraStackspydorinfrafargatesg1:1521'
+      Description: 'from spidorInfraStackspidorinfrafargatesg1:1521'
       FromPort: 1521
       GroupId:
         'Fn::GetAtt':
-          - spydorinfradatabasesg
+          - spidorinfradatabasesg
           - GroupId
       IpProtocol: tcp
       SourceSecurityGroupId:
         'Fn::GetAtt':
-          - spydorinfrafargatesg
+          - spidorinfrafargatesg
           - GroupId
       ToPort: 1521
 
-  spydorinfraefssg:
+  spidorinfraefssg:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: SpydorInfraStack/spydor_infra_efs_sg
+      GroupDescription: spidorInfraStack/spidor_infra_efs_sg
       SecurityGroupEgress:
         - CidrIp: 255.255.255.255/32
           Description: Disallow all traffic
@@ -225,34 +230,34 @@ Resources:
       VpcId:
         Ref: VpcId
 
-  spydorinfraefssgfromSpydorInfraStackspydorinfrafargates:
+  spidorinfraefssgfromspidorInfraStackspidorinfrafargates:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
-      Description: 'from SpydorInfraStackspydorinfrafargatesg:2049'
+      Description: 'from spidorInfraStackspidorinfrafargatesg:2049'
       FromPort: 2049
       GroupId:
         'Fn::GetAtt':
-          - spydorinfraefssg
+          - spidorinfraefssg
           - GroupId
       IpProtocol: tcp
       SourceSecurityGroupId:
         'Fn::GetAtt':
-          - spydorinfrafargatesg
+          - spidorinfrafargatesg
           - GroupId
       ToPort: 2049
 
-  spydorinfracluster:
+  spidorinfracluster:
     Type: 'AWS::ECS::Cluster'
 
-  spydorinfrafargateloggroup:
+  spidorinfrafargateloggroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
-      LogGroupName: /aws/ecs/spydor-infra-fargate
+      LogGroupName: /aws/ecs/spidor-infra-fargate
       RetentionInDays: 7
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
-  spydorinfralogsbucket:
+  spidorinfralogsbucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketEncryption:
@@ -262,11 +267,11 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
 
-  spydorinfralogsbucketPolicy:
+  spidorinfralogsbucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket:
-        Ref: spydorinfralogsbucket
+        Ref: spidorinfralogsbucket
       PolicyDocument:
         Statement:
           - Action: 's3:*'
@@ -278,17 +283,17 @@ Resources:
               AWS: '*'
             Resource:
               - 'Fn::GetAtt':
-                  - spydorinfralogsbucket
+                  - spidorinfralogsbucket
                   - Arn
               - 'Fn::Join':
                   - ''
                   - - 'Fn::GetAtt':
-                        - spydorinfralogsbucket
+                        - spidorinfralogsbucket
                         - Arn
                     - /*
         Version: '2012-10-17'
 
-  spydorinframdlbucket:
+  spidorinframdlbucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketEncryption:
@@ -298,11 +303,11 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
 
-  spydorinframdlbucketPolicy:
+  spidorinframdlbucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket:
-        Ref: spydorinframdlbucket
+        Ref: spidorinframdlbucket
       PolicyDocument:
         Statement:
           - Action: 's3:*'
@@ -314,17 +319,17 @@ Resources:
               AWS: '*'
             Resource:
               - 'Fn::GetAtt':
-                  - spydorinframdlbucket
+                  - spidorinframdlbucket
                   - Arn
               - 'Fn::Join':
                   - ''
                   - - 'Fn::GetAtt':
-                        - spydorinframdlbucket
+                        - spidorinframdlbucket
                         - Arn
                     - /*
         Version: '2012-10-17'
 
-  spydorinfraefs:
+  spidorinfraefs:
     Type: 'AWS::EFS::FileSystem'
     Properties:
       Encrypted: true
@@ -347,39 +352,38 @@ Resources:
 # Test With ProjAdmin
       FileSystemTags:
         - Key: Name
-          Value: SpydorInfraStack/spydor_infra_efs
+          Value: spidorInfraStack/spidor_infra_efs
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
 
-  spydorinfraefsEfsMountTargetFargateSubnet1:
+  spidorinfraefsEfsMountTargetFargateSubnet1:
     Type: 'AWS::EFS::MountTarget'
     Properties:
       FileSystemId:
-        Ref: spydorinfraefs
+        Ref: spidorinfraefs
       SecurityGroups:
         - 'Fn::GetAtt':
-            - spydorinfraefssg
+            - spidorinfraefssg
             - GroupId
       SubnetId: !Select [0,FargateSubnetIds]
-
-  spydorinfraefsEfsMountTargetFargateSubnet2:
+  spidorinfraefsEfsMountTargetFargateSubnet2:
     Type: 'AWS::EFS::MountTarget'
     Properties:
       FileSystemId:
-        Ref: spydorinfraefs
+        Ref: spidorinfraefs
       SecurityGroups:
         - 'Fn::GetAtt':
-            - spydorinfraefssg
+            - spidorinfraefssg
             - GroupId
       SubnetId: !Select [1,FargateSubnetIds]
 
-  spydorinfradbSubnetGroup:
+  spidorinfradbSubnetGroup:
     Type: 'AWS::RDS::DBSubnetGroup'
     Properties:
-      DBSubnetGroupDescription: Subnet group for spydor_infra_db database
+      DBSubnetGroupDescription: Subnet group for spidor_infra_db database
       SubnetIds: !Ref DatabaseSubnetIds
 
-  spydorinfradbSecret:
+  spidorinfradbSecret:
     Type: 'AWS::SecretsManager::Secret'
     Properties:
       Description:
@@ -395,16 +399,16 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
-  spydorinfradbSecretAttachment:
+  spidorinfradbSecretAttachment:
     Type: 'AWS::SecretsManager::SecretTargetAttachment'
     Properties:
       SecretId:
-        Ref: spydorinfradbSecret
+        Ref: spidorinfradbSecret
       TargetId:
-        Ref: spydorinfradb
+        Ref: spidorinfradb
       TargetType: 'AWS::RDS::DBInstance'
 
-  spydorinfradb:
+  spidorinfradb:
     Type: 'AWS::RDS::DBInstance'
     Properties:
       AllocatedStorage: !Ref RdsProvisionedStorage
@@ -412,34 +416,40 @@ Resources:
       LicenseModel: !Ref RdsLicenseModel
       DBInstanceClass: !Ref RdsInstanceClass
       DBSubnetGroupName:
-        Ref: spydorinfradbSubnetGroup
+        Ref: spidorinfradbSubnetGroup
       Engine: oracle-ee
       EngineVersion: !Ref RdsEngineVersion
       MasterUserPassword:
         'Fn::Join':
           - ''
           - - '{{resolve:secretsmanager:'
-            - Ref: spydorinfradbSecret
+            - Ref: spidorinfradbSecret
             - ':SecretString:password::}}'
       MasterUsername:
         'Fn::Join':
           - ''
           - - '{{resolve:secretsmanager:'
-            - Ref: spydorinfradbSecret
+            - Ref: spidorinfradbSecret
             - ':SecretString:username::}}'
       MultiAZ: true
       PubliclyAccessible: false
       StorageType: gp3
       VPCSecurityGroups:
         - 'Fn::GetAtt':
-            - spydorinfradatabasesg
+            - spidorinfradatabasesg
             - GroupId
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
 
-  spydorinfrafargatetaskTaskRole:
+  spidorinfrafargatetaskTaskRole:
     Type: 'AWS::IAM::Role'
     Properties:
+      PermissionsBoundary: !Ref PermissionsBoundaryArn
+      RoleName: 
+        Fn::Join:
+          - ''
+          - - !Ref RolePrefix
+            - "spidorInfraFargateTaskRole"
       AssumeRolePolicyDocument:
         Statement:
           - Action: 'sts:AssumeRole'
@@ -448,9 +458,15 @@ Resources:
               Service: ecs-tasks.amazonaws.com
         Version: '2012-10-17'
 
-  spydorinfrafargatetaskExecutionRole:
+  spidorinfrafargatetaskExecutionRole:
     Type: 'AWS::IAM::Role'
     Properties:
+      PermissionsBoundar: !Ref PermissionsBoundaryArn
+      RoleName: 
+        Fn::Join:
+          - ''
+          - - !Ref RolePrefix
+            - "spidorInfraFargateTaskExecutionRole"
       AssumeRolePolicyDocument:
         Statement:
           - Action: 'sts:AssumeRole'
@@ -461,7 +477,7 @@ Resources:
       ManagedPolicyArns:
         - 'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
 
-  spydorinfrafargatetask:
+  spidorinfrafargatetask:
     Type: 'AWS::ECS::TaskDefinition'
     Properties:
       ContainerDefinitions:
@@ -471,39 +487,39 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group:
-                Ref: spydorinfrafargateloggroup
+                Ref: spidorinfrafargateloggroup
               awslogs-region:
                 Ref: AWS::Region
-              awslogs-stream-prefix: spydor_infra_fargate
+              awslogs-stream-prefix: spidor_infra_fargate
           MountPoints:
             - ContainerPath: /mnt/efs
               ReadOnly: false
               SourceVolume: efs-volume
-          Name: spydor_infra_fargate_container
+          Name: spidor_infra_fargate_container
           PortMappings:
             - ContainerPort: !Ref ContainerPort
               Protocol: tcp
       Cpu: !Ref TaskCpu
-      Family: SpydorInfraStackspydorinfrafargatetask
+      Family: spidorInfraStackspidorinfrafargatetask
       Memory: !Ref TaskMemory
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       TaskRoleArn:
         'Fn::GetAtt':
-          - spydorinfrafargatetaskTaskRole
+          - spidorinfrafargatetaskTaskRole
           - Arn
       ExecutionRoleArn:
         'Fn::GetAtt':
-          - spydorinfrafargatetaskExecutionRole
+          - spidorinfrafargatetaskExecutionRole
           - Arn
       Volumes:
         - EFSVolumeConfiguration:
             FilesystemId:
-              Ref: spydorinfraefs
+              Ref: spidorinfraefs
           Name: efs-volume
 
-  spydorinfraalb:
+  spidorinfraalb:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       LoadBalancerAttributes:
@@ -512,59 +528,59 @@ Resources:
       Scheme: internet-facing
       SecurityGroups:
         - 'Fn::GetAtt':
-            - spydorinfraalbsg
+            - spidorinfraalbsg
             - GroupId
       Subnets: !Ref PublicSubnetIds
       Type: application
 
-# # Allow HTTP Traffic
-#   spydorinfraalbspydorlistener:
-#     Type: 'AWS::ElasticLoadBalancingV2::Listener'
-#     Properties:
-#       DefaultActions:
-#         - TargetGroupArn:
-#             Ref: spydortargetgroup
-#           Type: forward
-#       LoadBalancerArn:
-#         Ref: spydorinfraalb
-#       Port: 80
-#       Protocol: HTTP
-
-# Redirect HTTP to HTTPS
-  spydorinfraalbhttpsredirect:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Properties:
-      DefaultActions:
-        - Type: redirect
-          RedirectConfig:
-            Port: 443
-            Protocol: HTTPS
-            StatusCode: HTTP_301
-      LoadBalancerArn:
-        Ref: spydorinfraalb
-      Port: 80
-      Protocol: HTTP
-
-
-  spydorinfraalbhttpslistener:
+# Allow HTTP Traffic
+  spidorinfraalbspidorlistener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
         - TargetGroupArn:
-            Ref: spydortargetgroup
+            Ref: spidortargetgroup
           Type: forward
       LoadBalancerArn:
-        Ref: spydorinfraalb
-      Port: 443
-      Protocol: HTTPS
-      Certificates:
-        - CertificateArn: !Ref SpydorSslCertArn
+        Ref: spidorinfraalb
+      Port: 80
+      Protocol: HTTP
 
-  spydorinfrafargateserviceService:
+# Redirect HTTP to HTTPS
+  # spidorinfraalbhttpsredirect:
+  #   Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  #   Properties:
+  #     DefaultActions:
+  #       - Type: redirect
+  #         RedirectConfig:
+  #           Port: 443
+  #           Protocol: HTTPS
+  #           StatusCode: HTTP_301
+  #     LoadBalancerArn:
+  #       Ref: spidorinfraalb
+  #     Port: 80
+  #     Protocol: HTTP
+
+  # spidorinfraalbhttpslistener:
+  #   Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  #   Properties:
+  #     DefaultActions:
+  #       - TargetGroupArn:
+  #           Ref: spidortargetgroup
+  #         Type: forward
+  #     LoadBalancerArn:
+  #       Ref: spidorinfraalb
+  #     Port: 443
+  #     Protocol: HTTPS
+  #     Certificates:
+  #       - CertificateArn: !Ref spidorSslCertArn
+
+
+  spidorinfrafargateserviceService:
     Type: 'AWS::ECS::Service'
     Properties:
       Cluster:
-        Ref: spydorinfracluster
+        Ref: spidorinfracluster
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
@@ -572,25 +588,25 @@ Resources:
       HealthCheckGracePeriodSeconds: 60
       LaunchType: FARGATE
       LoadBalancers:
-        - ContainerName: spydor_infra_fargate_container
+        - ContainerName: spidor_infra_fargate_container
           ContainerPort: !Ref ContainerPort
           TargetGroupArn:
-            Ref: spydortargetgroup
+            Ref: spidortargetgroup
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           SecurityGroups:
             - 'Fn::GetAtt':
-                - spydorinfrafargatesg
+                - spidorinfrafargatesg
                 - GroupId
           Subnets: !Ref FargateSubnetIds
       TaskDefinition:
-        Ref: spydorinfrafargatetask
+        Ref: spidorinfrafargatetask
     DependsOn:
-      - spydorinfraalbspydorlistener
-      - spydorinfrafargatetaskTaskRole
+      - spidorinfraalbspidorlistener
+      - spidorinfrafargatetaskTaskRole
 
-  spydortargetgroup:
+  spidortargetgroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckPath: !Ref HealthCheckPath
