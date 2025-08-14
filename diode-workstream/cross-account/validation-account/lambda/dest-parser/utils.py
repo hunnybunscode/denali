@@ -1,12 +1,14 @@
 import boto3
 import json
 import logging
+import os
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
 s3_client = boto3.client('s3')
 ssm_client = boto3.client('ssm')
+sns_client = boto3.client('sns')
 
 def get_dest_tag(bucket, key):
     """Get DestinationMappingKey tag from S3 object"""
@@ -59,29 +61,61 @@ def get_key_mappings(destination_map_key):
     return bucket_list
 
 def copy_single_file(source_bucket, key, dest_bucket):
-    """Copy a single file to a destination bucket"""
+    """Copy a single file using download/upload to ensure completion"""
     logger.debug(f"Copying {key} from {source_bucket} to {dest_bucket}")
     
+    import tempfile
+    
     try:
-        response = s3_client.copy_object(
-            CopySource={
-                "Bucket": source_bucket,
-                "Key": key
-            },
-            Bucket=dest_bucket,
-            Key=key
-        )
-        
-        status_code = response['ResponseMetadata']['HTTPStatusCode']
-        if status_code != 200:
-            raise RuntimeError(f"S3 copy failed with status code: {status_code}")
+        # Download to temporary file
+        with tempfile.NamedTemporaryFile() as temp_file:
+            s3_client.download_file(source_bucket, key, temp_file.name)
+            
+            # Upload to destination
+            s3_client.upload_file(temp_file.name, dest_bucket, key)
         
         logger.debug(f"Successfully copied {key} to {dest_bucket}")
-        return response
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
         logger.error(f"Failed to copy {key} to {dest_bucket}: {error_code} - {e.response['Error']['Message']}")
+        raise
+
+def delete_source_file(bucket, key):
+    """Delete the source file after successful transfer"""
+    logger.info(f"Deleting source file {key} from bucket {bucket}")
+    
+    try:
+        s3_client.delete_object(Bucket=bucket, Key=key)
+        logger.info(f"Successfully deleted {key} from {bucket}")
+    except ClientError as e:
+        logger.error(f"Failed to delete {key} from {bucket}: {e}")
+        raise
+
+def send_failure_notification(bucket, key, failed_buckets, success_count, total_count):
+    """Send SNS notification for transfer failures"""
+    topic_arn = os.environ.get('SNS_TOPIC_ARN')
+    if not topic_arn:
+        logger.error("SNS_TOPIC_ARN environment variable not set")
+        return
+    
+    subject = f"One-to-Many Transfer Failure: {key}"
+    message = f"""Transfer failure for file: {key}
+Source bucket: {bucket}
+Successful transfers: {success_count}/{total_count}
+Failed destination buckets: {', '.join(failed_buckets)}
+
+Please investigate and retry the transfer manually if needed."""
+    
+    try:
+        sns_client.publish(
+            TopicArn=topic_arn,
+            Subject=subject,
+            Message=message
+        )
+        logger.info(f"Sent failure notification for {key}")
+    except ClientError as e:
+        logger.error(f"Failed to send SNS notification: {e}")
         raise
 
 def copy_files(buckets, bucket, key):

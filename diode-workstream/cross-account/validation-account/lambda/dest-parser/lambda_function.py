@@ -2,6 +2,7 @@ import boto3
 import json
 import time
 import logging
+import os
 from botocore.exceptions import ClientError
 import utils
 
@@ -36,8 +37,8 @@ def retry_with_backoff(func, max_retries=3, base_delay=1):
 def lambda_handler(event, context):
     try:
 
-        bucket = event['detail']['requestParameters']['bucketName']
-        key = event['detail']['requestParameters']['key']
+        bucket = event['Records'][0]['s3']['bucket']['name']
+        key = event['Records'][0]['s3']['object']['key']
         
         logger.info(f"Processing file {key} from bucket {bucket}")
         
@@ -79,14 +80,31 @@ def lambda_handler(event, context):
         # Log summary
         logger.info(f"Copy operation completed: {success_count}/{len(buckets)} successful")
         
-        if failed_buckets:
+        if success_count == len(buckets):
+            # All transfers successful - delete original file
+            try:
+                retry_with_backoff(
+                    lambda: utils.delete_source_file(bucket, key)
+                )
+                logger.info(f"Successfully deleted source file {key} from {bucket}")
+            except Exception as e:
+                logger.error(f"Failed to delete source file {key}: {str(e)}")
+                # Don't fail the entire process if delete fails
+        else:
+            # Some transfers failed - send SNS notification
             logger.error(f"Failed to copy to buckets: {failed_buckets}")
-            # Don't raise exception if at least one copy succeeded
+            try:
+                retry_with_backoff(
+                    lambda: utils.send_failure_notification(bucket, key, failed_buckets, success_count, len(buckets))
+                )
+            except Exception as e:
+                logger.error(f"Failed to send SNS notification: {str(e)}")
+            
             if success_count == 0:
                 raise RuntimeError("Failed to copy file to any destination bucket")
         
     except Exception as e:
-        logger.error(f"Error processing file {event.get('detail', {}).get('object', {}).get('key', 'unknown')}: {str(e)}")
+        logger.error(f"Error processing file {event.get('Records', [{}])[0].get('s3', {}).get('object', {}).get('key', 'unknown')}: {str(e)}")
         raise
 
 
