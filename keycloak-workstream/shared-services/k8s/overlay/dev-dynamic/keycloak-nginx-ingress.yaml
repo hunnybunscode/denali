@@ -1,3 +1,6 @@
+# PLACEHOLDER FILE - Customize before deployment
+# Replace all PLACEHOLDER values with environment-specific configuration
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -21,16 +24,16 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - keycloak.example.com
-      secretName: tls-certificate-keycloak
+        - keycloak.example.com  # PLACEHOLDER: Replace with actual domain (e.g., sso.yourdomain.com)
+      secretName: tls-certificate-keycloak  # PLACEHOLDER: Replace with actual TLS secret name
   rules:
-    - host: keycloak.example.com
+    - host: keycloak.example.com  # PLACEHOLDER: Replace with actual domain (e.g., sso.yourdomain.com)
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: keycloak-instance-service
+                name: keycloak-instance-service  # PLACEHOLDER: Replace with actual service name (check: kubectl get svc -n keycloak)
                 port:
-                  number: 8443
+                  number: 8443  # PLACEHOLDER: Replace with actual service port (check existing ALB ingress)
