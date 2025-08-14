@@ -173,6 +173,52 @@ If destination buckets use KMS encryption, the KMS key policy must allow the Lam
 
 ## File Processing Behavior
 
+### File Size Limitations
+
+The Lambda function is configured with **2 GB of ephemeral storage** in `/tmp`, allowing processing of files up to approximately **2 GB** in size. Files larger than this will fail during the download phase.
+
+#### Adjusting File Size Limits
+
+**Via CloudFormation:**
+Modify the `EphemeralStorage` configuration in the Lambda function:
+```yaml
+EphemeralStorage:
+  Size: 4096  # 4 GB in MB (max is 10240 for 10 GB)
+```
+
+**Via AWS Console:**
+1. Navigate to Lambda → Functions → `one-to-many-processor`
+2. Go to Configuration → General configuration
+3. Click Edit
+4. Adjust "Ephemeral storage" (512 MB - 10,240 MB)
+5. Save changes
+
+**Cost Impact:** Each additional GB costs ~$0.0000000309 per GB-second. For most use cases, the cost increase is negligible compared to execution time costs.
+
+### Execution Timeout
+
+The Lambda function is configured with a **5-minute (300 second) timeout**. This should be sufficient for most file transfers, but may need adjustment for:
+- Very large files (approaching 2 GB)
+- Distribution to many destination buckets
+- Slow network conditions
+
+#### Adjusting Timeout
+
+**Via CloudFormation:**
+Modify the `Timeout` configuration in the Lambda function:
+```yaml
+Timeout: 900  # 15 minutes (maximum allowed)
+```
+
+**Via AWS Console:**
+1. Navigate to Lambda → Functions → `one-to-many-processor`
+2. Go to Configuration → General configuration
+3. Click Edit
+4. Adjust "Timeout" (1 second - 15 minutes)
+5. Save changes
+
+**Note:** Maximum Lambda timeout is 15 minutes (900 seconds).
+
 ### Success Scenario
 1. Lambda downloads file from source bucket to temporary storage
 2. Lambda uploads file to all destination buckets

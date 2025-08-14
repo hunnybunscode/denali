@@ -109,6 +109,8 @@ Resources:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Ref LambdaCodeKey
       Timeout: 300
+      EphemeralStorage:
+        Size: 2048
       Environment:
         Variables:
           SOURCE_BUCKET: !Ref SourceBucket
