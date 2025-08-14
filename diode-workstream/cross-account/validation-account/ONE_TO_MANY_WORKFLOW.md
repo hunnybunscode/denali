@@ -2,18 +2,34 @@
 
 ## Overview
 
-The AFTAC One-to-Many workflow automatically distributes files from a source bucket to multiple destination buckets across different AWS accounts. The system uses EventBridge to trigger a Lambda function when objects are created in the source bucket, which then copies the file to multiple destination buckets based on a mapping configuration stored in Parameter Store.
+The AFTAC One-to-Many workflow automatically distributes files from a source bucket to multiple destination buckets across different AWS accounts. The system uses S3 event notifications to trigger a Lambda function when objects are created in the source bucket, which then copies the file to multiple destination buckets based on a mapping configuration stored in Parameter Store.
 
 ## Architecture Flow
 
 1. **File Upload**: File is uploaded to the source bucket (ingestion bucket)
-2. **Bucket Tag Configuration**: The ingestion bucket is pre-configured with a `DestinationMappingKey` tag
-3. **Object Processing Pipeline**: Files go through the validation pipeline where bucket tags are copied to objects
-4. **EventBridge Trigger**: S3 object creation event triggers EventBridge rule for the one-to-many function
-5. **Lambda Execution**: One-to-many Lambda function is invoked
-6. **Tag Retrieval**: Lambda reads `DestinationMappingKey` from the object's tags (inherited from bucket)
-7. **Mapping Lookup**: Lambda retrieves destination bucket list from Parameter Store using the mapping key
-8. **File Distribution**: Lambda copies the file to all destination buckets in the mapping
+2. **S3 Event Notification**: S3 bucket sends event notification directly to Lambda function
+3. **Lambda Execution**: One-to-many Lambda function is invoked with S3 event data
+4. **Tag Retrieval**: Lambda reads `DestinationMappingKey` from the object's tags
+5. **Mapping Lookup**: Lambda retrieves destination bucket list from Parameter Store using the mapping key
+6. **File Distribution**: Lambda downloads file locally and uploads to all destination buckets
+7. **Success Handling**: If all transfers succeed, source file is deleted
+8. **Failure Handling**: If any transfers fail, SNS notification is sent to configured email
+
+## S3 Event Notification Setup
+
+The CloudFormation stack includes a custom resource that automatically configures S3 event notifications on the source bucket. This custom resource:
+
+- **Preserves Existing Notifications**: Reads current bucket notification configuration and preserves any existing SNS/SQS notifications
+- **Adds Lambda Trigger**: Configures the source bucket to send `s3:ObjectCreated:*` events to the one-to-many Lambda function
+- **Handles Cleanup**: Removes the Lambda notification configuration when the stack is deleted
+- **Prevents Conflicts**: Uses a unique identifier (`OneToManyLambdaTrigger`) to avoid conflicts with other Lambda triggers
+
+### What This Means for Deployment
+
+- The source bucket will automatically be configured to trigger the Lambda function
+- No manual S3 notification configuration is required
+- Existing bucket notifications (SNS/SQS) will continue to work
+- Stack deletion will clean up the notification configuration
 
 ## CloudFormation Parameters
 
@@ -24,6 +40,9 @@ Parameters:
   SourceBucket: "my-ingestion-bucket"
   LambdaCodeBucket: "my-lambda-code-bucket"
   LambdaCodeKey: "one-to-many.zip"
+  NotificationEmail: "admin@example.com"
+  RolePrefix: "AFC2S_"
+  PermissionsBoundaryARN: "arn:aws:iam::123456789012:policy/MyPermissionsBoundary"
 ```
 
 ### Parameter Descriptions
@@ -31,6 +50,9 @@ Parameters:
 - **SourceBucket**: The S3 bucket that receives uploaded files and triggers the distribution
 - **LambdaCodeBucket**: S3 bucket containing the Lambda deployment package
 - **LambdaCodeKey**: S3 key for the Lambda zip file (defaults to "one-to-many.zip")
+- **NotificationEmail**: Email address to receive failure notifications via SNS
+- **RolePrefix**: Prefix for IAM role names (defaults to "AFC2S_")
+- **PermissionsBoundaryARN**: Optional permissions boundary ARN for IAM roles
 
 ## Parameter Store Configuration
 
@@ -96,11 +118,13 @@ Bucket tags are automatically configured during the ingestion bucket deployment 
 
 During the validation pipeline processing, the `DestinationMappingKey` tag from the bucket is automatically copied to each uploaded object. The one-to-many Lambda function then reads this tag from the object to determine distribution destinations.
 
-## Cross-Account Bucket Policies
+## Cross-Account Permissions
+
+### Destination Bucket Policies
 
 Since destination buckets are in different accounts, they must have bucket policies that allow the Lambda function's role to write objects.
 
-### Required Destination Bucket Policy
+#### Required Destination Bucket Policy
 
 ```json
 {
@@ -110,35 +134,75 @@ Since destination buckets are in different accounts, they must have bucket polic
       "Sid": "AllowOneToManyLambdaAccess",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:{AWS::Partition}:iam::SOURCE-ACCOUNT-ID:role/OneToManyLambdaRole"
+        "AWS": "arn:aws:iam::SOURCE-ACCOUNT-ID:role/AFC2S_OneToManyLambdaRole"
       },
       "Action": [
         "s3:PutObject",
         "s3:PutObjectAcl",
         "s3:PutObjectTagging"
       ],
-      "Resource": "arn:{AWS::Partition}:s3:::DESTINATION-BUCKET-NAME/*"
-    },
-    {
-      "Sid": "AllowOneToManyLambdaListBucket",
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:{AWS::Partition}:iam::SOURCE-ACCOUNT-ID:role/OneToManyLambdaRole"
-      },
-      "Action": "s3:ListBucket",
-      "Resource": "arn:{AWS::Partition}:s3:::DESTINATION-BUCKET-NAME"
+      "Resource": "arn:aws:s3:::DESTINATION-BUCKET-NAME/*"
     }
   ]
 }
 ```
 
+### KMS Key Policies (for encrypted buckets)
+
+If destination buckets use KMS encryption, the KMS key policy must allow the Lambda role access.
+
+#### Required KMS Key Policy Statement
+
+```json
+{
+  "Sid": "AllowOneToManyLambdaKMSAccess",
+  "Effect": "Allow",
+  "Principal": {
+    "AWS": "arn:aws:iam::SOURCE-ACCOUNT-ID:role/AFC2S_OneToManyLambdaRole"
+  },
+  "Action": [
+    "kms:Encrypt",
+    "kms:Decrypt",
+    "kms:ReEncrypt*",
+    "kms:GenerateDataKey*",
+    "kms:DescribeKey"
+  ],
+  "Resource": "*"
+}
+```
+
+## File Processing Behavior
+
+### Success Scenario
+1. Lambda downloads file from source bucket to temporary storage
+2. Lambda uploads file to all destination buckets
+3. Lambda verifies all uploads completed successfully
+4. Lambda deletes the original file from source bucket
+5. Process completes successfully
+
+### Failure Scenario
+1. Lambda attempts to copy file to all destination buckets
+2. If any destination fails, Lambda continues with remaining destinations
+3. If some destinations succeed but others fail:
+   - Original file is NOT deleted from source bucket
+   - SNS notification sent to configured email with failure details
+4. If ALL destinations fail, Lambda function fails and original file remains
+
+### SNS Failure Notifications
+
+When transfers fail, an email notification is sent containing:
+- Source bucket and file name
+- Number of successful vs total transfers
+- List of failed destination buckets
+- Timestamp and error details
+
 ### Policy Variables to Replace
 
 - **SOURCE-ACCOUNT-ID**: AWS account ID where the Lambda function is deployed
 - **DESTINATION-BUCKET-NAME**: Name of the destination bucket
-- **{AWS::Partition}**: Replace with appropriate partition (aws, aws-us-gov, aws-cn)
+- **AFC2S_OneToManyLambdaRole**: Role name (includes RolePrefix parameter)
 
-### Example for Multiple Destination Buckets
+### Example Complete Bucket Policy
 
 ```json
 {
@@ -148,31 +212,14 @@ Since destination buckets are in different accounts, they must have bucket polic
       "Sid": "AllowOneToManyLambdaAccess",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:{AWS::Partition}:iam::123456789012:role/OneToManyLambdaRole"
+        "AWS": "arn:aws:iam::123456789012:role/AFC2S_OneToManyLambdaRole"
       },
       "Action": [
         "s3:PutObject",
         "s3:PutObjectAcl", 
         "s3:PutObjectTagging"
       ],
-      "Resource": [
-        "arn:{AWS::Partition}:s3:::intel-bucket-east/*",
-        "arn:{AWS::Partition}:s3:::intel-bucket-west/*",
-        "arn:{AWS::Partition}:s3:::intel-backup-bucket/*"
-      ]
-    },
-    {
-      "Sid": "AllowOneToManyLambdaListBucket",
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:{AWS::Partition}:iam::123456789012:role/OneToManyLambdaRole"
-      },
-      "Action": "s3:ListBucket",
-      "Resource": [
-        "arn:{AWS::Partition}:s3:::intel-bucket-east",
-        "arn:{AWS::Partition}:s3:::intel-bucket-west", 
-        "arn:{AWS::Partition}:s3:::intel-backup-bucket"
-      ]
+      "Resource": "arn:aws:s3:::intel-bucket-east/*"
     }
   ]
 }
@@ -180,30 +227,29 @@ Since destination buckets are in different accounts, they must have bucket polic
 
 ## Lambda Function Permissions
 
-The Lambda function requires the following permissions:
+The Lambda function requires the following permissions (automatically configured by CloudFormation):
 
-### Parameter Store Access
-```json
-{
-  "Effect": "Allow",
-  "Action": [
-    "ssm:GetParameter",
-    "ssm:GetParameters"
-  ],
-  "Resource": "arn:{AWS::Partition}:ssm:*:*:parameter/pipeline/destination/*"
-}
-```
+### Source Account Permissions
+- **S3**: GetObject, GetObjectTagging, DeleteObject on source bucket
+- **SSM**: GetParameter on `/pipeline/destination/*` parameters
+- **SNS**: Publish to failure notification topic
+- **KMS**: GenerateDataKey, Encrypt, Decrypt on all keys (for encrypted buckets)
+- **Lambda**: Basic execution role for CloudWatch Logs
 
-### S3 Access (already included in CloudFormation)
-- Read access to source bucket
-- Write access to all destination buckets (via cross-account bucket policies)
+### Cross-Account Permissions (configured by destination accounts)
+- **S3**: PutObject, PutObjectAcl, PutObjectTagging on destination buckets
+- **KMS**: Encrypt, Decrypt, GenerateDataKey on destination bucket KMS keys
 
 ## Deployment Steps
 
 1. **Deploy CloudFormation Stack**: Deploy the one-to-many stack with required parameters
-2. **Create Parameter Store Mappings**: Add destination bucket mappings to Parameter Store
-3. **Configure Destination Bucket Policies**: Apply bucket policies to all destination buckets
-4. **Test File Upload**: Upload a tagged file to the source bucket to verify distribution
+2. **Confirm SNS Subscription**: Check email and confirm SNS subscription for failure notifications
+3. **Create Parameter Store Mappings**: Add destination bucket mappings to Parameter Store
+4. **Configure Cross-Account Permissions**: 
+   - Apply bucket policies to all destination buckets
+   - Update KMS key policies if buckets are encrypted
+5. **Test File Upload**: Upload a tagged file to the source bucket to verify distribution
+6. **Monitor**: Check CloudWatch Logs and verify files are distributed and source file deleted
 
 ## Error Handling
 
