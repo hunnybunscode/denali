@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import uuid
 import boto3
 
 def lambda_handler(event, context):
@@ -9,13 +10,23 @@ def lambda_handler(event, context):
     and formats output for GitHub issues and PRs.
     """
     try:
+        # Extact last output
+        previous_chat = event.get('previous_chat', '') # The previous output of the LLM
+
+        # Extract error(s)
+        compile_error = event.get('compile_error' ,'') # Could not compile after fix. Here is the output
+        new_findings = event.get('new_findings', '') # New findings were created after fix. Here are the finding
+        finding_not_resolved = event.get('finding_not_resolved') # Finding was not resolved in first attempt
+
+        attempt_count = event.get('attempt_count')# How many attempts has been made
+
         # Extract input data
         fortify_result = event.get('fortify_result', {})
         file_content = event.get('file_content', '')
         
         # Extract necessary details from fortify_result
         source_file = fortify_result.get('sourceFile', '')
-        line_number = fortify_result.get('line', 0)
+        line_number = fortify_result.get('primaryLine', 0)
         issue_type = fortify_result.get('type', '')
         subtype = fortify_result.get('subtype', '')
         function_name = fortify_result.get('function', '')
@@ -26,62 +37,138 @@ def lambda_handler(event, context):
         numbered_code = add_line_numbers(file_content, line_number)
         
         # Prepare the prompt for the LLM
-        human_prompt = f"""You are a senior C programming expert specialized in code analysis and bug fixing.
-                CODE CONTEXT:
-                Source File: {source_file}
-                Original Code:
-                {numbered_code}
+        # Base prompt components
+        base_intro = f"""You are a senior C programming expert specialized in code analysis and bug fixing.
+            CODE CONTEXT:
+            Source File: {source_file}
+            Original Code:
+            {numbered_code}
 
-                ISSUE DETAILS:
-                Category: {category}
-                Line Number: {line_number}
+            ISSUE DETAILS:
+            Category: {category}
+            Line Number: {line_number}
+            """
 
+        response_format = """
+            Provide your response in this exact format:
+
+            ANALYSIS:
+            [Detailed technical analysis of the issue(s)]
+            {analysis_points}
+
+            SOLUTION APPROACH:
+            [Explanation of fix strategy]
+            {solution_approach_points}
+
+            FALSE_POSITIVE: 
+            [TRUE / FALSE]
+
+            FIXED_CODE:
+            [Complete fixed source code without line numbers]
+
+            VERIFICATION_STEPS:
+            [List of recommended tests/checks to validate the fix]
+
+            The fixed code must be immediately usable as a source file with no additional formatting needed.
+            """
+
+        # Default requirements for initial prompt
+        default_requirements = """
+            REQUIREMENTS:
+            1. Fix the {category} issue at line {line_number}
+            2. Maintain full compatibility with existing codebase
+            3. Follow secure coding practices
+            4. Preserve original code style and formatting
+            5. Ensure no new vulnerabilities are introduced
+            """
+
+        # Conditionals for different scenarios
+        if compile_error:
+            error_section = f"""
+                COMPILATION ERROR:
+                Your previous solution resulted in compilation errors:
+                {compile_error}
+                """
+            requirements = """
                 REQUIREMENTS:
                 1. Fix the {category} issue at line {line_number}
+                2. Resolve the compilation errors shown above
+                3. Maintain full compatibility with existing codebase
+                4. Follow secure coding practices
+                5. Preserve original code style and formatting
+                6. Ensure no new vulnerabilities are introduced
+                """
+            instructions = "Please analyze both the original security issue and the compilation errors, then provide a revised fix that resolves both problems."
+            analysis_points = """### Root cause of security issue:
+                - Reason for compilation failure
+                - Potential implications
+                - Security considerations
+                - Performance impact"""
+            solution_points = """### Why this approach was chosen:
+                - How it addresses both the security issue and compilation errors
+                - Alternative approaches considered
+                - Trade-offs made"""
+
+        elif new_findings:
+            error_section = f"""
+                NEW SECURITY FINDINGS:
+                Your previous solution resolved the original issue but introduced new security findings:
+                {new_findings}
+                """
+            requirements = """
+                REQUIREMENTS:
+                1. Fix both the original {category} issue at line {line_number} AND the newly introduced findings
                 2. Maintain full compatibility with existing codebase
                 3. Follow secure coding practices
                 4. Preserve original code style and formatting
                 5. Ensure no new vulnerabilities are introduced
-
-                Please analyze and fix the code following these guidelines:
+                """
+            instructions = "Please analyze both the original security issue and the new findings, then provide a comprehensive fix that resolves all issues."
+            analysis_points = """### Root cause of original issue:
+                - Root cause of newly introduced findings
+                - Potential implications
+                - Security considerations
+                - Performance impact"""
+            solution_points = """### Why this approach was chosen:
+                - How it addresses both the original issue and new findings
+                - Alternative approaches considered
+                - Trade-offs made"""
+        else:
+            error_section = ""
+            requirements = default_requirements
+            instructions = """Please analyze and fix the code following these guidelines:
                 - Consider all potential edge cases
                 - Follow C best practices and standards
                 - Maintain or improve code performance
                 - Add necessary error handling
                 - Preserve existing comments and documentation
-                - Ensure thread safety if applicable
-
-                Provide your response in this exact format:
-
-                ANALYSIS:
-                [Detailed technical analysis of the issue]
-                - Root cause
+                - Ensure thread safety if applicable"""
+            analysis_points = """### Root cause:
                 - Potential implications
                 - Security considerations
-                - Performance impact
-
-                SOLUTION APPROACH:
-                [Explanation of fix strategy]
-                - Why this approach was chosen
+                - Performance impact"""
+            solution_points = """### Why this approach was chosen:
                 - Alternative approaches considered
-                - Trade-offs made
+                - Trade-offs made"""
 
-                FALSE_POSITIVE: 
-                [TRUE / FALSE]
+        # Format the requirements and response format
+        requirements = requirements.format(category=category, line_number=line_number)
+        formatted_response = response_format.format(
+            analysis_points=analysis_points,
+            solution_approach_points=solution_points
+        )
 
-                FIXED_CODE:
-                [Complete fixed source code without line numbers]
+        # Assemble the complete prompt
+        human_prompt = f"{base_intro}{error_section}{requirements}\n\n{instructions}\n{formatted_response}"
 
-                VERIFICATION_STEPS:
-                [List of recommended tests/checks to validate the fix]
-
-                The fixed code must be immediately usable as a source file with no additional formatting needed.
-                """
-
-        prompt = f"Human: {human_prompt}\n\nAssistant:"
+        # Add previous chat if available
+        if previous_chat:
+            prompt = f"Human: {human_prompt}\n\nAssistant:{previous_chat}"
+        else:
+            prompt = f"Human: {human_prompt}\n\nAssistant:"
 
         # Call the LLM for a fix
-        llm_response = call_llm(prompt)
+        llm_response = call_bedrock(prompt)
         
         # Parse the LLM response
         parsed_sections = parse_llm_sections(llm_response)
@@ -133,100 +220,76 @@ def add_line_numbers(code_content, target_line):
             numbered_lines.append(f"  {prefix}{line}")
     
     return '\n'.join(numbered_lines)
-
-def get_mock_response():
-    """Return a mock response for testing purposes"""
-    return """
-    ANALYSIS:
-    This is a mock analysis of the code issue.
-    
-    SOLUTION APPROACH:
-    This is a mock solution approach.
-    
-    FIXED_CODE:
-    // This is mock fixed code
-    int main() {
-        // Fixed implementation
-        return 0;
-    }
-    
-    VERIFICATION_STEPS:
-    1. Test step one
-    2. Test step two
-    """
-
-def call_llm(prompt):
-    """Call the LLM to get a code fix"""
-    # Get LLM service configuration from environment variables
-    llm_service = os.environ.get('LLM_SERVICE', 'bedrock')
-    
-    if llm_service.lower() == 'bedrock':
-        return call_bedrock(prompt)
-    elif llm_service.lower() == 'sagemaker':
-        return call_sagemaker(prompt)
-    else:
-        # For testing or if no LLM service is specified
-        return get_mock_response()
         
 def call_bedrock(prompt):
-    """Call AWS Bedrock to get a code fix"""
-    try:
-        bedrock = boto3.client('bedrock-runtime')
-        model_id = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
-        
-        # Check if using Claude 3 or newer models (which use Messages API)
-        if 'claude-3' in model_id:
-            response = bedrock.invoke_model(
-                modelId=model_id,
-                body=json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 2000,
-                    "temperature": 0.2,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ]
-                })
-            )
+    """Call AWS Bedrock to get a code fix with retry logic for timeouts"""
+    import time
+    from botocore.exceptions import ClientError
+    
+    max_retries = 3
+    retry_delay = 2  # Start with 2 seconds delay
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            bedrock = boto3.client('bedrock-runtime')
+            model_id = os.environ.get('BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
             
-            response_body = json.loads(response['body'].read())
-            return response_body.get('content', [{}])[0].get('text', '')
-        else:
-            # Legacy format for older Claude models
-            response = bedrock.invoke_model(
-                modelId=model_id,
-                body=json.dumps({
-                    "prompt": prompt,
-                    "max_tokens_to_sample": 2000,
-                    "temperature": 0.2
-                })
-            )
-            
-            response_body = json.loads(response['body'].read())
-            return response_body.get('completion', '')
-            
-    except Exception as e:
-        print(f"Error calling Bedrock: {e}")
-        return get_mock_response()
+            # Check if using Claude 3 or newer models (which use Messages API)
+            if 'claude-3' in model_id:
+                response = bedrock.invoke_model(
+                    modelId=model_id,
+                    body=json.dumps({
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 10000,
+                        "temperature": 0.2,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ]
+                    })
+                )
+                
+                response_body = json.loads(response['body'].read())
+                return response_body.get('content', [{}])[0].get('text', '')
+            else:
+                # Legacy format for older Claude models
+                response = bedrock.invoke_model(
+                    modelId=model_id,
+                    body=json.dumps({
+                        "prompt": prompt,
+                        "max_tokens_to_sample": 2000,
+                        "temperature": 0.2
+                    })
+                )
+                
+                response_body = json.loads(response['body'].read())
+                return response_body.get('completion', '')
+                
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code in ['ThrottlingException', 'RequestTimeout', 'ServiceUnavailable', 'TooManyRequestsException']:
+                if attempt < max_retries:
+                    print(f"Bedrock timeout/throttling on attempt {attempt}, retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    print(f"Failed after {max_retries} attempts: {e}")
+                    raise Exception(f"Bedrock service timeout after {max_retries} attempts: {str(e)}")
+            else:
+                print(f"Bedrock error: {e}")
+                raise
+        except Exception as e:
+            print(f"Error calling Bedrock: {e}")
+            if attempt < max_retries:
+                print(f"Retrying attempt {attempt} in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                print(f"Failed after {max_retries} attempts: {e}")
+                raise Exception(f"Failed to call Bedrock after {max_retries} attempts: {str(e)}")
 
-def call_sagemaker(prompt):
-    """Call a SageMaker endpoint to get a code fix"""
-    try:
-        runtime = boto3.client('sagemaker-runtime')
-        endpoint_name = os.environ.get('SAGEMAKER_ENDPOINT_NAME')
-        
-        response = runtime.invoke_endpoint(
-            EndpointName=endpoint_name,
-            ContentType='application/json',
-            Body=json.dumps({"prompt": prompt})
-        )
-        
-        return json.loads(response['Body'].read().decode())['generated_text']
-    except Exception as e:
-        print(f"Error calling SageMaker: {e}")
-        return get_mock_response()
 
 def parse_llm_sections(response):
     """Parse the LLM response to extract all sections"""
@@ -289,10 +352,38 @@ def parse_llm_sections(response):
 def format_github_output(fortify_result, source_file, function_name, category, line_number, 
                          analysis, solution_approach, modified_code, verification_steps, project_name, false_positive):
     """Format the output for GitHub issues and PRs"""
-    # Create branch name
-    safe_project_name = project_name.lower().replace(' ', '-')
-    safe_category = category.replace(' ', '_').replace(':', '_').lower()
-    branch_name = f"fix/{safe_project_name}/{safe_category}/{function_name.lower()}_{line_number}-t1"
+    # Create branch name - sanitize all components to ensure valid Git branch name
+    def sanitize_for_branch(text):
+        if not text:
+            return "unknown"
+        # Replace special characters and spaces with hyphens
+        sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '-', text.lower())
+        # Remove consecutive hyphens
+        sanitized = re.sub(r'-+', '-', sanitized)
+        # Remove leading/trailing hyphens
+        return sanitized.strip('-')
+    
+    # Extract just the filename without path for shorter branch names
+    filename = os.path.basename(source_file) if source_file else "unknown-file"
+    filename_base = os.path.splitext(filename)[0]  # Remove extension
+    
+    # Get a short version of the category
+    if ':' in category:
+        category_parts = category.split(':')
+        short_category = category_parts[0].strip().lower()
+    else:
+        short_category = category.lower()
+    
+    # Limit function name length
+    short_function = function_name[:15] if function_name else "unknown"
+    
+    # Create a shorter branch name with a consistent format
+    # Include the first 6 chars of InstanceID to ensure uniqueness for similar vulnerabilities
+    instance_id = fortify_result.get('InstanceID', '')
+    instance_suffix = instance_id[:6] if instance_id else uuid.uuid4().hex[:6]
+    
+    # Create a more concise branch name
+    branch_name = f"fix/{sanitize_for_branch(short_category)}/{sanitize_for_branch(filename_base)}-{line_number}-{instance_suffix}"
     
     # Create issue/PR titles
     issue_title = f"Fix {category} in {source_file} at line {line_number}"
@@ -302,51 +393,50 @@ def format_github_output(fortify_result, source_file, function_name, category, l
     reasoning = f"## Analysis\n{analysis}\n\n## Solution Approach\n{solution_approach}"
     
     # Create issue body with all sections
-    issue_body = f"""## Security Issue: {category}
-        **File:** {source_file}
-        **Function:** {function_name}
-        **Line:** {line_number}
-        **Severity:** {fortify_result.get('severity', 'Unknown')}/5
+    issue_body = f"""
+## Security Issue: {category}\n
+**File:** {source_file}
+**Function:** {function_name}
+**Line:** {line_number}
+**Severity:** {fortify_result.get('severity', 'Unknown')}/5
 
-        ### Issue Description
-        {reasoning}
+{reasoning}
 
-        ### Is False Positive?
-        {false_positive}
-
-        ### Proposed Fix
-        ```c
-        {modified_code}
-        ```
-        
-        ### Verification Steps
-        {verification_steps}
-        
-        ### Fortify Report Details
-
-        {json.dumps(fortify_result, indent=2)}
+### Is False Positive?
+{false_positive}
+    
+### Verification Steps
+{verification_steps}
+    
+### Fortify Report Details
+```json
+{json.dumps(fortify_result, indent=2)}
+```
     """
 
     # Create commit message
     commit_message = f"Fix {category} in {function_name} at {source_file}:{line_number}"
 
     # Create PR description
-    pr_description = f"""This PR addresses a {category} vulnerability in {source_file} at line {line_number}.
-        Issue
+    pr_description = f"""
+This PR addresses a {category} vulnerability in {source_file} at line {line_number}.
+## Issue
 
-        The function {function_name} contains a {category} vulnerability.
-        Fix
+The function {function_name} contains a {category} vulnerability.
 
-        {reasoning}
+## Fix
+
+{reasoning}
         
-        Verification Steps
-        {verification_steps}
+## Verification Steps
+
+{verification_steps}
         
-        Fortify Report
+## Fortify Report
 
-        Severity: {fortify_result.get('severity', 'Unknown')}/5
+Severity: {fortify_result.get('severity', 'Unknown')}/5
 
-        Instance ID: {fortify_result.get('InstanceID', 'N/A')}
+Instance ID: {fortify_result.get('InstanceID', 'N/A')}
     """
     #Create labels
 
