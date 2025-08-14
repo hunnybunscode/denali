@@ -9,3 +9,16 @@ networking:
     - subnet_id: "subnet-037ee1b96ac684f7d"
       availability_zone: "us-gov-west-1b"
   security_group_id: "sg-04db58b3fca80f069" # replace with your security group ID if needed
+
+lambda_functions:
+  git_branch_crud: "Git_Branch_CRUD"
+  git_issues_crud: "Git_Issues_CRUD"
+  git_code_merge_and_push: "Git_Code_Merge_and_Push"
+  create_dynamodb_table: "Create_DynamoDB_Table"
+  parse_fortify_findings: "Parse_Fortify_Findings_into_DynamoDB"
+  dynamodb_table_scan: "DynamoDB_Table_Scan"
+  bedrock_llm_call: "Code_Remediation_Bedrock"
+  git_file_crud: "Git_Grab_File"
+  verify_findings_resolved: "Verify_Findings_Resolved"
+  git_pr_crud: "Git_PR_CRUD"
+

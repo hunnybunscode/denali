@@ -3,13 +3,13 @@
 CONFIG_FILE ?= config/deployment_config.yaml
 
 deploy:
-	cdk deploy --context config_file=$(CONFIG_FILE)
+	cdk deploy --all --context config_file=$(CONFIG_FILE)
 
 synth:
-	cdk synth --context config_file=$(CONFIG_FILE)
+	cdk synth --all --context config_file=$(CONFIG_FILE)
 
 bootstrap:
 	cdk bootstrap
 
 clean:
-	cdk destroy --context config_file=$(CONFIG_FILE)
+	cdk destroy --all --context config_file=$(CONFIG_FILE)
