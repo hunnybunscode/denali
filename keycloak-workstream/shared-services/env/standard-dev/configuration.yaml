@@ -16,7 +16,6 @@ environment:
 
       - .access-analyzer.us-west-1.amazonaws.com
       - .account.us-west-1.amazonaws.com
-      - .acm.us-west-1.amazonaws.com
       - .api.ecr.us-west-1.amazonaws.com
       - .api.sagemaker.us-west-1.amazonaws.com
       - .appstream2.us-west-1.amazonaws.com
@@ -96,7 +95,7 @@ hostedZones: &hostedZones
   - zoneName: denali.jktruong.people.aws.dev
     private: true
     vpc: *vpc
-  - zoneName: denali.dev.internal
+  - zoneName: denali.jktruong.people.aws.dev.internal
     private: true
     vpc: *vpc
 

@@ -14,7 +14,6 @@ environment:
 
       - .access-analyzer.us-west-1.amazonaws.com
       - .account.us-west-1.amazonaws.com
-      - .acm.us-west-1.amazonaws.com
       - .api.ecr.us-west-1.amazonaws.com
       - .api.sagemaker.us-west-1.amazonaws.com
       - .appstream2.us-west-1.amazonaws.com
@@ -88,11 +87,11 @@ environment:
       - .us-west-1.eks.amazonaws.com
 
 vpc:
-  id: vpc-09ece2a5cef7091ea
-  isolated: true
+  id: vpc-0ea1fbb49ae45a7d2
+  isolated: false
   subnets:
-    - id: subnet-0ee355e7dd3e8baa3
-    - id: subnet-06a76de812a6e15bd
+    - id: subnet-0e1ddd26680e52a10
+    - id: subnet-0e8350b80dd689d3e
 
 docker:
   images:
@@ -103,13 +102,15 @@ docker:
     - repository: registry.access.redhat.com/ubi9/openjdk-21
       tag: latest
     - repository: quay.io/keycloak/keycloak-operator
-      tag: 26.2.5
+      tag: 26.3.2
     - repository: quay.io/keycloak/keycloak
-      tag: 26.2.5
+      tag: 26.3.2
     - repository: public.ecr.aws/docker/library/postgres
       tag: 16
     - repository: public.ecr.aws/lts/squid
       tag: latest
+    - repository: registry1.dso.mil/ironbank/opensource/keycloak/keycloak-fips
+      tag: 26.3.2-fips
 
 helm:
   charts:
