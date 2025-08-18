@@ -1,3 +1,8 @@
+<!--
+(c) 2025 Amazon Web Services, Inc. All Rights Reserved.
+This AWS content is subject to the terms of C2E Task Order 5502/HM047623F0080
+-->
+
 # Project Denali
 
 ## Table of Contents
@@ -55,9 +60,9 @@ Project Denali is a comprehensive AWS infrastructure and security platform desig
 **Purpose**: GitLab CI/CD pipeline configuration  
 **Features**:
 - Automated testing and validation
-- CDK NAG security scanning
-- Multi-environment deployment
-- Code quality checks
+- CDK NAG security scanning (AWS Internal)
+- Multi-environment deployment (AWS Internal)
+- Code quality checks (AWS Internal)
 
 ### [.pre-commit-config.yaml](./.pre-commit-config.yaml)
 **Purpose**: Pre-commit hooks for code quality enforcement  
@@ -92,13 +97,7 @@ cdk destroy
 ```
 
 **Kubernetes Projects:**
-```bash
-# Deploy manifests
-kubectl apply -k k8s/overlay/dev/
-
-# Check deployment status
-kubectl get pods -n <namespace>
-```
+Refer to individual workstream documentation for specific deployment instructions.
 
 ## Architecture Overview
 
@@ -147,15 +146,7 @@ kubectl get pods -n <namespace>
 
 ## Deployment Environments
 
-### Development
-- **Account**: 776732943381
-- **Region**: us-west-2
-- **Purpose**: Development and testing
-
-### Production/GovCloud
-- **Account**: 303344244756
-- **Region**: us-gov-west-1
-- **Purpose**: Production workloads
+Deployment environments and AWS account configurations vary by organization and deployment requirements. Each workstream can be deployed to development, staging, or production environments as needed.
 
 ## Support & Documentation
 
@@ -178,10 +169,6 @@ kubectl get pods -n <namespace>
 4. Add/update documentation
 5. Submit merge request with clear description
 6. Ensure all CI/CD checks pass
-
-## License
-
-This project is proprietary and confidential. Unauthorized access, use, or distribution is prohibited.
 
 ---
 
