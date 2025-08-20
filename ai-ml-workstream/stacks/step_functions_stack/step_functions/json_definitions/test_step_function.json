@@ -140,7 +140,8 @@
       "Arguments": {
         "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{DYNAMODB_TABLE_SCAN}}",
         "Payload": {
-          "tableName": "{% $input.tableName %}"
+          "tableName": "{% $input.tableName %}",
+          "minSeverity": "{% $input.minSeverity %}"
         }
       },
       "Retry": [
