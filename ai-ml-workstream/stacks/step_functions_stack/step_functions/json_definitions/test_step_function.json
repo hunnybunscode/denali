@@ -1,0 +1,219 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Run Fortify Scan on Instance & Push Results to Git",
+  "States": {
+    "Run Fortify Scan on Instance & Push Results to Git": {
+      "Type": "Task",
+      "Arguments": {
+        "DocumentName": "{% $states.input.scanDocumentName %}",
+        "InstanceIds": [
+          "{% $states.input.fortifyScanInstanceID %}"
+        ],
+        "Parameters": {
+          "BranchName": [
+            "{% $states.input.mainBranch %}"
+          ]
+        }
+      },
+      "Resource": "arn:aws-us-gov:states:::aws-sdk:ssm:sendCommand",
+      "Next": "Modify Output for Loop",
+      "Assign": {
+        "input": "{% $states.input %}"
+      }
+    },
+    "Modify Output for Loop": {
+      "Type": "Pass",
+      "Next": "GetCommandInvocation",
+      "Output": {
+        "CommandId": "{% $states.input.Command.CommandId %}",
+        "InstanceId": "{% $states.input.Command.InstanceIds[0] %}"
+      }
+    },
+    "GetCommandInvocation": {
+      "Type": "Task",
+      "Arguments": {
+        "CommandId": "{% $states.input.CommandId %}",
+        "InstanceId": "{% $states.input.InstanceId %}"
+      },
+      "Resource": "arn:aws-us-gov:states:::aws-sdk:ssm:getCommandInvocation",
+      "Next": "Choice"
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Create DynamoDB Table for Findings",
+          "Condition": "{% ($states.input.StatusDetails) = (\"Success\") %}"
+        },
+        {
+          "Next": "Wait",
+          "Condition": "{% (($states.input.StatusDetails) = (\"InProgress\") or ($states.input.StatusDetails) = (\"Pending\")) %}"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "Create DynamoDB Table for Findings": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{CREATE_DYNAMODB_TABLE}}:$LATEST",
+        "Payload": {
+          "tableName": "{% $input.tableName %}",
+          "keySchema": [
+            {
+              "AttributeName": "InstanceID",
+              "KeyType": "HASH"
+            }
+          ],
+          "attributeDefinitions": [
+            {
+              "AttributeName": "InstanceID",
+              "AttributeType": "S"
+            }
+          ],
+          "billingMode": "PAY_PER_REQUEST"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Pull Repo & Parse Individual Findings into DynamoDB",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "TableAlreadyExistsError"
+          ],
+          "Comment": "Table Exists Already",
+          "Next": "Fail"
+        }
+      ]
+    },
+    "Pull Repo & Parse Individual Findings into DynamoDB": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{PARSE_FORTIFY_FINDINGS}}",
+        "Payload": "{% $input %}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Get DynamoDB Findings",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "DeleteTable",
+          "Comment": "All Error"
+        }
+      ]
+    },
+    "Get DynamoDB Findings": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{DYNAMODB_TABLE_SCAN}}",
+        "Payload": {
+          "tableName": "{% $input.tableName %}",
+          "minSeverity": "{% $input.minSeverity %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Proccess each Finding"
+    },
+    "Proccess each Finding": {
+      "Type": "Map",
+      "ItemProcessor": {
+        "ProcessorConfig": {
+          "Mode": "INLINE"
+        },
+        "StartAt": "Run Remediation Functions for Each Finding",
+        "States": {
+          "Run Remediation Functions for Each Finding": {
+            "Type": "Task",
+            "Resource": "arn:aws-us-gov:states:::states:startExecution.sync:2",
+            "Arguments": {
+              "StateMachineArn": "arn:aws-us-gov:states:{{REGION}}:{{ACCOUNT_ID}}:stateMachine:{{REMEDIATION_STATE_MACHINE}}",
+              "Input": {
+                "original_input": "{% $input %}",
+                "fortify_finding": "{% $states.input %}",
+                "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID": "{% $states.context.Execution.Id %}"
+              }
+            },
+            "End": true
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "DeleteTable"
+        }
+      ],
+      "Items": "{% $states.input.items %}",
+      "Next": "Success",
+      "MaxConcurrency": 1
+    },
+    "Success": {
+      "Type": "Succeed"
+    },
+    "DeleteTable": {
+      "Type": "Task",
+      "Arguments": {
+        "TableName": "{% $input.tableName %}"
+      },
+      "Resource": "arn:aws-us-gov:states:::aws-sdk:dynamodb:deleteTable",
+      "Next": "Fail"
+    },
+    "Fail": {
+      "Type": "Fail"
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "GetCommandInvocation"
+    }
+  },
+  "QueryLanguage": "JSONata"
+}

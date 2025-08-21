@@ -1,6 +1,7 @@
 import os
 import aws_cdk as cdk
 from config.config import get_configs
+from stacks.lambda_stack import LambdaStack
 from stacks.step_functions_stack.step_functions_stack import StepFunctionsStack
 
 app = cdk.App()
@@ -14,11 +15,20 @@ env = cdk.Environment(
     region=os.environ.get('CDK_DEFAULT_REGION', cfg.region)
 )
 
+lambda_stack = LambdaStack(
+    app,
+    f"{cfg.namespace}-{cfg.version}-LambdaStack",
+    env=env,
+    config=cfg,
+)
+
 step_functions_stack = StepFunctionsStack(
     app,
     f"{cfg.namespace}-{cfg.version}-StepFunctionsStack",
     env=env,
     config=cfg,
 )
+
+step_functions_stack.add_dependency(lambda_stack)
 
 app.synth()

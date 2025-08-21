@@ -14,11 +14,25 @@ class Networking:
     security_group_id: str
 
 @dataclass
+class LambdaFunctions:
+    git_branch_crud: str
+    git_issues_crud: str
+    git_code_merge_and_push: str
+    create_dynamodb_table: str
+    parse_fortify_findings: str
+    dynamodb_table_scan: str
+    bedrock_llm_call: str
+    git_file_crud: str
+    verify_findings_resolved: str
+    git_pr_crud: str
+
+@dataclass
 class Config:
     namespace: str
     region: str
     version: str
     networking: Networking
+    lambda_functions: LambdaFunctions
 
 def get_configs(config_file: str) -> Config:
     with open(config_file, 'r') as f:
@@ -30,9 +44,23 @@ def get_configs(config_file: str) -> Config:
         security_group_id=config['networking']['security_group_id']
     )
     
+    lambda_functions = LambdaFunctions(
+        git_branch_crud=config['lambda_functions']['git_branch_crud'],
+        git_issues_crud=config['lambda_functions']['git_issues_crud'],
+        git_code_merge_and_push=config['lambda_functions']['git_code_merge_and_push'],
+        create_dynamodb_table=config['lambda_functions']['create_dynamodb_table'],
+        parse_fortify_findings=config['lambda_functions']['parse_fortify_findings'],
+        dynamodb_table_scan=config['lambda_functions']['dynamodb_table_scan'],
+        bedrock_llm_call=config['lambda_functions']['bedrock_llm_call'],
+        git_file_crud=config['lambda_functions']['git_file_crud'],
+        verify_findings_resolved=config['lambda_functions']['verify_findings_resolved'],
+        git_pr_crud=config['lambda_functions']['git_pr_crud']
+    )
+    
     return Config(
         namespace=config['namespace'],
         version=config['version'],
         region=config['region'],
-        networking=networking
+        networking=networking,
+        lambda_functions=lambda_functions
     )
