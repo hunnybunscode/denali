@@ -1,0 +1,13 @@
+FROM scratch
+
+# Copy the minimal rootfs
+COPY rootfs/ /
+
+# Copy the application
+COPY app-hello.py /app.py
+
+# Expose port
+EXPOSE 8080
+
+# Run the application
+CMD ["/usr/bin/python3", "/app.py"]
