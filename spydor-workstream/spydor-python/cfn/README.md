@@ -1,5 +1,17 @@
 # Spydor Infrastructure Stack - Comprehensive Guide
 
+## Table of Contents
+1. [Overview](#overview)
+2. [Architecture Components](#architecture-components)
+3. [SSL Certificate Requirements](#ssl-certificate-requirements)
+4. [Traffic Flow](#traffic-flow)
+5. [Customer Container Requirements](#customer-container-requirements)
+6. [Monitoring and Logging](#monitoring-and-logging)
+7. [Security Considerations](#security-considerations)
+8. [Scalability and High Availability](#scalability-and-high-availability)
+9. [Cost Optimization](#cost-optimization)
+10. [Troubleshooting Common Issues](#troubleshooting-common-issues)
+
 ## Overview
 
 This CloudFormation template deploys a complete containerized application infrastructure on AWS, designed to host customer-provided applications in a secure, scalable environment. The stack includes a VPC with multiple subnet tiers, an Application Load Balancer, ECS Fargate containers, an Oracle RDS database, EFS shared storage, and S3 buckets for application data.

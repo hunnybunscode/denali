@@ -22,6 +22,23 @@ This document outlines all information that must be collected from the customer 
 - [ ] **IAM Role Prefix**: Required prefix for all IAM roles (e.g., `AFC2S_`)
 - [ ] **Permissions Boundary ARN**: ARN of the IAM permissions boundary policy
 
+### VPC Endpoints
+- [ ] **S3 VPC Endpoint**: Does the VPC have an S3 VPC endpoint configured?
+  - Required for: Container image pulls from ECR, application S3 access
+  - Type: Gateway endpoint for S3
+- [ ] **ECR VPC Endpoints**: Are ECR VPC endpoints configured?
+  - Required for: Private container image pulls
+  - Endpoints needed: `com.amazonaws.region.ecr.dkr`, `com.amazonaws.region.ecr.api`
+- [ ] **CloudWatch VPC Endpoints**: Are CloudWatch VPC endpoints configured?
+  - Required for: Application logging and metrics
+  - Endpoints needed: `com.amazonaws.region.logs`, `com.amazonaws.region.monitoring`
+- [ ] **SSM VPC Endpoints**: Are Systems Manager VPC endpoints configured?
+  - Required for: Parameter Store access, session management
+  - Endpoints needed: `com.amazonaws.region.ssm`, `com.amazonaws.region.ssmmessages`
+- [ ] **Secrets Manager VPC Endpoint**: Is Secrets Manager VPC endpoint configured?
+  - Required for: Database credentials and application secrets
+  - Endpoint needed: `com.amazonaws.region.secretsmanager`
+
 ## 2. Application Configuration
 
 ### Container Specifications
@@ -48,7 +65,7 @@ This document outlines all information that must be collected from the customer 
 ### Health Check Configuration
 - [ ] **Health Check Path**: Endpoint for ALB health checks (e.g., `/health`, `/status`)
 - [ ] **Health Check Success Codes**: HTTP status codes indicating healthy application
-  - Common: `200`, `200-299`, `404` (for default Tomcat)
+  - Common: `200`, `200-299`
 - [ ] **Application Startup Time**: How long does the application take to start?
   - Used to configure health check grace period
 
@@ -107,11 +124,44 @@ aws iam upload-server-certificate \
 
 **After upload, provide us with the certificate ARN from the IAM console.**
 
-## 6. Testing and Validation
+## 6. Required Application Endpoints
+
+### Mandatory Endpoints
+The customer application **MUST** implement the following endpoints for proper infrastructure operation:
+
+- [ ] **Health Check Endpoint**: Application must provide a health check endpoint
+  - Path: `/health`, `/status`, or custom path specified by customer
+  - Response: HTTP 200 status code when application is healthy
+  - Content: Can be simple text ("OK") or JSON health status
+  - Purpose: Used by ALB for health checks and auto-scaling decisions
+
+- [ ] **Root Endpoint**: Application should respond to root path requests
+  - Path: `/` 
+  - Response: HTTP 200 or appropriate application response
+  - Purpose: Basic connectivity testing and load balancer verification
+
+### Optional but Recommended Endpoints
+- [ ] **Metrics Endpoint**: For monitoring and observability
+  - Path: `/metrics` or `/actuator/metrics`
+  - Response: Application metrics in Prometheus or JSON format
+  - Purpose: CloudWatch custom metrics and monitoring
+
+- [ ] **Info Endpoint**: Application information
+  - Path: `/info` or `/actuator/info`
+  - Response: Application version, build info, etc.
+  - Purpose: Deployment verification and troubleshooting
+
+### Endpoint Requirements
+- All endpoints must be accessible on the configured container port
+- Health check endpoint must respond within 5 seconds
+- Endpoints should not require authentication for infrastructure testing
+- Must handle HTTP requests (HTTPS termination handled by ALB)
+
+## 7. Testing and Validation
 
 ### Infrastructure Testing
-- [ ] **Test Endpoints**: Basic endpoints to verify infrastructure connectivity
-- [ ] **Load Balancer Testing**: Verify ALB can reach container
+- [ ] **Test Endpoints**: Verify all required endpoints are implemented
+- [ ] **Load Balancer Testing**: Verify ALB can reach container health check
 - [ ] **Database Connectivity**: Test database connection from container
 - [ ] **File System Access**: Verify EFS mount functionality
 

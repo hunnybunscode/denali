@@ -96,7 +96,7 @@ Ensure your container image is:
   - Docker Hub example: `nginx:latest`
 - **ContainerPort**: Port your application listens on (default: `8080`)
 - **HealthCheckPath**: Health check endpoint path (default: `/`)
-- **HealthCheckSuccessCode**: HTTP codes indicating health (default: `404`)
+- **HealthCheckSuccessCode**: HTTP codes indicating health (default: `200`)
 
 #### Task Configuration
 - **TaskCpu**: Select CPU units based on application needs
@@ -123,7 +123,7 @@ Ensure your container image is:
 - **RdsProvisionedStorage**: Database storage in GB (minimum: `100`)
 
 #### SSL Configuration (Optional)
-- **ServerCertificateName**: Enter IAM certificate name (leave blank for HTTP only)
+- **spidorSslCertArn**: Enter IAM certificate ARN (leave blank for HTTP only)
 
 ### Step 4: Configure Stack Options
 
