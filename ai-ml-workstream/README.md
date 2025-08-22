@@ -77,3 +77,9 @@ cdk deploy --context config_file=path/to/config.yaml
   - A missing minSeverity value returns findings of any severity.
   - Setting the minSeverity value will turn on filtering so that the lambda only returns findings with that severity or higher. 
   - Example: a "4" minSeverity would only return findings with 4 and above severity (highs and criticals)
+
+### get_branch_crud lambda
+- Path: ai-ml-workstream/stacks/step_functions_stack/lambdas/git_branch_crud
+- Uses a create_behavior payload value to modify the behavior of the 'create' workflow.
+  - A missing create_behavior property will not change the default create branch behavior.
+  - Setting the create_behavior to the value 'delete_if_exists' will modify the behavior. Before attempting to create the branch the lambda will delete the branch if it already exists.

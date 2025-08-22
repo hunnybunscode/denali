@@ -139,7 +139,8 @@ def create_branch(event, api_context):
     """Create a new branch in a repository"""
     base_branch = event.get('base_branch')
     branch_name = event.get('branch_name')
-    
+    create_behavior = event.get('create_behavior')
+
     # Validate required parameters
     if not branch_name:
         raise ValidationError("Missing required parameter: branch_name")
@@ -147,13 +148,27 @@ def create_branch(event, api_context):
     if not base_branch:
         raise ValidationError("Missing required parameter: base_branch")
     
-    print(f"Creating branch {branch_name} from {base_branch} in {api_context['owner']}/{api_context['repo_name']}")
+    print(f"Creating branch {branch_name} from {base_branch} in {api_context['owner']}/{api_context['repo_name']} with behavior {create_behavior}")
     
     # Set up headers for API requests
     headers = {
         'Authorization': f'token {api_context["auth_token"]}',
         'Content-Type': 'application/json'
     }
+    
+    
+    if create_behavior and create_behavior=='delete_if_exists':
+        # Does the branch already exist?  If so delete it
+        try:
+            get_branch_result = get_branch(event, api_context)
+            if get_branch_result["success"]==True:
+                print("The branch already exists, will delete it")
+                try:
+                    delete_branch(event, api_context)
+                except GiteaError as ex:
+                    print(f"Error deleting existing branch. Errors {ex}")
+        except GiteaError as ex:
+            print(f"Error getting branch. Exception: {ex}")
     
     # Create the branch using the correct endpoint
     branch_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches"

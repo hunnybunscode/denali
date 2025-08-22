@@ -108,7 +108,8 @@
                   "repo_url": "{% $input.codeRepo %}",
                   "base_branch": "{% $input.mainBranch %}",
                   "branch_name": "{% $llm_output.branchName %}",
-                  "secret_name": "{% $input.secretName %}"
+                  "secret_name": "{% $input.secretName %}",
+                  "create_behavior": "delete_if_exists"
                 }
               },
               "Retry": [
@@ -143,7 +144,8 @@
                   "repo_url": "{% $input.scanResultsRepo %}",
                   "base_branch": "{% $input.mainBranch %}",
                   "branch_name": "{% $llm_output.branchName %}",
-                  "secret_name": "{% $input.secretName %}"
+                  "secret_name": "{% $input.secretName %}",
+                  "create_behavior": "delete_if_exists"
                 }
               },
               "Retry": [
@@ -474,9 +476,9 @@
           "Comment": "New Findings Found"
         },
         {
-          "Next": "Failed to Fix (Rety Max Hit)",
+          "Next": "Failed to Fix (Retry Max Hit)",
           "Condition": "{% $attempt_count = $input.retry_max %}",
-          "Comment": "Rety Max Reached"
+          "Comment": "Retry Max Reached"
         }
       ],
       "Default": "Fail"
@@ -559,7 +561,7 @@
       "Seconds": 5,
       "Next": "Check if Scan is Complete"
     },
-    "Failed to Fix (Rety Max Hit)": {
+    "Failed to Fix (Retry Max Hit)": {
       "Type": "Fail"
     }
   },
