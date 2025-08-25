@@ -1,71 +1,73 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Description: |
-  Creates a source S3 bucket with KMS encryption, Lambda function for object copying, and necessary IAM roles and permissions for secure cross-account access.
-  Objects uploaded to this Source Bucket are automatically copied to the Ingestion Bucket in the Validation Account.
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Creates an automated file transfer system that copies objects from a customer S3 bucket to a cross-account ingestion bucket
+  for secure cross-domain data delivery
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Source Bucket Configuration"
+          default: Source Configuration
         Parameters:
           - SourceBucketName
-          - ObjectExpirationInDays
           - DeleteSourceObjects
+          - ObjectExpirationInDays
       - Label:
-          default: "Destination Bucket Configuration"
+          default: Destination Configuration
         Parameters:
-          - DestinationBucketName
-          - DestinationBucketKeyArn
+          - IngestionBucketName
+          - IngestionBucketKeyArn
+
     ParameterLabels:
       SourceBucketName:
         default: Source Bucket Name
-      ObjectExpirationInDays:
-        default: Object Expiration
       DeleteSourceObjects:
         default: Delete Source Objects
-      DestinationBucketName:
-        default: Destination Bucket Name
-      DestinationBucketKeyArn:
-        default: Destination Bucket Key ARN
+      ObjectExpirationInDays:
+        default: Object Retention
+      IngestionBucketName:
+        default: Ingestion Bucket Name
+      IngestionBucketKeyArn:
+        default: Ingestion Bucket KMS Key ARN
 
 Parameters:
   SourceBucketName:
     Type: String
-    Description: Name for the source S3 bucket
+    Description: Enter a globally unique name to use for a source S3 bucket that will be created by this stack.
     AllowedPattern: ^[a-z0-9.\-]{3,63}$
-    ConstraintDescription: Must be between 3 and 63 characters, and contain only lowercase letters, numbers, periods (.), and hyphens (-).
-
-  DestinationBucketName:
-    Type: String
-    Description: Name of the destination bucket
-    AllowedPattern: ^[a-z0-9.\-]{3,63}$
-    ConstraintDescription: Must be between 3 and 63 characters, and contain only lowercase letters, numbers, periods (.), and hyphens (-).
-
-  DestinationBucketKeyArn:
-    Type: String
-    Description: Name of the destination bucket KMS Key Arn
-    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9\-]+:[0-9]{12}:key\/[a-z0-9\-]{36}$
-    ConstraintDescription: Must be a valid KMS Key Arn
-
-  ObjectExpirationInDays:
-    Type: Number
-    Description: Enter the number of days you want to keep objects in the Ingestion Bucket.
-    Default: 30
-    MinValue: 1
+    ConstraintDescription: Must be between 3 and 63 characters, and contain only lowercase letters, numbers, periods (.), and hyphens (-)
 
   DeleteSourceObjects:
     Type: String
-    Description: Should source objects be deleted after successful copy?
-    AllowedValues:
-      - true
-      - false
+    Description: Whether to delete source objects after successful copy
     Default: false
+    AllowedValues: [true, false]
+
+  ObjectExpirationInDays:
+    Type: Number
+    Description: >
+      Number of days to keep objects in the source bucket for (the minimum value is 1).
+      This parameter is mostly useful if Delete Source Objects is set to false.
+      Note that objects that fail to be copied will be retained only for the specified number of days.
+    Default: 1
+    MinValue: 1
+
+  IngestionBucketName:
+    Type: String
+    Description: >
+      Enter the name of the ingestion bucket created by the validation account owner.
+      Objects uploaded into the source bucket will be copied into this ingestion bucket for secure cross-domain transfer.
+    AllowedPattern: ^[a-z0-9.\-]{3,63}$
+    ConstraintDescription: Must be between 3 and 63 characters, and contain only lowercase letters, numbers, periods (.), and hyphens (-)
+
+  IngestionBucketKeyArn:
+    Type: String
+    Description: Enter the ARN of the KMS key encrypting the ingestion bucket
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9\-]+:[0-9]{12}:key\/[a-z0-9\-]{36}$
+    ConstraintDescription: Must be a valid KMS key ARN
 
 Conditions:
-  EnabledDeleteSourceObjects: !Equals
-    - !Ref DeleteSourceObjects
-    - true
+  DeleteSourceObjectsAfterCopy: !Equals [!Ref DeleteSourceObjects, true]
 
 Resources:
   EncryptionKey:
@@ -76,13 +78,12 @@ Resources:
       Description: KMS key for S3 bucket and Lambda encryption
       EnableKeyRotation: true
       KeyPolicy:
-        Version: "2012-10-17"
-        Id: key-default-1
+        Version: 2012-10-17
         Statement:
           - Sid: Enable IAM User Permissions
             Effect: Allow
             Principal:
-              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+              AWS: !Ref AWS::AccountId
             Action: kms:*
             Resource: "*"
           - Sid: Allow logs service principal to use the key
@@ -105,6 +106,7 @@ Resources:
 
   SourceBucket:
     Type: AWS::S3::Bucket
+    DependsOn: LambdaInvokePermission
     Metadata:
       checkov:
         skip:
@@ -143,7 +145,7 @@ Resources:
     Properties:
       Bucket: !Ref SourceBucket
       PolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Sid: Restrict to TLS requests only
             Effect: Deny
@@ -155,20 +157,12 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: false
-          - Sid: AllowLambdaGetObject
-            Effect: Allow
-            Principal:
-              AWS: !GetAtt LambdaExecutionRole.Arn
-            Action:
-              - s3:GetObject
-              - s3:GetObjectVersion
-            Resource: !Sub ${SourceBucket.Arn}/*
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -180,9 +174,9 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: S3AccessPolicy
+        - PolicyName: S3_Policy_Source_Bucket
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -190,32 +184,33 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:ListBucket
                   - !If
-                    - EnabledDeleteSourceObjects
+                    - DeleteSourceObjectsAfterCopy
                     - s3:DeleteObject
                     - !Ref AWS::NoValue
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${SourceBucketName}/*
                   - !Sub arn:${AWS::Partition}:s3:::${SourceBucketName}
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::${DestinationBucketName}/*
-        - PolicyName: KMSAccessPolicy
+        - PolicyName: S3_Policy_Ingestion_Bucket
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action:
-                  - kms:Decrypt
+                Action: s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${IngestionBucketName}/*
+        - PolicyName: KMS_Policy_Source_Bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
                 Resource: !GetAtt EncryptionKey.Arn
-        - PolicyName: KMSAccessPolicyDestinationBucket
+        - PolicyName: KMS_Policy_Ingestion_Bucket
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action:
-                  - kms:GenerateDataKey
-                Resource: !Ref DestinationBucketKeyArn
+                Action: kms:GenerateDataKey
+                Resource: !Ref IngestionBucketKeyArn
 
   CopyObjectFunction:
     Type: AWS::Lambda::Function
@@ -232,23 +227,65 @@ Resources:
       MemorySize: 256
       Environment:
         Variables:
-          DESTINATION_BUCKET: !Ref DestinationBucketName
+          DESTINATION_BUCKET: !Ref IngestionBucketName
           DELETE_SOURCE_OBJECTS: !Ref DeleteSourceObjects
       KmsKeyArn: !GetAtt EncryptionKey.Arn
       Code:
         ZipFile: |
           import json
-          import boto3
-          import os
           import logging
-          from botocore.exceptions import ClientError
+          import os
           from urllib.parse import unquote_plus
+
+          import boto3 # type: ignore
+          from botocore.exceptions import ClientError # type: ignore
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
           S3_CLIENT = boto3.client("s3")
-          DELETE_SOURCE_OBJECTS = os.environ['DELETE_SOURCE_OBJECTS'].lower() == 'true'
+          DELETE_SOURCE_OBJECTS = os.environ["DELETE_SOURCE_OBJECTS"].lower() == "true"
+
+
+          def handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              source_bucket = event["Records"][0]["s3"]["bucket"]["name"]
+              object_key = unquote_plus(event["Records"][0]["s3"]["object"]["key"])
+              destination_bucket = os.environ["DESTINATION_BUCKET"]
+
+              try:
+                  logger.info(f"Copying {object_key} from {source_bucket} to {destination_bucket}")
+
+                  # Copy the object to destination
+                  if copy_object(source_bucket, destination_bucket, object_key):
+                      action = "copied"
+                      # If copy was successful and deletion is enabled, delete from source
+                      if DELETE_SOURCE_OBJECTS:
+                          delete_source_object(source_bucket, object_key)
+                          action = "copied and deleted"
+
+                  return {
+                      "statusCode": 200,
+                      "body": json.dumps({
+                          "message": "Object processed successfully",
+                          "source": f"{source_bucket}/{object_key}",
+                          "destination": f"{destination_bucket}/{object_key}",
+                          "action": action
+                      })
+                  }
+
+              except ClientError as e:
+                  error_code = e.response["Error"]["Code"]
+                  error_message = e.response["Error"]["Message"]
+                  logger.error(f"AWS Error processing object: {error_code} - {error_message}")
+                  if error_code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"]:
+                      logger.error("This might be a permissions issue with the bucket")
+                  raise e
+              except Exception as e:
+                  logger.error(f"Unexpected error: {str(e)}")
+                  raise e
+
 
           def delete_source_object(bucket, key):
               try:
@@ -259,9 +296,10 @@ Resources:
                   logger.error(f"Error deleting object {key} from {bucket}: {str(e)}")
                   raise e
 
+
           def copy_object(source_bucket, destination_bucket, object_key):
               try:
-                  copy_source = {'Bucket': source_bucket, 'Key': object_key}
+                  copy_source = {"Bucket": source_bucket, "Key": object_key}
                   S3_CLIENT.copy_object(
                       CopySource=copy_source,
                       Bucket=destination_bucket,
@@ -273,45 +311,6 @@ Resources:
                   logger.error(f"Error copying object {object_key}: {str(e)}")
                   raise e
 
-          def handler(event, context):
-              logger.info(f"Event: {json.dumps(event, default=str)}")
-
-              source_bucket = event['Records'][0]['s3']['bucket']['name']
-              object_key = unquote_plus(event['Records'][0]['s3']['object']['key'])
-              destination_bucket = os.environ['DESTINATION_BUCKET']
-
-              try:
-                  logger.info(f"Copying {object_key} from {source_bucket} to {destination_bucket}")
-
-                  # Copy the object to destination
-                  if copy_object(source_bucket, destination_bucket, object_key):
-                      action = 'copied'
-                      # If copy was successful and deletion is enabled, delete from source
-                      if DELETE_SOURCE_OBJECTS:
-                          delete_source_object(source_bucket, object_key)
-                          action = 'copied and deleted'
-
-                  return {
-                      'statusCode': 200,
-                      'body': json.dumps({
-                          'message': 'Object processed successfully',
-                          'source': f"{source_bucket}/{object_key}",
-                          'destination': f"{destination_bucket}/{object_key}",
-                          'action': action
-                      })
-                  }
-
-              except ClientError as e:
-                  error_code = e.response['Error']['Code']
-                  error_message = e.response['Error']['Message']
-                  logger.error(f"AWS Error processing object: {error_code} - {error_message}")
-                  if error_code in ['AccessDenied', 'InvalidAccessKeyId', 'SignatureDoesNotMatch']:
-                      logger.error("This might be a permissions issue with the bucket")
-                  raise e
-              except Exception as e:
-                  logger.error(f"Unexpected error: {str(e)}")
-                  raise e
-
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -319,7 +318,7 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceArn: !Sub arn:${AWS::Partition}:s3:::${SourceBucketName}
-      SourceAccount: !Ref "AWS::AccountId"
+      SourceAccount: !Ref AWS::AccountId
 
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
@@ -331,6 +330,6 @@ Resources:
       KmsKeyId: !GetAtt EncryptionKey.Arn
 
 Outputs:
-  LambdFunctionRoleArn:
+  LambdaFunctionRoleArn:
     Value: !GetAtt LambdaExecutionRole.Arn
     Description: ARN of the Lambda function execution role
