@@ -3,6 +3,8 @@ import json
 import urllib.parse
 import requests
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 class GiteaError(Exception):
     """Custom exception for Gitea-related errors"""
     pass
@@ -180,7 +182,7 @@ def create_branch(event, api_context):
     print(f"Creating branch with payload: {json.dumps(payload)}")
     print(f"Using URL: {branch_url}")
     
-    response = requests.post(branch_url, headers=headers, json=payload)
+    response = requests.post(branch_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -221,7 +223,7 @@ def get_branch(event, api_context):
     # Get branch information using the API
     branch_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches/{branch_name}"
     
-    response = requests.get(branch_url, headers=headers)
+    response = requests.get(branch_url, headers=headers, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -260,7 +262,7 @@ def list_branches(event, api_context):
     # List branches using the API
     branches_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches"
     
-    response = requests.get(branches_url, headers=headers)
+    response = requests.get(branches_url, headers=headers, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -306,7 +308,7 @@ def update_branch(event, api_context):
     
     # First, get the SHA of the old branch
     branch_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches/{branch_name}"
-    response = requests.get(branch_url, headers=headers)
+    response = requests.get(branch_url, headers=headers, timeout=TIMEOUT)
     
     if response.status_code != 200:
         raise GiteaError(f"Failed to get branch information: {response.text}")
@@ -321,14 +323,14 @@ def update_branch(event, api_context):
         "old_branch_name": branch_name
     }
     
-    create_response = requests.post(create_url, headers=headers, json=create_payload)
+    create_response = requests.post(create_url, headers=headers, json=create_payload, timeout=TIMEOUT)
     
     if create_response.status_code != 201:
         raise GiteaError(f"Failed to create new branch: {create_response.text}")
     
     # Delete the old branch
     delete_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches/{branch_name}"
-    delete_response = requests.delete(delete_url, headers=headers)
+    delete_response = requests.delete(delete_url, headers=headers, timeout=TIMEOUT)
     
     if delete_response.status_code not in (200, 204):
         # If deletion fails, we should report but not fail the whole operation
@@ -363,7 +365,7 @@ def delete_branch(event, api_context):
     # Delete the branch using the API
     branch_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches/{branch_name}"
     
-    response = requests.delete(branch_url, headers=headers)
+    response = requests.delete(branch_url, headers=headers, timeout=TIMEOUT) 
     
     # Log response details
     print(f"Response status code: {response.status_code}")

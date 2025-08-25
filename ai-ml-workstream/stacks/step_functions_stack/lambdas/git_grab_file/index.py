@@ -4,6 +4,8 @@ import urllib.parse
 import requests
 import base64
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 class GiteaError(Exception):
     """Custom exception for Gitea-related errors"""
     pass
@@ -112,7 +114,7 @@ def get_file_content(api_base, owner, repo_name, file_path, branch, auth_token):
         params['ref'] = branch
     
     # Make the API request
-    response = requests.get(contents_url, headers=headers, params=params)
+    response = requests.get(contents_url, headers=headers, params=params, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")

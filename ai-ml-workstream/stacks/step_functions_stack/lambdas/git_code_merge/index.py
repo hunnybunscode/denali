@@ -4,6 +4,8 @@ import urllib.parse
 import requests
 import base64
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 class GiteaError(Exception):
     """Custom exception for Gitea-related errors"""
     pass
@@ -103,7 +105,7 @@ def update_file(file_path, content, commit_message, branch_name, api_context):
     
     # First, check if the file exists and get its SHA if it does
     get_file_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/contents/{file_path}?ref={branch_name}"
-    get_response = requests.get(get_file_url, headers=headers)
+    get_response = requests.get(get_file_url, headers=headers, timeout=TIMEOUT)
     
     sha = None
     if get_response.status_code == 200:
@@ -132,7 +134,7 @@ def update_file(file_path, content, commit_message, branch_name, api_context):
     
     print(f"Updating file with payload: {json.dumps({**payload, 'content': '(content in base64)'})}") 
     
-    response = requests.put(update_url, headers=headers, json=payload)
+    response = requests.put(update_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
