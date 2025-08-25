@@ -3,6 +3,8 @@ import json
 import urllib.parse
 import requests
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 class GiteaError(Exception):
     """Custom exception for Gitea-related errors"""
     pass
@@ -153,7 +155,7 @@ def create_issue(event, api_context):
     print(f"Creating issue with payload: {json.dumps(payload)}")
     print(f"Using URL: {issue_url}")
     
-    response = requests.post(issue_url, headers=headers, json=payload)
+    response = requests.post(issue_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -176,7 +178,7 @@ def create_issue(event, api_context):
             
             # Get SHA of the branch
             branch_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/branches/{branch}"
-            branch_response = requests.get(branch_url, headers=headers)
+            branch_response = requests.get(branch_url, headers=headers, timeout=TIMEOUT)
             
             if branch_response.status_code != 200:
                 print(f"Warning: Unable to find branch '{branch}'. Status: {branch_response.status_code}")
@@ -192,13 +194,13 @@ def create_issue(event, api_context):
                         "branch": branch
                     }
                     
-                    ref_response = requests.post(ref_url, headers=headers, json=ref_payload)
+                    ref_response = requests.post(ref_url, headers=headers, json=ref_payload, timeout=TIMEOUT)
                     print(f"Branch attachment response: {ref_response.status_code}")
                     
                     # Method 3: Create a Git reference (this might be more for PRs)
                     # Some Gitea instances might support this format
                     gitref_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/git/refs/heads/{branch}"
-                    gitref_response = requests.get(gitref_url, headers=headers)
+                    gitref_response = requests.get(gitref_url, headers=headers, timeout=TIMEOUT)
                     print(f"Git ref response: {gitref_response.status_code}")
         except Exception as e:
             print(f"Warning: Failed to link branch to issue: {str(e)}")
@@ -232,7 +234,7 @@ def get_issue(event, api_context):
     # Get issue information using the API
     issue_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/issues/{issue_id}"
     
-    response = requests.get(issue_url, headers=headers)
+    response = requests.get(issue_url, headers=headers, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -299,7 +301,7 @@ def list_issues(event, api_context):
     if milestone:
         params['milestone'] = milestone
     
-    response = requests.get(issues_url, headers=headers, params=params)
+    response = requests.get(issues_url, headers=headers, params=params, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -359,7 +361,7 @@ def update_issue(event, api_context):
     
     # First get current issue details
     get_issue_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/issues/{issue_id}"
-    get_response = requests.get(get_issue_url, headers=headers)
+    get_response = requests.get(get_issue_url, headers=headers, timeout=TIMEOUT)
     
     if get_response.status_code != 200:
         raise GiteaError(f"Failed to get issue information: {get_response.text}")
@@ -421,7 +423,7 @@ def update_issue(event, api_context):
     
     # Update the issue using the API
     issue_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/issues/{issue_id}"
-    response = requests.patch(issue_url, headers=headers, json=payload)
+    response = requests.patch(issue_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -440,7 +442,7 @@ def update_issue(event, api_context):
     
     # If we didn't get JSON data back but the status was successful, fetch the issue again
     if not issue_data and 200 <= response.status_code < 300:
-        get_response = requests.get(get_issue_url, headers=headers)
+        get_response = requests.get(get_issue_url, headers=headers, timeout=TIMEOUT)
         if get_response.status_code == 200:
             issue_data = get_response.json()
         else:
@@ -490,7 +492,7 @@ def delete_issue(event, api_context):
     issue_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/issues/{issue_id}"
     
     # Try to delete, but if not supported, close the issue instead
-    response = requests.delete(issue_url, headers=headers)
+    response = requests.delete(issue_url, headers=headers, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -509,7 +511,8 @@ def delete_issue(event, api_context):
         close_response = requests.patch(
             issue_url, 
             headers={**headers, 'Content-Type': 'application/json'}, 
-            json=close_payload
+            json=close_payload,
+            timeout=TIMEOUT
         )
         
         if close_response.status_code != 200:

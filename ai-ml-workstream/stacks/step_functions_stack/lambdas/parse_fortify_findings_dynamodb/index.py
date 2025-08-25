@@ -8,6 +8,8 @@ import uuid
 import urllib.parse
 from decimal import Decimal
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 def get_relative_path(base_path, absolute_path):
     """
     Computes the git relative path given a base path and an absolute path.
@@ -86,7 +88,7 @@ def download_files_from_gitea(repo_url, branch, secret_name=None):
         params = {'ref': branch} if branch else {}
         
         print(f"Fetching: {url} with params {params}")
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=TIMEOUT)
         
         if response.status_code != 200:
             print(f"Error fetching directory {path}: {response.status_code} {response.text}")
@@ -101,7 +103,7 @@ def download_files_from_gitea(repo_url, branch, secret_name=None):
                 if item['name'].lower().endswith(('.xml', '.fvdl')):
                     # Download the file
                     download_url = item['download_url']
-                    file_response = requests.get(download_url, headers=headers)
+                    file_response = requests.get(download_url, headers=headers, timeout=TIMEOUT)
                     
                     if file_response.status_code == 200:
                         # Save to a temporary file

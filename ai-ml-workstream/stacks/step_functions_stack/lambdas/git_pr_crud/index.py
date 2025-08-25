@@ -3,6 +3,8 @@ import json
 import urllib.parse
 import requests
 
+TIMEOUT = (10, 15) # 10s for connect, 15s for read
+
 class GiteaError(Exception):
     """Custom exception for Gitea-related errors"""
     pass
@@ -152,7 +154,7 @@ def create_pull_request(event, api_context):
     print(f"Creating PR with payload: {json.dumps(payload)}")
     
     # Create the PR
-    response = requests.post(pr_url, headers=headers, json=payload)
+    response = requests.post(pr_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -206,7 +208,7 @@ def get_pull_request(event, api_context):
     # Get the pull request using the API
     pr_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/pulls/{pr_number}"
     
-    response = requests.get(pr_url, headers=headers)
+    response = requests.get(pr_url, headers=headers, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -257,7 +259,7 @@ def list_pull_requests(event, api_context):
     # List pull requests using the API
     pr_url = f"{api_context['api_base']}/repos/{api_context['owner']}/{api_context['repo_name']}/pulls"
     
-    response = requests.get(pr_url, headers=headers, params=params)
+    response = requests.get(pr_url, headers=headers, params=params, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -315,7 +317,7 @@ def update_pull_request(event, api_context):
     print(f"Updating PR with payload: {json.dumps(payload)}")
     
     # Update the PR
-    response = requests.patch(pr_url, headers=headers, json=payload)
+    response = requests.patch(pr_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -391,7 +393,7 @@ def close_pull_request(event, api_context):
     }
     
     # Close the PR
-    response = requests.patch(pr_url, headers=headers, json=payload)
+    response = requests.patch(pr_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -476,7 +478,7 @@ def merge_pull_request(event, api_context):
     print(f"Merging PR with payload: {json.dumps(payload)}")
     
     # Merge the PR
-    response = requests.post(merge_url, headers=headers, json=payload)
+    response = requests.post(merge_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     # Log response details
     print(f"Response status code: {response.status_code}")
@@ -544,7 +546,7 @@ def add_labels_to_pr(pr_number, labels, api_context):
     payload = labels
     
     # Add the labels
-    response = requests.post(labels_url, headers=headers, json=payload)
+    response = requests.post(labels_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     if response.status_code not in (200, 201):
         print(f"Warning: Failed to add labels to PR #{pr_number}: {response.text}")
@@ -570,7 +572,7 @@ def add_assignees_to_pr(pr_number, assignees, api_context):
     }
     
     # Add the assignees
-    response = requests.post(assignees_url, headers=headers, json=payload)
+    response = requests.post(assignees_url, headers=headers, json=payload, timeout=TIMEOUT)
     
     if response.status_code not in (200, 201):
         print(f"Warning: Failed to add assignees to PR #{pr_number}: {response.text}")
