@@ -10,7 +10,7 @@ environment:
   #   httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
   #   noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/8,192.168.0.0/16,172.20.0.0/16
 
-.pipelineVersion: &pipeline-version 1.1.2
+.pipelineVersion: &pipeline-version 1.0.0
 
 .storage: &storage
   type: gp3
@@ -37,7 +37,7 @@ environment:
   schedule: 0 10 1 * ? *
 
 pipelines:
-  - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
+  - name: amazon-eks-node-al2023-x86_64-standard-1_32-stig-high
     description: "EKS Optimized Image with STIG High"
     version: *pipeline-version
     <<: *schedule
@@ -45,7 +45,7 @@ pipelines:
     vpc: *vpc
     instanceTypes: *instanceTypes
     ami:
-      name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+      name: amazon-eks-node-al2023-x86_64-standard-1.32-*
     storages:
       - *storage
     tags:
@@ -53,7 +53,7 @@ pipelines:
       ARCH: x86_64
       STIG: High
       FIPS: Enabled
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - name: stig-build-linux-high
         version: x.x.x
@@ -70,7 +70,7 @@ pipelines:
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/rhel/cleanup-RHEL.yml
 
-  - name: amazon-eks-node-rhel8-x86_64-standard-1_30-stig-high
+  - name: amazon-eks-node-rhel8-x86_64-standard-1_32-stig-high
     description: "EKS Optimized Image with STIG High"
     version: *pipeline-version
     <<: *schedule
@@ -88,7 +88,7 @@ pipelines:
       ARCH: x86_64
       STIG: High
       FIPS: Enabled
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - lib/component/additional-software.yml
       - name: aws-cli-version-2-linux
@@ -118,7 +118,7 @@ pipelines:
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/rhel/cleanup-RHEL.yml
 
-  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_32-stig-high
     description: "EKS Optimized Image with STIG High"
     <<: *schedule
     version: *pipeline-version
@@ -136,7 +136,7 @@ pipelines:
       ARCH: x86_64
       STIG: High
       FIPS: Enabled
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - lib/component/additional-software.yml
       - name: aws-cli-version-2-linux
@@ -183,7 +183,7 @@ pipelines:
       ARCH: x86_64
       STIG: High
       FIPS: Enabled
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - lib/component/additional-software.yml
       - name: aws-cli-version-2-linux
@@ -201,7 +201,7 @@ pipelines:
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/rhel/cleanup-RHEL.yml
 
-  - name: amazon-eks-node-rhel8-x86_64-standard-1_30-normal
+  - name: amazon-eks-node-rhel8-x86_64-standard-1_32-normal
     description: "EKS Optimized Image"
     version: *pipeline-version
     <<: *schedule
@@ -219,7 +219,7 @@ pipelines:
       ARCH: x86_64
       STIG: N/A
       FIPS: N/A
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - lib/component/additional-software.yml
       - name: aws-cli-version-2-linux
@@ -237,7 +237,7 @@ pipelines:
       - lib/component/SecurityUpdate.yml
       - lib/component/eks/rhel/cleanup-RHEL.yml
 
-  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-normal
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_32-normal
     description: "EKS Optimized Image"
     version: *pipeline-version
     <<: *schedule
@@ -255,7 +255,7 @@ pipelines:
       ARCH: x86_64
       STIG: N/A
       FIPS: N/A
-      K8S VERSION: "1.30"
+      K8S VERSION: "1.32"
     components:
       - lib/component/additional-software.yml
       - name: aws-cli-version-2-linux

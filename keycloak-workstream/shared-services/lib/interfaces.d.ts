@@ -278,6 +278,87 @@ interface Cluster {
   nodeGroups: NodeGroup[];
   tags?: { [key: string]: string };
   hostedZones?: ExtendedHostedZone[];
+  teams: {
+    /**
+     * Required unique name for organization.
+     * May map to an OU name.
+     */
+    readonly name: string;
+
+    /**
+     * Defaults to team name prefixed by "team-"
+     */
+    readonly namespace?: string;
+
+    /**
+     *  Annotations such as necessary for GitOps engine.
+     */
+    readonly namespaceAnnotations?: { [key: string]: any };
+
+    /**
+     * Labels such as necessary for AWS AppMesh
+     */
+    readonly namespaceLabels?: { [key: string]: any };
+
+    /**
+     * Optional, but highly recommended setting to ensure predictable demands.
+     */
+    readonly namespaceHardLimits?: { [key: string]: any };
+
+    /**
+     * Service Account Name
+     */
+    readonly serviceAccountName?: string;
+
+    /**
+     * Creates a secrets access by name or ARN. The secret must already exist in the AWS Secrets Manager or in SSM Parameters.     *
+     */
+    readonly secrets?: {
+      /**
+       * Name of the secret
+       */
+      secretName: string;
+
+      /**
+       * Secret Arn of the Secret
+       * @requires Lookup Type to configured
+       */
+      secretArn?: string;
+
+      /**
+       * How to look up the secret
+       * arn - Look up Secret Manager via secrets arn
+       * name - Look up Secret Manager via secrets name
+       * attr - Look up Parameter Store via resource tag attribute
+       */
+      lookUpType: "arn" | "name" | "attr";
+      secretType?:
+        | "Opaque"
+        | "kubernetes.io/basic-auth"
+        | "bootstrap.kubernetes.io/token"
+        | "kubernetes.io/dockerconfigjson"
+        | "kubernetes.io/dockercfg"
+        | "kubernetes.io/ssh-auth"
+        | "kubernetes.io/service-account-token"
+        | "kubernetes.io/tls";
+      metadata: {
+        jmesPath?: { objectAlias: string; path: string }[];
+        data: {
+          /**
+           * Name of the AWS Secret that is synced
+           */
+          objectName?: string;
+
+          /**
+           * Kubernetes Secret Key
+           */
+          key?: string;
+        }[];
+      };
+    }[];
+
+    readonly type: "application" | "platform";
+  }[];
 }
 
 interface NodeGroup {

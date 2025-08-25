@@ -1,0 +1,66 @@
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBCluster
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+spec:
+  engine: aurora-postgresql
+  engineVersion: "15"
+  dbClusterIdentifier: eks-ack-keycloak-aurora-postgres
+  masterUsername: postgres
+  manageMasterUserPassword: true
+  storageEncrypted: true
+  kmsKeyID: alias/aws/rds
+  # kmsKeyID: alias/eks/StandardSharedServices/storage/default
+  backupRetentionPeriod: 7
+  databaseName: keycloak
+  dbSubnetGroupName: eks-ack-keycloak-db-subnet-group
+  vpcSecurityGroupRefs:
+    - from:
+        name: keycloak-rds-sg
+  serverlessV2ScalingConfiguration:
+    minCapacity: 2
+    maxCapacity: 8
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+data: {}
+---
+apiVersion: services.k8s.aws/v1alpha1
+kind: FieldExport
+metadata:
+  name: keycloak-db-endpoint-host
+  namespace: keycloak
+spec:
+  from:
+    resource:
+      group: rds.services.k8s.aws
+      name: keycloak-db
+      kind: DBCluster
+    path: .status.endpoint
+  to:
+    name: keycloak-db
+    namespace: keycloak
+    kind: configmap
+    key: KC_DB_URL_HOST
+---
+apiVersion: services.k8s.aws/v1alpha1
+kind: FieldExport
+metadata:
+  name: keycloak-db-endpoint-port
+  namespace: keycloak
+spec:
+  from:
+    resource:
+      group: rds.services.k8s.aws
+      name: keycloak-db
+      kind: DBCluster
+    path: .spec.port
+  to:
+    name: keycloak-db
+    namespace: keycloak
+    kind: configmap
+    key: KC_DB_URL_PORT

@@ -65,7 +65,7 @@ if (doc.environment.tags) {
 
 for (const [key, value] of Object.entries(tags)) {
   console.info(`Adding Key Value: "${key}" // "${value}"`);
-  Tags.of(app).add(key, value, {
+  Tags.of(app).add(key, `${value}`, {
     includeResourceTypes: [],
     excludeResourceTypes: [],
   });

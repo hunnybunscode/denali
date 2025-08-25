@@ -1,0 +1,14 @@
+# This file references ACK-created subnets instead of hardcoded subnet IDs
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBSubnetGroup
+metadata:
+  name: keycloak-db-subnet-group
+  namespace: keycloak
+spec:
+  name: eks-ack-keycloak-db-subnet-group
+  description: "Subnet group for Keycloak Aurora PostgreSQL database"
+  subnetRefs:
+    - from:
+        name: keycloak-db-subnet-1
+    - from:
+        name: keycloak-db-subnet-2

@@ -21,6 +21,7 @@ import {
 import { globSync } from "glob";
 import * as blueprints from "@aws-quickstart/eks-blueprints";
 import { StorageClassDefaultAddon } from "./eks-blueprints/addons/storage-class-default-addon";
+import { AckAddOn } from "./eks-blueprints/addons/ack";
 
 import { NagSuppressions } from "cdk-nag";
 import { VpcCniProxyPatchAddon, VpcCniProxyPatchAddonProps } from "./eks-blueprints/addons/vpc-cni-proxy-patch-addon";
@@ -68,7 +69,7 @@ export class EKSClustersConstruct extends Construct {
     const commonKeyPair = this.createCommonKeyPair();
 
     for (const clusterMetadata of clusters) {
-      const clusterStack = this.createCluster(clusterMetadata, commonKeyPair, env);
+      const clusterStack = this.createCluster(clusterMetadata, commonKeyPair);
       this._clusters[clusterMetadata.name] = clusterStack.getClusterInfo().cluster;
       this._clusterStacks[clusterMetadata.name] = clusterStack;
 
@@ -89,6 +90,10 @@ export class EKSClustersConstruct extends Construct {
           {
             id: "NIST.800.53.R4-LambdaInsideVPC",
             reason: "Lambda is handled by the blueprints library",
+          },
+          {
+            id: "NIST.800.53.R4-IAMNoInlinePolicy",
+            reason: "All inline policies here are created within IaC",
           },
           {
             id: "AwsSolutions-IAM5",
@@ -162,7 +167,7 @@ export class EKSClustersConstruct extends Construct {
     return keyPair;
   }
 
-  private createCluster(clusterMetadata: Cluster, commonKeyPair: ec2.KeyPair, environment?: Omit<Environment, "name">) {
+  private createCluster(clusterMetadata: Cluster, commonKeyPair: ec2.KeyPair) {
     const {
       name: clusterName,
       vpc: vpcData,
@@ -172,7 +177,16 @@ export class EKSClustersConstruct extends Construct {
       hostedZones,
       private: isPrivateCluster,
       isolated: isClusterIsolated,
+      teams,
     } = clusterMetadata;
+
+    // Get the tags attached to this stack
+    const environmentTags = this.props.environment?.tags ?? {};
+    const environmentTagsStr = Object.fromEntries(
+      Object.entries(environmentTags).map(([key, value]) => [key, `${value}`])
+    );
+
+    const tagsStr = Object.fromEntries(Object.entries(tags ?? {}).map(([key, value]) => [key, `${value}`]));
 
     // Read the enx-max-pod.txt and generate a hash table of instance limits
     // https://github.com/awslabs/amazon-eks-ami/blob/main/templates/shared/runtime/eni-max-pods.txt
@@ -324,13 +338,20 @@ export class EKSClustersConstruct extends Construct {
           new blueprints.addons.AwsLoadBalancerControllerAddOn({
             repository: chartRepository,
             version: chartVersion,
-            values: Object.assign(values, this.props.environment.proxy ? { env: extraEnvVarsFlat } : {}),
+            values: Object.assign(
+              values,
+              this.props.environment.proxy
+                ? { env: extraEnvVarsFlat, defaultTags: { ...environmentTagsStr, ...tagsStr } }
+                : { defaultTags: { ...environmentTagsStr, ...tagsStr } }
+            ),
           })
         );
       } else {
         blueprintsAddons.push(
           new blueprints.addons.AwsLoadBalancerControllerAddOn({
-            values: this.props.environment.proxy ? { env: extraEnvVarsFlat } : {},
+            values: this.props.environment.proxy
+              ? { env: extraEnvVarsFlat, defaultTags: { ...environmentTagsStr, ...tagsStr } }
+              : { defaultTags: { ...environmentTagsStr, ...tagsStr } },
           })
         );
       }
@@ -411,46 +432,296 @@ export class EKSClustersConstruct extends Construct {
     }
 
     /**
+     * ACK Controller
+     */
+    {
+      const ackDefaultValues = {
+        resourceTags: [
+          ...Object.entries({ ...environmentTagsStr, ...tagsStr }).flatMap(item => `${item[0]}=${item[1]}`),
+          "Managed By=eks-ack-controller",
+          `eks:cluster-name=${clusterName}`,
+        ],
+      };
+
+      // Security Groups - creates the namespace
+      const ec2AckAddon = new AckAddOn({
+        createNamespace: true,
+        namespace: "ack-system",
+        serviceName: blueprints.AckServiceName.EC2,
+        values: ackDefaultValues,
+        inlinePolicyStatements: [
+          new iam.PolicyStatement({
+            sid: "AllowSubnetAccess",
+            actions: ["ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute"],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            actions: ["ec2:CreateTags", "ec2:DescribeTags"],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            sid: "AllowCreateSecurityGroupWithPrefix",
+            actions: ["ec2:CreateSecurityGroup"],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            sid: "AllowDeleteSecurityGroupWithPrefix",
+            actions: ["ec2:DeleteSecurityGroup"],
+            resources: ["*"],
+            conditions: {
+              StringLike: {
+                "ec2:ResourceTag/Name": "eks-ack-*",
+              },
+            },
+          }),
+          // Restrict other actions to eks-ack-* security groups
+          new iam.PolicyStatement({
+            actions: ["ec2:*SecurityGroup*"],
+            resources: ["*"],
+            conditions: {
+              StringLike: {
+                "aws:ResourceTag/Name": "eks-ack-*",
+              },
+            },
+          }),
+
+          // Generic Security Read Only Access
+          new iam.PolicyStatement({
+            actions: ["ec2:DescribeSecurityGroups"],
+            resources: ["*"],
+          }),
+        ],
+      });
+      blueprintsAddons.push(ec2AckAddon);
+
+      // Secret Manager - depends on namespace creation
+      const secretsManagerAckAddon = new AckAddOn({
+        createNamespace: false,
+        namespace: "ack-system",
+        serviceName: blueprints.AckServiceName.SECRETSMANAGER,
+        values: ackDefaultValues,
+        inlinePolicyStatements: [
+          new iam.PolicyStatement({
+            actions: ["secretsmanager:*"],
+            resources: ["arn:*:secretsmanager:*:*:secret:*eks-ack-*"],
+          }),
+        ],
+      });
+      blueprintsAddons.push(secretsManagerAckAddon);
+
+      // RDS - depends on namespace creation
+      const rdsAckAddon = new AckAddOn({
+        createNamespace: false,
+        namespace: "ack-system",
+        serviceName: blueprints.AckServiceName.RDS,
+        values: ackDefaultValues,
+        inlinePolicyStatements: [
+          new iam.PolicyStatement({
+            actions: [
+              "rds:CreateDBInstance",
+              "rds:DeleteDBInstance",
+              "rds:ModifyDBInstance",
+              "rds:RebootDBInstance",
+              "rds:StartDBInstance",
+              "rds:StopDBInstance",
+              "rds:CreateDBCluster",
+              "rds:DeleteDBCluster",
+              "rds:ModifyDBCluster",
+              "rds:CreateDBSubnetGroup",
+              "rds:DeleteDBSubnetGroup",
+              "rds:ModifyDBSubnetGroup",
+              "rds:CreateDBParameterGroup",
+              "rds:DeleteDBParameterGroup",
+              "rds:ModifyDBParameterGroup",
+              "rds:CreateDBSnapshot",
+              "rds:DeleteDBSnapshot",
+              "rds:AddTagsToResource",
+              "rds:RemoveTagsFromResource",
+              "rds:ListTagsForResource",
+              "rds:CreateTags",
+            ],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            actions: ["rds:Describe*", "rds:List*"],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            actions: ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey", "kms:ReEncrypt*"],
+            resources: ["*"],
+          }),
+          new iam.PolicyStatement({
+            actions: [
+              "secretsmanager:CreateSecret",
+              "secretsmanager:DeleteSecret",
+              "secretsmanager:DescribeSecret",
+              "secretsmanager:GetSecretValue",
+              "secretsmanager:PutSecretValue",
+              "secretsmanager:UpdateSecret",
+              "secretsmanager:TagResource",
+            ],
+            resources: ["arn:*:secretsmanager:*:*:secret:rds!*"],
+          }),
+          new iam.PolicyStatement({
+            actions: ["iam:CreateServiceLinkedRole"],
+            resources: ["arn:*:iam::*:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"],
+            conditions: {
+              StringLike: {
+                "iam:AWSServiceName": "rds.amazonaws.com",
+              },
+            },
+          }),
+        ],
+      });
+      blueprintsAddons.push(rdsAckAddon);
+    }
+
+    /**
      * Kubernetes Secrets Store CSI Driver
      */
-    // {
-    //   const chart = helm?.charts.find(chart => chart.chartName === "secrets-store-csi-driver");
-    //   if (chart) {
-    //     const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
-    //     const values: blueprints.Values = {
-    //       linux: {
-    //         image: {
-    //           repository: images.find(image => image.repository.includes("driver"))?.repository,
-    //           tag: images.find(image => image.repository.includes("driver"))?.tag,
-    //         },
-    //         crds: {
-    //           image: {
-    //             repository: images.find(image => image.repository.includes("driver-crds"))?.repository,
-    //             tag: images.find(image => image.repository.includes("driver-crds"))?.tag,
-    //           },
-    //         },
-    //         registrarImage: {
-    //           repository: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.repository,
-    //           tag: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.tag,
-    //         },
-    //         livenessProbeImage: {
-    //           repository: images.find(image => image.repository.includes("livenessprobe"))?.repository,
-    //           tag: images.find(image => image.repository.includes("livenessprobe"))?.tag,
-    //         },
-    //       },
-    //     };
 
-    //     blueprintsAddons.push(
-    //       new blueprints.addons.SecretsStoreAddOn({
-    //         repository: chartRepository,
-    //         version: chartVersion,
-    //         values,
-    //       })
-    //     );
-    //   } else {
-    //     blueprintsAddons.push(new blueprints.addons.SecretsStoreAddOn());
-    //   }
-    // }
+    const clusterTeams: blueprints.Team[] = [];
+
+    {
+      const chart = helm?.charts.find(chart => chart.chartName === "secrets-store-csi-driver");
+      if (chart) {
+        const { chartName, images, repositoryUrl: chartRepository, version: chartVersion } = chart;
+        const values: blueprints.Values = {
+          linux: {
+            image: {
+              repository: images.find(image => image.repository.includes("driver"))?.repository,
+              tag: images.find(image => image.repository.includes("driver"))?.tag,
+            },
+            crds: {
+              image: {
+                repository: images.find(image => image.repository.includes("driver-crds"))?.repository,
+                tag: images.find(image => image.repository.includes("driver-crds"))?.tag,
+              },
+            },
+            registrarImage: {
+              repository: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.repository,
+              tag: images.find(image => image.repository.includes("csi-node-driver-registrar"))?.tag,
+            },
+            livenessProbeImage: {
+              repository: images.find(image => image.repository.includes("livenessprobe"))?.repository,
+              tag: images.find(image => image.repository.includes("livenessprobe"))?.tag,
+            },
+          },
+        };
+
+        blueprintsAddons.push(
+          new blueprints.addons.SecretsStoreAddOn({
+            repository: chartRepository,
+            version: chartVersion,
+            values,
+          })
+        );
+      } else {
+        blueprintsAddons.push(new blueprints.addons.SecretsStoreAddOn());
+      }
+
+      // Parse the configuration file for teams and process for secrets
+      if (teams?.length > 0) {
+        teams.forEach(
+          ({
+            name,
+            type,
+            namespace,
+            namespaceAnnotations,
+            namespaceHardLimits,
+            namespaceLabels,
+            secrets,
+            serviceAccountName,
+          }) => {
+            const teamClassType = type == "application" ? blueprints.ApplicationTeam : blueprints.PlatformTeam;
+            const teamSecrets: blueprints.CsiSecretProps[] = [];
+
+            secrets?.forEach(({ secretName, secretArn, lookUpType, secretType, metadata }) => {
+              let secretProvider: blueprints.SecretProvider;
+              let secretTypeClass: blueprints.KubernetesSecretType = blueprints.KubernetesSecretType.OPAQUE;
+
+              switch (lookUpType) {
+                case "arn":
+                  if (secretArn)
+                    secretProvider = new blueprints.LookupSecretsManagerSecretByArn(
+                      secretArn,
+                      `${clusterName}-lookup-${secretArn}`
+                    );
+                  break;
+                case "name":
+                  secretProvider = new blueprints.LookupSecretsManagerSecretByName(
+                    secretArn ?? secretName,
+                    `${clusterName}-lookup-${secretArn ?? secretName}`
+                  );
+                  break;
+                case "attr":
+                  throw new Error(
+                    `Not implemented for secrets: ${lookUpType} for team: ${name} in cluster: ${clusterName}`
+                  );
+                default:
+                  throw new Error(
+                    `Unable to determine lookup type for secrets: ${lookUpType} for team: ${name} in cluster: ${clusterName}`
+                  );
+              }
+
+              switch (secretType) {
+                case "kubernetes.io/basic-auth":
+                  secretTypeClass = blueprints.KubernetesSecretType.BASIC_AUTH;
+                  break;
+                case "bootstrap.kubernetes.io/token":
+                  secretTypeClass = blueprints.KubernetesSecretType.TOKEN;
+                  break;
+                case "kubernetes.io/dockerconfigjson":
+                  secretTypeClass = blueprints.KubernetesSecretType.DOCKER_CONFIG_JSON;
+                  break;
+                case "kubernetes.io/dockercfg":
+                  secretTypeClass = blueprints.KubernetesSecretType.DOCKER_CONFIG;
+                  break;
+                case "kubernetes.io/ssh-auth":
+                  secretTypeClass = blueprints.KubernetesSecretType.SSH_AUTH;
+                  break;
+                case "kubernetes.io/service-account-token":
+                  secretTypeClass = blueprints.KubernetesSecretType.SERVICE_ACCOUNT_TOKEN;
+                  break;
+                case "kubernetes.io/tls":
+                  secretTypeClass = blueprints.KubernetesSecretType.TLS;
+                  break;
+                case "Opaque":
+                default:
+                  // Default to Opaque Type
+                  break;
+              }
+
+              if (secretProvider!) {
+                const teamSecret: blueprints.CsiSecretProps = {
+                  secretProvider,
+                  jmesPath: metadata.jmesPath ?? [],
+                  kubernetesSecret: {
+                    type: secretTypeClass,
+                    secretName,
+                    data: metadata.data ?? [],
+                  },
+                };
+
+                teamSecrets.push(teamSecret);
+              }
+            });
+
+            const clusterTeam = new teamClassType({
+              name,
+              namespace,
+              namespaceAnnotations,
+              namespaceHardLimits,
+              namespaceLabels,
+              teamSecrets,
+              serviceAccountName,
+            });
+
+            clusterTeams.push(clusterTeam);
+          }
+        );
+      }
+    }
 
     const managedNodeGroupRole = blueprints.getResource(({ scope }) => {
       const role = new iam.Role(scope, `${clusterName}-managed-nodeGroup-role`, {
@@ -851,6 +1122,16 @@ export class EKSClustersConstruct extends Construct {
         version: "auto",
         storageClass: undefined,
         kmsKeys: [clusterDataKey],
+        configurationValues: {
+          controller: {
+            extraVolumeTags: {
+              ...environmentTagsStr,
+              ...tagsStr,
+              "Managed By": "eks-ebs-csi-controller",
+              "eks:cluster-name": `${clusterName}`,
+            },
+          },
+        },
       }),
       new StorageClassDefaultAddon({
         storageClassPaths: globSync(`**/*.{yaml,yml}`, {
@@ -917,8 +1198,9 @@ export class EKSClustersConstruct extends Construct {
 
     const clusterStack = eksBuilder
       .clusterProvider(clusterProvider)
-      .region(environment?.region)
-      .account(environment?.account)
+      .region(this.props.environment?.region)
+      .account(this.props.environment?.account)
+      .teams(...clusterTeams)
       .resourceProvider(blueprints.GlobalResources.Vpc, new blueprints.DirectVpcProvider(vpc))
       .addOns(...blueprintsAddons, ...dynamicAddons)
       .useDefaultSecretEncryption(false)

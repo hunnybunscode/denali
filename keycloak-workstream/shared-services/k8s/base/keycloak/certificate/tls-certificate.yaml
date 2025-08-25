@@ -32,4 +32,3 @@ spec:
     - keycloak.keycloak.svc.cluster.local
 
     - sso.denali.jktruong.people.aws.dev
-

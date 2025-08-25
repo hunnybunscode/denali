@@ -5,6 +5,8 @@ environment:
   iam:
     prefix: AFC2S
     # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+  tags:
+    EnvTags: true
   proxy:
     httpProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
     httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
@@ -131,6 +133,28 @@ hostedZones: &hostedZones
 clusters:
   - name: StandardSharedServices
     version: "1.30"
+    tags:
+      CusTags: true
+    teams:
+      - type: application
+        name: keycloak
+        namespace: keycloak
+        serviceAccountName: keycloak-secrets-sa
+        secrets:
+          - secretName: keycloak-db-secret
+            secretArn: rds!cluster-f7e6dc90-c359-44ca-b55f-34ab5b4ae526
+            lookUpType: name
+            metadata:
+              jmesPath:
+                - path: username
+                  objectAlias: username
+                - path: password
+                  objectAlias: password
+              data:
+                - key: username
+                  objectName: username
+                - key: password
+                  objectName: password
     private: false
     vpc:
       <<: *vpc
@@ -147,15 +171,15 @@ clusters:
       #   minSize: 1
       #   desiredCapacity: 1
       #   maxSize: 40
-      # - name: al2023-compute-xlarge
-      #   instanceType: m5a.xlarge
-      #   ami:
-      #     name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
-      #   storage: *al-storage
-      #   subnets: *workerNodeGroupSubnets
-      #   minSize: 1
-      #   desiredCapacity: 1
-      #   maxSize: 50
+      - name: al2023-compute-xlarge
+        instanceType: m5a.xlarge
+        ami:
+          name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+        storage: *al-storage
+        subnets: *workerNodeGroupSubnets
+        minSize: 1
+        desiredCapacity: 1
+        maxSize: 50
       # - name: al2023-compute-normal-xlarge
       #   instanceType: m5a.xlarge
       #   ami:

@@ -1,0 +1,31 @@
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: SecurityGroup
+metadata:
+  name: keycloak-rds-sg
+  namespace: keycloak
+spec:
+  name: eks-ack-keycloak-rds
+  vpcID: vpc-0ea1fbb49ae45a7d2
+  ingressRules:
+    - ipProtocol: tcp
+      fromPort: 5432
+      toPort: 5432
+      ipRanges:
+        # Known Pod Subnets
+        - cidrIP: 10.0.32.0/19
+          description: BootstrapStack/vpc/cluster-pods-Subnet1
+        - cidrIP: 10.0.64.0/19
+          description: BootstrapStack/vpc/cluster-pods-Subnet2
+        - cidrIP: 10.0.128.0/19
+          description: BootstrapStack/vpc/isolated-cluster-pods-Subnet1
+        - cidrIP: 10.0.160.0/19
+          description: BootstrapStack/vpc/isolated-cluster-pods-Subnet2
+        # Known Worker Subnets
+        - cidrIP: 10.0.4.0/22
+          description: BootstrapStack/vpc/cluster-worker-nodes-Subnet1
+        - cidrIP: 10.0.8.0/22
+          description: BootstrapStack/vpc/cluster-worker-nodes-Subnet2
+        - cidrIP: 10.0.100.0/22
+          description: BootstrapStack/vpc/isolated-cluster-worker-nodes-Subnet1
+        - cidrIP: 10.0.104.0/22
+          description: BootstrapStack/vpc/isolated-cluster-worker-nodes-Subnet2

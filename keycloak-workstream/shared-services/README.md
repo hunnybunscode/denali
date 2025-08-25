@@ -2,9 +2,13 @@
 
 The CDK portion will create the necessary infrastructure needed to deploy the Shared Services Applications.
 
-The `/lib/k8s/overlay/dev` contains the actual applications
+The `k8s/overlay/dev` contains the actual applications
 
 It is possible to disable mTLS requirements if you don't want to support direct integration of smartcard authentication.
+
+## Architecture Diagram
+
+![Keycloak Architecture](documents/Keycloak-Architecture.jpg)
 
 ## Services
 * Keycloak
@@ -49,7 +53,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
 2. Deploy the stack
    > NOTE: `--output`, `--debug` is **optional**
    ```bash
-   cdk context --clear; cdk deploy --require-approval never --yes --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
+   cdk context --clear; cdk deploy --require-approval never --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force SharedServicesStack && cdk deploy --require-approval never --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
    ```
 3. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
    Sample Command
@@ -57,8 +61,8 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    aws eks update-kubeconfig --name SharedServices --region us-east-1 --role-arn arn:aws:iam::992382523718:role/cluster-SharedServices-stack-cluster-admin-role
    ```
 
-## To deploy the Pre-Deploy of the Kubernetes portion of Shared Services
-> Deploy the core Shared Services k8s operator(s) and custom resource definitions
+## To deploy Keycloak with RDS
+> Deploy Keycloak with Aurora PostgreSQL database
 
 1. Build the mTLS AWS Load Balancer Service Provider Interface (SPI) Plugin for Keycloak
    ```bash
@@ -66,15 +70,29 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    ./gradlew clean build
    cd -
    ```
-2. Execute the following command once logged into the cluster
+
+2. Generate RDS resources
+   ```bash
+   ./k8s/base/keycloak/scripts/pre-deploy-keycloak.sh [cluster-name] [region]
+   ```
+
+3. Deploy infrastructure resources (RDS, etc.)
    ```bash
    kubectl apply --kustomize k8s/overlay/dev
    ```
 
-## To deploy the Post-Deploy of the Kubernetes portion of Shared Services
-> Deploy the Shared Services Deployments
+4. Wait for RDS cluster to be available
+   ```bash
+   kubectl get dbcluster -n keycloak
+   # Wait for STATUS: available
+   ```
 
-1. Execute the following command once logged into the cluster
+5. Update files with actual RDS endpoint and secret names
+   ```bash
+   ./k8s/base/keycloak/scripts/post-deploy-keycloak.sh [cluster-name] [region]
+   ```
+
+6. Deploy applications
    ```bash
    kubectl apply --kustomize k8s/overlay/dev/post
    ```

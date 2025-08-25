@@ -4,7 +4,7 @@ metadata:
   name: service-keycloak-instance
   namespace: keycloak
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     keycloak: keycloak-instance
   ports:

@@ -1,0 +1,11 @@
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBInstance
+metadata:
+  name: keycloak-db-instance
+  namespace: keycloak
+spec:
+  dbInstanceIdentifier: eks-ack-keycloak-db-instance
+  dbInstanceClass: db.serverless
+  engine: aurora-postgresql
+  dbClusterIdentifier: eks-ack-keycloak-aurora-postgres
+  publiclyAccessible: false

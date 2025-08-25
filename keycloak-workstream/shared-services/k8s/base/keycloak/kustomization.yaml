@@ -5,11 +5,8 @@ metadata:
 
 resources:
   - certificate
-  - postgres
+  - rds
   - realm
-
-  - keycloak-db-secret.yaml
-  # - namespace.yaml
 
   - service-keycloak-instance.yaml
   - ingress-keycloak-app-x509.yaml

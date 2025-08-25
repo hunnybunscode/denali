@@ -18,7 +18,7 @@ metadata:
 spec:
   ingressClassName: alb
   rules:
-    - host: sso.denali.jktruong.people.aws.dev
+    - host: keycloak.keycloak.svc.cluster.local
       http:
         paths:
           - pathType: Prefix

@@ -1,0 +1,48 @@
+environment:
+  name: govcloud
+  region: us-gov-west-1
+  account: "249263810748"
+
+.storage: &storage
+  type: gp3
+  deviceName: /dev/xvda
+  sizeInGB: 20
+
+.vpc: &vpc
+  id: vpc-029c12710bf709971
+  subnet:
+    id: subnet-0f97d9b9aa4cfc5ab
+
+pipelines:
+  - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: 1.0.0
+    scan: false
+    vpc: *vpc
+    instanceTypes:
+      - m5.large
+      - m5.xlarge
+      - m6a.xlarge
+    ami:
+      name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+    storages:
+      - *storage
+    tags:
+      OS: Amazon Linux 2023
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: "1.30"
+    components:
+      - name: stig-build-linux-high
+        version: 2024.4.0
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value:
+              - "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/SecurityUpdate.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml

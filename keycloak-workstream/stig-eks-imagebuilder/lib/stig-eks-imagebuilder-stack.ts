@@ -60,7 +60,6 @@ export class StigEksImageBuilderStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       enforceSSL: true,
       versioned: false,
-      autoDeleteObjects: true,
       lifecycleRules: [
         {
           expiration: Duration.days(30),
@@ -921,7 +920,9 @@ export class StigEksImageBuilderStack extends Stack {
       logGroup: stepLogGroup,
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "index.lambda_handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/trigger-imagebuilder-pipeline")),
+      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/trigger-imagebuilder-pipeline"), {
+        exclude: [".env", ".venv", ".vscode", "Makefile", "requirements-dev.txt", ".gitignore"],
+      }),
       deadLetterQueueEnabled: false,
       timeout: Duration.minutes(1),
       role: new iam.Role(this, "TriggerImageBuilderPipelineFunctionRole", {
@@ -953,7 +954,9 @@ export class StigEksImageBuilderStack extends Stack {
       logGroup: stepLogGroup,
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "index.lambda_handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/update-ami")),
+      code: lambda.Code.fromAsset(path.join(__dirname, "lambda/update-ami"), {
+        exclude: [".env", ".venv", ".vscode", "Makefile", "requirements-dev.txt", ".gitignore"],
+      }),
       deadLetterQueueEnabled: false,
       timeout: Duration.minutes(1),
       role: new iam.Role(this, "UpdateAmiFunctionRole", {

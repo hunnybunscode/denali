@@ -3,6 +3,6 @@ kind: Kustomization
 
 resources:
   - ../../base/certificate
+  - ../../base/keycloak/rds
   - ../../base/keycloak-operator
-  - ../../base/squid
   - ../../base/nifikop
