@@ -1,0 +1,456 @@
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - IamPrefix
+          - ResourceSuffix
+
+      - Label:
+          default: Allowed File Types and MIME Mapping
+        Parameters:
+          - ApprovedFileTypes
+          - MimeMapping
+
+      - Label:
+          default: Tags
+        Parameters:
+          - IngestBucketMappingId
+          - DfdlBound
+          - IngestBucketDestinationBucket
+
+          - IngestBucketDataOwner
+          - IngestBucketDataSteward
+          - IngestBucketGovPoc
+          - IngestBucketKeyOwner
+          - IngestBucketDestinationMappingKey # Mapping Key Parameter for one-to-many effort AR 7/31
+
+      - Label:
+          default: Bucket KMS Key
+        Parameters:
+          - IngestBucketKeyAlias
+          - IamEntityAllowedToUseKey
+
+      - Label:
+          default: External IAM Entity
+        Parameters:
+          - AllowedExternalRoleArn
+
+      - Label:
+          default: Secure File Transfer Protocol (SFTP)
+        Parameters:
+          - SftpUserName
+          - SshPublicKeys
+
+      - Label:
+          default: Bucket LifeCycle
+        Parameters:
+          - ObjectExpirationInDays
+
+    ParameterLabels:
+      IamPrefix:
+        default: IAM Prefix
+      ResourceSuffix:
+        default: Resource Suffix
+      ApprovedFileTypes:
+        default: Approved File Types
+      MimeMapping:
+        default: MIME Mapping
+      IngestBucketMappingId:
+        default: Mapping ID
+      DfdlBound:
+        default: DFDL Bound
+      IngestBucketDestinationBucket:
+        default: Destination Bucket Name
+      IngestBucketDataOwner:
+        default: Data Owner
+      IngestBucketDataSteward:
+        default: Data Steward
+      IngestBucketGovPoc:
+        default: GOV POC
+      IngestBucketKeyOwner:
+        default: Key Owner
+      IngestBucketKeyAlias:
+        default: Key Alias
+      IamEntityAllowedToUseKey:
+        default: IAM Entity Allowed to Use Key
+      AllowedExternalRoleArn:
+        default: Allowed Role ARN from Customer Account
+      SftpUserName:
+        default: SFTP User Name
+      SshPublicKeys:
+        default: SSH Public Keys
+      ObjectExpirationInDays:
+        default: Object Expiration In Days
+      IngestBucketDestinationMappingKey: # Added AR 7/31
+        default: Ingest Bucket Destination Parameter Mapping Key
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: (Required) Prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      (Required) Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  ApprovedFileTypes:
+    Type: CommaDelimitedList
+    Description: (Required) A comma-separated list of file extensions (without leading dots) allowed through the validation pipeline
+    Default: txt, json
+
+  MimeMapping:
+    Type: String
+    Description: >
+      (Conditional) MIME type mapping as JSON object, with file extensions (without leading dots) as keys and arrays of MIME types as values.
+      For example, {"txt": ["text/plain"], "json": ["application/json"]}. Recommend using a tool to validate the input as JSON.
+    Default: '{"txt": ["text/plain"], "json": ["application/json"]}'
+    AllowedPattern: ^$|^\s*\{\s*(?:"[^"]*"\s*:\s*\[[^\]]*\]\s*(?:,\s*"[^"]*"\s*:\s*\[[^\]]*\]\s*)*)\s*\}\s*$
+    ConstraintDescription: Must be either blank or a valid JSON
+
+  IngestBucketMappingId:
+    Type: String
+    Description: (Conditional) Value for tag key MappingId. Do not specify a value here if you specify a value in Destination Bucket Name.
+    Default: 12346789-abcd-1234-abcd-123456789012
+    AllowedPattern: ^$|^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$
+    ConstraintDescription: Must be either blank or a valid Mapping ID
+
+  DfdlBound:
+    Type: String
+    Description: (Required) If you select "Yes", any files uploaded to this bucket will be sent through the DFDL workflow.
+    Default: "No"
+    AllowedValues: ["Yes", "No"]
+    ConstraintDescription: Must be "Yes" or "No"
+
+  IngestBucketDestinationBucket:
+    Type: String
+    Description: (Conditional) Value for tag key DestinationBucket. Do not specify a value here if you specify a value in Mapping ID.
+    AllowedPattern: ^$|^(?!\s*arn:)\S+$
+    ConstraintDescription: Must be either blank or a valid bucket name
+
+  IngestBucketDataOwner:
+    Type: String
+    Description: (Required) Value for tag key DataOwner
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
+
+  IngestBucketDataSteward:
+    Type: String
+    Description: (Required) Value for tag key DataSteward
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
+
+  IngestBucketGovPoc:
+    Type: String
+    Description: (Required) Value for tag key GovPOC
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
+
+  IngestBucketKeyOwner:
+    Type: String
+    Description: (Required) Value for tag key KeyOwner
+    AllowedPattern: (?!.*/).+
+    ConstraintDescription: Must have at least one valid character and not contain a slash (/)
+
+  IngestBucketKeyAlias:
+    Type: String
+    Description: >
+      (Optional) Alias for KMS key encrypting the ingestion bucket. Do NOT start with "alias/"--it will be prepended automatically.
+    AllowedPattern: ^$|^(?!alias/)(?!aws/)[a-zA-Z0-9/_-]+$
+    ConstraintDescription: >
+      Must be either blank or composed of alphanumeric characters, forward slashes (/), underscores (_), and dashes (-).
+      Cannot start with "alias/" or "aws/", and cannot exceed 256 characters.
+
+  IamEntityAllowedToUseKey:
+    Type: String
+    Description: (Optional) ARN of the IAM user or role that is allowed to use the KMS key associated with the ingestion bucket
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::\d{12}:(role|user)/\S+
+    ConstraintDescription: Must be either blank or a valid ARN
+
+  AllowedExternalRoleArn:
+    Type: String
+    Description: (Optional) ARN of the role that is allowed to put objects into the ingestion bucket
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::\d{12}:role/\S+
+    ConstraintDescription: Must be either blank or a valid ARN
+
+  SftpUserName:
+    Type: String
+    Description: (Optional) Username for SFTP user who is allowed to write to the ingestion bucket via SFTP
+    AllowedPattern: ^$|^(?![-.@].*)[a-zA-Z0-9-_.@]{3,100}$
+    ConstraintDescription: >-
+      Must be either blank or a username with a minimum of 3 and a maximum of 100 characters long.
+      The following are valid characters: a-z, A-Z, 0-9, underscore '_', hyphen '-', period '.', and at sign '@'.
+      The user name can't start with a hyphen, period, or at sign.
+
+  SshPublicKeys:
+    Type: CommaDelimitedList
+    Description: >-
+      (Optional) Public key portion of the SSH keys stored for the SFTP user. If adding more than one, separate them with a comma.
+      If you want to delete the key(s), clear out the contents from this field.
+
+  ObjectExpirationInDays:
+    Type: Number
+    Description: (Required) Enter the number of days you want to keep objects in the Ingestion Bucket.
+    Default: 30
+    MinValue: 1
+
+  # Added Destination mapping Parameter (AR 7/31)
+  IngestBucketDestinationMappingKey:
+    Type: String
+    Description: The Mapping Key that will be used to to identify the ultimate transfer destination
+
+Rules:
+  MappingIdOnly:
+    RuleCondition: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
+    Assertions:
+      - Assert: !Equals [!Ref IngestBucketDestinationBucket, ""]
+        AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
+  DestinationBucketOnly:
+    RuleCondition: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
+    Assertions:
+      - Assert: !Equals [!Ref IngestBucketMappingId, ""]
+        AssertDescription: You cannot specify a value in both Mapping ID and Destination Bucket Name
+
+Conditions:
+  CreateSftpUser: !Not [!Equals [!Ref SftpUserName, ""]]
+  UseSshPublicKey: !Not [!Equals [!Join ["", !Ref SshPublicKeys], ""]]
+  AllowIamEntityToUseKey: !Not [!Equals [!Ref IamEntityAllowedToUseKey, ""]]
+  UseMimeMapping: !Not [!Equals [!Ref MimeMapping, ""]]
+  UseMappingId: !Not [!Equals [!Ref IngestBucketMappingId, ""]]
+  UseDestinationBucket: !Not [!Equals [!Ref IngestBucketDestinationBucket, ""]]
+  AllowExternalRoleArn: !Not [!Equals [!Ref AllowedExternalRoleArn, ""]]
+  UseIngestBucketKeyAlias: !Not [!Equals [!Ref IngestBucketKeyAlias, ""]]
+  # Adding Condition for ingest bucket destination Mapping Key AR 7/31
+  UseDestinationMappingKey:
+    !Not [!Equals [!Ref IngestBucketDestinationMappingKey, ""]]
+
+Resources:
+  IngestBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
+    Properties:
+      LoggingConfiguration:
+        DestinationBucketName:
+          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt SSES3KmsKey.Arn
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function:
+              Fn::ImportValue: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireObjectsLifecycleRule
+            Status: Enabled
+            ExpirationInDays: !Ref ObjectExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+      Tags:
+        - !If
+          - UseMappingId
+          - Key: MappingId
+            Value: !Ref IngestBucketMappingId
+          - !Ref AWS::NoValue
+        - Key: DfdlBound
+          Value: !Ref DfdlBound
+        - !If
+          - UseDestinationBucket
+          - Key: DestinationBucket
+            Value: !Ref IngestBucketDestinationBucket
+          - !Ref AWS::NoValue
+        - Key: DataOwner
+          Value: !Ref IngestBucketDataOwner
+        - Key: DataSteward
+          Value: !Ref IngestBucketDataSteward
+        - Key: GovPOC
+          Value: !Ref IngestBucketGovPoc
+        - Key: KeyOwner
+          Value: !Ref IngestBucketKeyOwner
+        - !If
+          - UseDestinationMappingKey
+          - Key: DestinationMappingKey
+            Value: !Ref IngestBucketDestinationMappingKey
+          - !Ref AWS::NoValue
+
+  IngestBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref IngestBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Restrict to TLS requests only
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub ${IngestBucket.Arn}
+              - !Sub ${IngestBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Deny a presigned URL request if the signature is more than 5 minutes old
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: !Sub ${IngestBucket.Arn}/*
+            Condition:
+              NumericGreaterThan:
+                s3:signatureAge: 300000 # in milliseconds
+          - Sid: Require use of KMS key for encryption
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub ${IngestBucket.Arn}/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt SSES3KmsKey.Arn
+          - !If
+            - AllowExternalRoleArn
+            - Sid: Allow customer role to put objects
+              Effect: Allow
+              Principal:
+                AWS: !Ref AllowedExternalRoleArn
+              Action: s3:PutObject
+              Resource: !Sub ${IngestBucket.Arn}/*
+            - !Ref AWS::NoValue
+
+  ApprovedFileTypesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${IngestBucket}/ApprovedFileTypes-${ResourceSuffix}
+      Description: !Sub File types which are authorized for low to high transfer from ${IngestBucket}
+      Type: StringList
+      Value: !Join [",", !Ref ApprovedFileTypes]
+
+  MimeMappingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${IngestBucket}/MimeMapping-${ResourceSuffix}
+      Description: !Sub Mime mapping in JSON for ${IngestBucket}
+      Type: String
+      Value: !If [UseMimeMapping, !Ref MimeMapping, "{}"]
+
+  SSES3KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for an ingestion bucket
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: kms-key-policy
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            # Allow all but cryptographic operations via IAM policies
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow EC2 Scanner role to decrypt
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-Ec2ScannerRole-${ResourceSuffix}
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: Allow specific roles to use the key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
+                - !If
+                  - AllowExternalRoleArn
+                  - !Ref AllowedExternalRoleArn
+                  - !Ref AWS::NoValue
+                - !If
+                  - CreateSftpUser
+                  - Fn::ImportValue: !Sub TransferUserRoleArn-${ResourceSuffix}
+                  - !Ref AWS::NoValue
+                - !If
+                  - AllowIamEntityToUseKey
+                  - !Ref IamEntityAllowedToUseKey
+                  - !Ref AWS::NoValue
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+      Tags:
+        - Key: CreatedByCloudFormationStack
+          Value: !Ref AWS::StackName
+
+  SSES3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: UseIngestBucketKeyAlias
+    Properties:
+      AliasName: !Sub alias/${IngestBucketKeyAlias}-${ResourceSuffix}
+      TargetKeyId: !Ref SSES3KmsKey
+
+  TransferUser:
+    Type: AWS::Transfer::User
+    Condition: CreateSftpUser
+    Properties:
+      ServerId:
+        Fn::ImportValue: !Sub SFTPServerId-${ResourceSuffix}
+      Role:
+        Fn::ImportValue: !Sub TransferUserRoleArn-${ResourceSuffix}
+      UserName: !Ref SftpUserName
+      HomeDirectoryType: LOGICAL
+      HomeDirectoryMappings:
+        - Entry: / # chroot
+          Target: !Sub /${IngestBucket}/${SftpUserName} # Limit visibility to this directory (and below) only
+          Type: DIRECTORY
+      SshPublicKeys: !If
+        - UseSshPublicKey
+        - !Ref SshPublicKeys
+        - []
+
+Outputs:
+  IngestBucketName:
+    Description: Name of the ingestion bucket
+    Value: !Ref IngestBucket
+  SSES3KmsKeyId:
+    Description: ID of the KMS key for the ingestion bucket
+    Value: !Ref SSES3KmsKey
+  SSES3KmsKeyArn:
+    Description: ARN of the KMS key for the ingestion bucket
+    Value: !GetAtt SSES3KmsKey.Arn

@@ -1,0 +1,1488 @@
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Prefix added to all IAM resources
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+
+  ResourceSuffix:
+    Type: String
+    Description: Suffix added to the named AWS resources
+
+  VpcId:
+    Type: String
+    Description: VPC ID
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR block of the existing VPC
+
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: The list of private subnet IDs to use for the pipeline
+
+  S3PrefixListId:
+    Type: String
+    Description: The S3 prefix list ID to use for the pipeline
+
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
+Resources:
+  IngestKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for ingest stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow cryptographic operations via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
+          - Sid: Allow logs service principal to use the key
+            # https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+
+  IngestKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/ingest-stack-${ResourceSuffix}
+      TargetKeyId: !Ref IngestKmsKey
+
+  ObjectTaggerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-ObjectTaggerRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: ObjectTaggerRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:bucket-object-tagger-${ResourceSuffix}
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt AvScanQueue.Arn
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt IngestKmsKey.Arn
+
+  APILambdaInvokeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-APILambdaInvokeRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+            # This condition does NOT allow apigateway to assume the role
+            # Condition:
+            #   StringEquals:
+            #     aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: APILambdaInvokeRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt PresignedUrlGenerator.Arn
+
+  ApiGatewayStageLogGroup:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt IngestKmsKey.Arn
+
+  AvScanDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      # Encryption here may not be necessary; moving a message to a DLQ doesn't affect its encryption
+      # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-server-side-encryption.html#sqs-encryption-what-does-sse-encrypt
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
+
+  AvScanQueue:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 345600 # Default value (4 days)
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AvScanDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  AvScanQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref AvScanQueue]
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt AvScanQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  LambdaFunctionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: Security Group for Lambda Functions
+      SecurityGroupEgress:
+        - Description: Allow TCP traffic out to VPC CIDR
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+        - Description: Allow TCP traffic out to S3 Gateway Endpoint
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationPrefixListId: !Ref S3PrefixListId
+
+  BucketObjectTagger:
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The managed policy, AWSLambdaVPCAccessExecutionRole, attached to the execution role includes permissions to write to CloudWatch Logs
+    Properties:
+      FunctionName: !Sub bucket-object-tagger-${ResourceSuffix}
+      Handler: index.lambda_handler
+      Role: !GetAtt ObjectTaggerRole.Arn
+      Runtime: python3.11
+      Timeout: 30
+      # LoggingConfig:
+      #   LogGroup: The name of the log group
+      # ReservedConcurrentExecutions: 50
+      Environment:
+        Variables:
+          AV_SCAN_QUEUE_URL: !Ref AvScanQueue
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaFunctionSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SQS_CLIENT = boto3.client("sqs", config=config)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+              send_to_sqs(event)
+              logger.info("SUCCESS")
+
+
+          def send_to_sqs(event: dict):
+              logger.info("Sending a message to the SQS queue")
+              SQS_CLIENT.send_message(
+                  QueueUrl=AV_SCAN_QUEUE_URL,
+                  MessageBody=json.dumps(event),
+              )
+
+  BucketObjectTaggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt BucketObjectTagger.Arn
+      Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceAccount: !Ref AWS::AccountId
+
+  PresignedUrlGenerator:
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58 # Lambda functions require permission to write CloudWatch Logs
+            reason: The managed policy, AWSLambdaVPCAccessExecutionRole, attached to the execution role includes permissions to write to CloudWatch Logs
+    Properties:
+      FunctionName: !Sub presigned-url-generator-${ResourceSuffix}
+      Handler: index.lambda_handler
+      Role: !GetAtt PresignedUrlGeneratorRole.Arn
+      Runtime: python3.11
+      Timeout: 30
+      # LoggingConfig:
+      #   LogGroup: The name of the log group
+      # ReservedConcurrentExecutions: 50
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaFunctionSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Code:
+        ZipFile: |
+          import json
+          import logging
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          config = Config(
+              retries={"max_attempts": 5, "mode": "standard"},
+              signature_version="s3v4",
+          )
+          S3_CLIENT = boto3.client("s3", config=config)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              bucket = event["queryStringParameters"]["bucket"]
+              key = event["queryStringParameters"]["key"]
+              kms_key_id = event["queryStringParameters"]["kms_key_id"]
+
+              logger.info(f"Bucket: {bucket}")
+              logger.info(f"Key: {key}")
+              logger.info(f"KMS Key ID: {kms_key_id}")
+
+              fields = {
+                  "x-amz-server-side-encryption": "aws:kms",
+                  "x-amz-server-side-encryption-aws-kms-key-id": kms_key_id,
+              }
+
+              params = dict(
+                  Bucket=bucket,
+                  Key=key,
+                  Fields=fields,
+                  Conditions=[{k: v} for k, v in fields.items()],
+              )
+              response = S3_CLIENT.generate_presigned_post(**params)
+
+              logger.info(f"Response Body: {response}")
+
+              response = {
+                  "statusCode": 200,
+                  "body": json.dumps(response),
+                  "isBase64Encoded": False,
+              }
+
+              return response
+
+  PresignedUrlGeneratorRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      # Note that there is a dependency on this name
+      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: PresignedUrlGeneratorRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+
+  FileUploader:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub FileUploader-${ResourceSuffix}
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  FileUploaderDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - FileUploaderUploadOptions
+      - FileUploaderUploadPost
+      - FileUploaderUpload
+    Properties:
+      Description: File Uploader Deployment
+      RestApiId: !Ref FileUploader
+
+  FileUploaderDeploymentStageProd:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: prod
+      RestApiId: !Ref FileUploader
+      DeploymentId: !Ref FileUploaderDeployment
+      CacheClusterEnabled: true
+      CacheClusterSize: "0.5"
+      MethodSettings:
+        - CacheDataEncrypted: true
+          CachingEnabled: true
+          DataTraceEnabled: false
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayStageLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","user":"$context.identity.user","caller":"$context.identity.caller","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
+
+  FileUploaderUpload:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt FileUploader.RootResourceId
+      PathPart: upload
+      RestApiId: !Ref FileUploader
+
+  FileUploaderUploadPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      RestApiId: !Ref FileUploader
+      ResourceId: !Ref FileUploaderUpload
+      AuthorizationType: AWS_IAM
+      Integration:
+        Credentials: !GetAtt APILambdaInvokeRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: "200"
+        PassthroughBehavior: NEVER
+        RequestTemplates:
+          application/json: '{ "statusCode": 200 }'
+        Type: AWS_PROXY
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresignedUrlGenerator.Arn}/invocations
+      MethodResponses:
+        - ResponseModels:
+            application/json: !Ref APIModel
+          StatusCode: "200"
+
+  FileUploaderUploadOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: OPTIONS
+      RestApiId: !Ref FileUploader
+      ResourceId: !Ref FileUploaderUpload
+      AuthorizationType: NONE
+      ApiKeyRequired: false # pragma: allowlist secret
+      Integration:
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'OPTIONS,GET,POST,PUT'"
+            StatusCode: "200"
+        RequestTemplates:
+          application/json: "{ statusCode: 200 }"
+        Type: MOCK
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
+
+  APIModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      ContentType: application/json
+      RestApiId: !Ref FileUploader
+      Schema:
+        "$schema": http://json-schema.org/draft-04/schema#
+
+  AvScanQueueURLParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/AvScanQueueUrl-${ResourceSuffix}
+      Description: URL of the SQS Queue which manages AV Scan
+      Type: String
+      Value: !GetAtt AvScanQueue.QueueUrl
+
+  ### WEB ACL RESOURCES
+  IngestAPIWebACL:
+    Type: AWS::WAFv2::WebACL
+    Condition: IsLowSide
+    Properties:
+      Description: WAF for API Gateway protection
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: IngestAPILogsWAF
+      Rules:
+        - Name: AWS-AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesCommonRuleSetMetric
+        - Name: AWS-AWSManagedRulesAnonymousIpList
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAnonymousIpListMetric
+        - Name: AWS-AWSManagedRulesAmazonIpReputationList
+          Priority: 3
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesAmazonIpReputationListMetric
+        - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
+
+  # WAF Association with API Gateway stages
+  WebACLAssociationAPI:
+    Type: AWS::WAFv2::WebACLAssociation
+    Condition: IsLowSide
+    DependsOn: FileUploaderDeploymentStageProd
+    Properties:
+      ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
+      WebACLArn: !GetAtt IngestAPIWebACL.Arn
+
+  # WAF Logging
+  WAFLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: IsLowSide
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub
+        - aws-waf-logs-${name}
+        - name: !Select [0, !Split ["|", !Ref IngestAPIWebACL]]
+      RetentionInDays: 731
+
+  WAFLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Condition: IsLowSide
+    Properties:
+      LogDestinationConfigs:
+        - !GetAtt WAFLogGroup.Arn
+      ResourceArn: !GetAtt IngestAPIWebACL.Arn
+
+  # Cloudwatch Metric Filter
+  MetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: IsLowSide
+    Properties:
+      FilterName: WAF Rule Action
+      FilterPattern: '{ $.action = "*" }'
+      LogGroupName: !Ref WAFLogGroup
+      MetricTransformations:
+        - Dimensions:
+            - Key: Action
+              Value: $.action
+          MetricName: RuleAction
+          MetricNamespace: Custom/WAF
+          MetricValue: 1
+          Unit: Count
+
+  InsightsRuleClientIpAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.clientIp"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleClientIpBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.clientIp"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleCountryAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.country"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleCountryBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-CountryBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.country"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleUriAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.uri"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleUriBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-UriBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.httpRequest.uri"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleTerminatingRuleAllowed:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "ALLOW"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.terminatingRuleId"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  InsightsRuleTerminatingRuleBlocked:
+    Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
+    Properties:
+      RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
+      RuleState: ENABLED
+      RuleBody: !Sub >
+        {
+          "AggregateOn": "Count",
+          "Contribution": {
+            "Filters": [
+              {
+                "Match": "$.action",
+                "In": [
+                  "BLOCK"
+                ]
+              }
+            ],
+            "Keys": [
+              "$.terminatingRuleId"
+            ]
+          },
+          "LogFormat": "JSON",
+          "LogGroupNames": [
+            "${WAFLogGroup}"
+          ],
+          "Schema": {
+            "Name": "CloudWatchLogRule",
+            "Version": 1
+          }
+        }
+
+  AlarmBlockRatio:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-block-ratio-anomaly
+      AlarmDescription: Abnormal percentage of total requests blocked over 5 minute period.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: GreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      ThresholdMetricId: ad1
+      Metrics:
+        - Id: e1
+          Label: Block Percentage
+          ReturnData: true
+          Expression: m2 / (m2 + m1) * 100
+        - Id: m2
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: BLOCK
+            Period: 300
+            Stat: Sum
+        - Id: m1
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: Custom/WAF
+              MetricName: RuleAction
+              Dimensions:
+                - Name: Action
+                  Value: ALLOW
+            Period: 300
+            Stat: Sum
+        - Id: ad1
+          Label: Block Ratio (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e1, 2)
+
+  AlarmClientIpAllowed:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-top-clientip-allowed-anomaly
+      AlarmDescription: Abnormal number of requests for the top allowed client IP over 5 minutes.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      ThresholdMetricId: ad1
+      Metrics:
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpAllowed.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpAllowed.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
+
+  AlarmClientIpBlocked:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      AlarmName: !Sub ${WAFLogGroup}-top-clientip-blocked-anomaly
+      AlarmDescription: Abnormal number of requests for the top blocked client IP over 5 minutes.
+      ActionsEnabled: true
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
+      TreatMissingData: notBreaching
+      ThresholdMetricId: ad1
+      Metrics:
+        - Id: e0
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue
+          ReturnData: true
+          Expression: !Sub INSIGHT_RULE_METRIC('${InsightsRuleClientIpBlocked.RuleName}','MaxContributorValue')
+          Period: 300
+        - Id: ad1
+          Label: !Sub ${InsightsRuleClientIpBlocked.RuleName} MaxContributorValue (expected)
+          ReturnData: true
+          Expression: ANOMALY_DETECTION_BAND(e0, 2)
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: IsLowSide
+    Properties:
+      DashboardName: !Ref WAFLogGroup
+      DashboardBody: !Sub >
+        {
+          "start": "-PT1H",
+          "widgets": [
+            {
+              "height": 3,
+              "width": 3,
+              "y": 0,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    { "label": "Requests Blocked", "color": "#ff7f0e" }
+                  ]
+                ],
+                "view": "singleValue",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "Requests",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "liveData": false,
+                "setPeriodToTimeRange": true,
+                "title": " ",
+                "singleValueFullPrecision": false
+              }
+            },
+            {
+              "height": 3,
+              "width": 3,
+              "y": 3,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    { "label": "Requests Allowed" }
+                  ]
+                ],
+                "view": "singleValue",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "Requests",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "title": " ",
+                "singleValueFullPrecision": false
+              }
+            },
+            {
+              "height": 6,
+              "width": 15,
+              "y": 0,
+              "x": 3,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    {
+                      "expression": "FILL(METRICS(), 0)",
+                      "label": "",
+                      "id": "fill",
+                      "region": "${AWS::Region}",
+                      "color": "#1f77b4"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    {
+                      "id": "allowed",
+                      "color": "#1f77b4",
+                      "visible": false,
+                      "label": "Requests Allowed"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    {
+                      "id": "blocked",
+                      "visible": false,
+                      "label": "Requests Blocked",
+                      "color": "#ff7f0e"
+                    }
+                  ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "${AWS::Region}",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "title": "",
+                "legend": {
+                  "position": "right"
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 6,
+              "y": 0,
+              "x": 18,
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [
+                    {
+                      "expression": "blocked / (allowed + blocked) * 100",
+                      "label": "Block %",
+                      "id": "blkratio",
+                      "color": "#ff7f0e",
+                      "region": "${AWS::Region}"
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "BLOCK",
+                    {
+                      "id": "blocked",
+                      "label": "Blocked",
+                      "color": "#ff7f0e",
+                      "visible": false
+                    }
+                  ],
+                  [
+                    "Custom/WAF",
+                    "RuleAction",
+                    "Action",
+                    "ALLOW",
+                    {
+                      "id": "allowed",
+                      "color": "#1f77b4",
+                      "visible": false,
+                      "label": "Allowed"
+                    }
+                  ]
+                ],
+                "region": "${AWS::Region}",
+                "view": "gauge",
+                "period": 60,
+                "stat": "Sum",
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "min": 0,
+                    "max": 100
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "setPeriodToTimeRange": true,
+                "legend": {
+                  "position": "bottom"
+                },
+                "singleValueFullPrecision": true
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 6,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Terminating Rule",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleTerminatingRuleAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 6,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by Terminating Rule",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleTerminatingRuleBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 12,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by IP",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleClientIpAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 12,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "yAxis": {
+                  "left": {
+                    "showUnits": false,
+                    "label": "",
+                    "min": 0
+                  },
+                  "right": {
+                    "showUnits": false
+                  }
+                },
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by IP",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleClientIpBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 18,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Country",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleCountryAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "bottom"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 18,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by Country",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleCountryBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "bottom"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 24,
+              "x": 0,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Allowed by Request URI",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleUriAllowed.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "height": 6,
+              "width": 12,
+              "y": 24,
+              "x": 12,
+              "type": "metric",
+              "properties": {
+                "period": 60,
+                "region": "${AWS::Region}",
+                "stacked": true,
+                "timezone": "local",
+                "title": "Top Blocked by URI Path",
+                "view": "timeSeries",
+                "insightRule": {
+                  "maxContributorCount": 10,
+                  "orderBy": "Sum",
+                  "ruleName": "${InsightsRuleUriBlocked.RuleName}"
+                },
+                "legend": {
+                  "position": "right"
+                },
+                "yAxis": {
+                  "left": {
+                    "showUnits": true,
+                    "min": 0
+                  }
+                }
+              }
+            }
+          ]
+        }
+
+Outputs:
+  IngestKmsKeyArn:
+    Description: KMS Key Arn for the Ingest Stack
+    Value: !GetAtt IngestKmsKey.Arn
+
+  AvScanQueueUrl:
+    Description: Queue URL of the SQS AV Scan Queue
+    Value: !Ref AvScanQueue
+
+  AvScanQueueName:
+    Description: Name of the SQS AV Scan Queue
+    Value: !GetAtt AvScanQueue.QueueName
+    # TODO: Remove this export once it's not referenced anywhere
+    Export:
+      Name: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
+
+  AvScanQueueArn:
+    Description: ARN of the SQS AV Scan Queue
+    Value: !GetAtt AvScanQueue.Arn
+
+  AvScanDeadLetterQueueUrl:
+    Description: Queue URL of the SQS AV Scan Dead Letter Queue
+    Value: !Ref AvScanDeadLetterQueue
+
+  AvScanDeadLetterQueueName:
+    Description: Name of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.QueueName
+
+  AvScanDeadLetterQueueArn:
+    Description: ARN of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.Arn
+
+  BucketObjectTaggerArn:
+    Description: ARN of the Object Tagger Lambda Function
+    Value: !GetAtt BucketObjectTagger.Arn
+    Export:
+      Name: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
+
+  PresignedUrlGeneratorInvokeUrl:
+    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/upload
+    Description: URL of the Presign Generator API Endpoint
