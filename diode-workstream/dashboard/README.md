@@ -1,21 +1,19 @@
 # DIODE Dashboard Monitoring Suite
 
+## Quick Start
+
+**Choose your monitoring focus:**
+- **DIODE Transfer Monitoring** → [diode-dashboard/README.md](./diode-dashboard/README.md)
+- **Pipeline Infrastructure Monitoring** → [pipeline-dashboard/README.md](./pipeline-dashboard/README.md)
+
 ## Table of Contents
 1. [Overview](#overview)
-2. [Project Architecture](#project-architecture)
-3. [AWS CDK Deep Dive](#aws-cdk-deep-dive)
-4. [Stack Overviews](#stack-overviews)
-5. [CDK Application Structure](#cdk-application-structure)
-6. [CDK Deployment Lifecycle](#cdk-deployment-lifecycle)
-7. [CDK Configuration Management](#cdk-configuration-management)
-8. [CDK Best Practices](#cdk-best-practices)
-9. [Prerequisites](#prerequisites)
-10. [Installation and Setup](#installation-and-setup)
-11. [Deployment Instructions](#deployment-instructions)
-12. [CDK Commands Reference](#cdk-commands-reference)
-13. [Troubleshooting CDK Issues](#troubleshooting-cdk-issues)
-14. [Advanced CDK Features](#advanced-cdk-features)
-15. [Maintenance and Updates](#maintenance-and-updates)
+2. [Dashboard Selection Guide](#dashboard-selection-guide)
+3. [Operational Procedures](#operational-procedures)
+4. [Project Architecture](#project-architecture)
+5. [Stack Overviews](#stack-overviews)
+6. [Detailed Documentation](#detailed-documentation)
+7. [CDK Overview](#cdk-overview)
 
 ## Overview
 
@@ -25,6 +23,32 @@ The DIODE Dashboard Monitoring Suite is a comprehensive AWS CDK-based solution t
 2. **Pipeline Dashboard Stack**: Monitors the validation pipeline infrastructure components
 
 The application leverages AWS CDK (Cloud Development Kit) to provide infrastructure-as-code capabilities, enabling consistent, repeatable, and version-controlled deployments of monitoring infrastructure.
+
+## Dashboard Selection Guide
+
+### Decision Matrix
+
+| **Criteria** | **DIODE Dashboard** | **Pipeline Dashboard** |
+|--------------|-------------------|----------------------|
+| **Primary Focus** | Mission area transfer monitoring | Infrastructure health monitoring |
+| **Target Users** | Mission operators, data analysts | DevOps, infrastructure teams |
+| **Metrics Source** | Custom CloudWatch metrics | AWS service metrics (SQS, Lambda, EC2) |
+| **Time Granularity** | Real-time to 30-day views | 6-month historical with daily aggregation |
+| **Dashboard Count** | Multiple (per mission area) | Single comprehensive dashboard |
+| **Use When** | Monitoring data transfers by mission | Monitoring pipeline infrastructure health |
+| **Key Widgets** | Transfer counts, sizes, success rates | Queue metrics, Lambda performance, network |
+| **Configuration** | Mission area mapping IDs | Queue names, Lambda functions, ASG names |
+| **Deployment Account** | Mission area accounts | Infrastructure/monitoring account |
+
+## Operational Procedures
+
+### Incident Response
+
+For operational incidents, alerts, and escalation procedures, refer to your organizational Incident Response Procedures and contact the appropriate on-call teams.
+
+### Dashboard Health Monitoring
+
+Both dashboard applications include built-in health monitoring. If dashboards are not displaying current data or showing errors, follow standard troubleshooting procedures documented in each application's README.
 
 ## Project Architecture
 
@@ -105,99 +129,24 @@ Stacks are the unit of deployment in CDK. Each stack corresponds to a CloudForma
 #### 3. Apps
 Apps are the root of the construct tree and contain one or more stacks.
 
-### CDK Architecture in This Project
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           CDK Application Layer                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐        │
-│  │   CDK App       │───▶│   Stack 1       │───▶│  CloudFormation │        │
-│  │   (Python)      │    │ DashboardStack  │    │     Template    │        │
-│  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
-│           │                       │                       │                │
-│           │              ┌─────────────────┐    ┌─────────────────┐        │
-│           └─────────────▶│   Stack 2       │───▶│  CloudFormation │        │
-│                          │PipelineStack    │    │     Template    │        │
-│                          └─────────────────┘    └─────────────────┘        │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
 
-### CDK Synthesis Process
+Both applications use AWS CDK for infrastructure-as-code deployment. Key CDK concepts:
 
-The CDK synthesis process converts your CDK code into CloudFormation templates:
+- **Bootstrap**: One-time setup creating S3 bucket and IAM roles for CDK operations
+- **Synthesis**: Converts Python CDK code into CloudFormation templates
+- **Deployment**: Creates/updates CloudFormation stacks with monitoring resources
 
-1. **Code Execution**: CDK executes your Python code
-2. **Construct Tree Building**: Creates a tree of constructs
-3. **Validation**: Validates construct properties and relationships
-4. **Template Generation**: Converts constructs to CloudFormation JSON
-5. **Asset Bundling**: Packages any code or file assets
-6. **Output Generation**: Creates templates and manifests in `cdk.out/`
-
-### CDK Bootstrap Deep Dive
-
-Bootstrap is a one-time setup process that prepares your AWS environment for CDK deployments:
-
-#### Bootstrap Resources Created
-
-```
-CDKToolkit Stack:
-├── S3 Bucket (cdk-hnb659fds-assets-{account}-{region})
-│   ├── CloudFormation templates
-│   ├── Lambda code bundles
-│   ├── Docker images
-│   └── File assets
-├── IAM Roles
-│   ├── CloudFormation execution role
-│   ├── Deployment role
-│   ├── File publishing role
-│   ├── Image publishing role
-│   └── Lookup role
-├── ECR Repository (for container images)
-└── SSM Parameters (for version tracking)
-```
-
-#### Bootstrap Command Options
-
+**Common CDK Commands:**
 ```bash
-# Basic bootstrap
-cdk bootstrap
-
-# Bootstrap specific account/region
-cdk bootstrap aws://123456789012/us-east-1
-
-# Bootstrap with custom qualifier
-cdk bootstrap --qualifier myapp
-
-# Bootstrap with custom policy
-cdk bootstrap --policy-file bootstrap-policy.json
-
-# Show bootstrap template
-cdk bootstrap --show-template
+cdk bootstrap    # First-time environment setup
+cdk synth       # Generate CloudFormation templates
+cdk deploy      # Deploy infrastructure
+cdk diff        # Show changes before deployment
+cdk destroy     # Remove all resources
 ```
 
-## Stack Overviews
-
-### DIODE Dashboard Stack
-
-**Purpose**: Monitors DIODE transfer activities across multiple mission areas
-
-**Key Features**:
-- Dynamic dashboard creation based on mission area configurations
-- Automatic dashboard chunking (5 mappings per dashboard)
-- Multiple time-scale monitoring (12 months, 14 days, 1 day)
-- Friendly name mapping for better readability
-- SSM Parameter Store integration for configuration storage
-
-**Monitored Metrics**:
-- TransferCreatedCount
-- SucceededTransferCount
-- SucceededTransferSize
-- InTransitTransferSize
-- InTransitTransferCount
-- RejectedTransferCount
+**For detailed CDK information, deployment procedures, and troubleshooting**, see the individual project READMEs linked above.jectedTransferCount
 
 **Dashboard Types Created**:
 - Transfer activity graphs (long-term, medium-term, real-time)

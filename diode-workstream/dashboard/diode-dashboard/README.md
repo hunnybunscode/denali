@@ -12,12 +12,13 @@
 9. [Prerequisites](#prerequisites)
 10. [Installation and Setup](#installation-and-setup)
 11. [Deployment Instructions](#deployment-instructions)
-12. [Advanced Features](#advanced-features)
-13. [Testing](#testing)
-14. [Troubleshooting](#troubleshooting)
-15. [Security Considerations](#security-considerations)
-16. [Performance Considerations](#performance-considerations)
-17. [Maintenance and Updates](#maintenance-and-updates)
+12. [Adding New Metrics to Dashboards](#adding-new-metrics-to-dashboards)
+13. [Advanced Features](#advanced-features)
+14. [Testing](#testing)
+15. [Troubleshooting](#troubleshooting)
+16. [Security Considerations](#security-considerations)
+17. [Performance Considerations](#performance-considerations)
+18. [Maintenance and Updates](#maintenance-and-updates)
 
 ## Overview
 
@@ -646,6 +647,429 @@ cdk deploy
 cdk destroy
 ```
 
+## Adding New Metrics to Dashboards
+
+### Overview
+
+This section provides a comprehensive guide for adding new metrics to the DIODE dashboards. The process involves discovering available metrics, creating metric objects, configuring widgets, and integrating them into the dashboard layout.
+
+### Step 1: Discover Available Metrics
+
+#### Method 1: Find Metrics via AWS Console
+
+**Navigate to CloudWatch Metrics:**
+1. Open AWS Console → CloudWatch → Metrics → All metrics
+2. In the "Browse" tab, look for "AWS/Diode" namespace
+3. Click on "AWS/Diode" to expand available metrics
+4. Click on dimension categories (e.g., "MappingId") to see specific metrics
+
+**Identify Metric Details:**
+1. **Namespace**: Will show as "AWS/Diode" in the breadcrumb
+2. **Metric Name**: Listed in the "Metric name" column (e.g., "ProcessingLatency")
+3. **Dimensions**: Shown in dimension columns (e.g., "MappingId: mapping-123")
+4. **Available Statistics**: Click "Graphed metrics" tab to see Sum, Average, Maximum options
+
+**Console Screenshot Reference:**
+```
+CloudWatch > Metrics > All metrics
+├── AWS/Diode
+│   ├── MappingId
+│   │   ├── ProcessingLatency        [MappingId: mapping-123]
+│   │   ├── TransferCreatedCount     [MappingId: mapping-123]
+│   │   └── CustomMetricName         [MappingId: mapping-456]
+│   └── Other Dimensions...
+```
+
+**Verify Metric Data:**
+1. Select the checkbox next to your desired metric
+2. Click "Graphed metrics" tab to see the metric plotted
+3. Note the "Statistic" column (Sum, Average, etc.)
+4. Check "Period" to understand data granularity
+5. Verify data points exist in the graph
+
+#### Method 2: Find Metrics via AWS CLI
+
+For programmatic discovery or automation:
+
+```bash
+# List all metrics in the AWS/Diode namespace
+aws cloudwatch list-metrics --namespace AWS/Diode
+
+# List metrics for a specific metric name
+aws cloudwatch list-metrics --namespace AWS/Diode --metric-name YourNewMetricName
+
+# List metrics with specific dimensions
+aws cloudwatch list-metrics --namespace AWS/Diode --dimensions Name=MappingId,Value=your-mapping-id
+```
+
+**Example CLI Output:**
+```json
+{
+    "Metrics": [
+        {
+            "Namespace": "AWS/Diode",
+            "MetricName": "ProcessingLatency",
+            "Dimensions": [
+                {
+                    "Name": "MappingId",
+                    "Value": "mapping-123"
+                }
+            ]
+        }
+    ]
+}
+```
+
+#### Identify Required Attributes
+
+From either the Console or CLI, note these key attributes:
+
+**From Console:**
+- **Namespace**: Shown in breadcrumb (e.g., `AWS/Diode`)
+- **MetricName**: Listed in "Metric name" column (e.g., `ProcessingLatency`)
+- **Dimensions**: Shown as column headers and values (e.g., `MappingId: mapping-123`)
+- **Statistic**: Available in "Graphed metrics" tab (Sum, Average, Maximum, etc.)
+
+**From CLI Output:**
+- **Namespace**: `AWS/Diode` (for DIODE metrics)
+- **MetricName**: The exact name of the metric (e.g., `ProcessingLatency`)
+- **Dimensions**: Key-value pairs that identify the metric source (e.g., `MappingId: mapping-123`)
+
+**Console Tips:**
+- Use the search box to filter metrics by name
+- Click "Add to dashboard" to see metric configuration options
+- Use "Actions" → "View in Metrics Explorer" for advanced filtering
+
+### Step 2: Create Metric Objects in CDK
+
+#### Basic Metric Creation
+
+In `diode_dashboard_stack.py`, add your new metric creation within the mapping loop:
+
+```python
+# Example: Adding ProcessingLatency metric
+processing_latency = cloudwatch.Metric(
+    namespace="AWS/Diode",                    # CloudWatch namespace
+    dimensions_map={"MappingId": mapping_id}, # Dimension mapping
+    metric_name="ProcessingLatency",          # Exact metric name from CloudWatch
+    statistic="Average",                     # Aggregation method
+    label=f"{friendly_name} - ProcessingLatency"  # Display label
+)
+```
+
+#### Metric Configuration Parameters Explained
+
+- **namespace**: The CloudWatch namespace where the metric exists
+- **dimensions_map**: Dictionary mapping dimension names to values
+- **metric_name**: Exact metric name as it appears in CloudWatch
+- **statistic**: How to aggregate data points (`Sum`, `Average`, `Maximum`, `Minimum`, `SampleCount`)
+- **label**: Human-readable label displayed in dashboard legends
+
+#### Choosing the Right Statistic
+
+| Metric Type | Recommended Statistic | Use Case |
+|-------------|----------------------|----------|
+| Count metrics (events) | `Sum` | Total number of occurrences |
+| Size metrics (bytes) | `Sum` | Total data volume |
+| Latency metrics (time) | `Average` | Typical response time |
+| Utilization metrics (%) | `Average` | Resource usage levels |
+| Error rates | `Sum` | Total error count |
+
+### Step 3: Add Metrics to Collections
+
+After creating individual metrics, add them to the appropriate collections for widget creation:
+
+```python
+# Find the existing metric collections in the code
+all_transfer_created_count.append(transfer_created_count)
+all_succeeded_transfer_count.append(succeeded_transfer_count)
+# ... existing metrics ...
+
+# Add your new metric to a new collection
+all_processing_latency.append(processing_latency)
+```
+
+**Complete Example:**
+```python
+# Initialize collections at the beginning of the loop
+all_processing_latency = []
+
+# Inside the mapping loop, after existing metric creation:
+for friendly_name, mapping_id in friendly_to_mapping_id.items():
+    # ... existing metric creation code ...
+    
+    # Create new metric
+    processing_latency = cloudwatch.Metric(
+        namespace="AWS/Diode",
+        dimensions_map={"MappingId": mapping_id},
+        metric_name="ProcessingLatency",
+        statistic="Average",
+        label=f"{friendly_name} - ProcessingLatency"
+    )
+    
+    # Add to collection
+    all_processing_latency.append(processing_latency)
+```
+
+### Step 4: Create Widgets
+
+#### Graph Widget for Time-Series Data
+
+Add a new graph widget to display your metric over time:
+
+```python
+# Add after existing widget creation
+dashboard.add_widgets(
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} Processing Latency: Last 14 Days",
+        left=all_processing_latency,           # Metrics to display
+        width=12,                             # Widget width (12 = half dashboard)
+        period=Duration.hours(1),             # Data aggregation period
+        start='-P14D'                         # Time range (14 days ago)
+    )
+)
+```
+
+#### Single Value Widget for Summary Data
+
+Add a single value widget for high-level metrics:
+
+```python
+# Add individual single value widgets for each mapping
+for i, (friendly_name, mapping_id) in enumerate(friendly_to_mapping_id.items()):
+    dashboard.add_widgets(
+        cloudwatch.SingleValueWidget(
+            metrics=[all_processing_latency[i]],
+            title=f"{friendly_name} Avg Latency - Last 24 Hours",
+            width=6,                          # Smaller width for summary widgets
+            period=Duration.days(1)           # Aggregation period
+        )
+    )
+```
+
+#### Widget Configuration Options
+
+**Graph Widget Parameters:**
+- **title**: Descriptive title for the widget
+- **left**: List of metrics for left Y-axis
+- **right**: List of metrics for right Y-axis (optional)
+- **width**: Widget width (6, 12, 18, or 24 units)
+- **height**: Widget height (default: 6 units)
+- **period**: Data aggregation interval
+- **start**: Relative start time (ISO 8601 duration format)
+- **end**: Relative end time (optional)
+- **region**: AWS region (defaults to current region)
+
+**Time Range Examples:**
+- `-PT1H`: Last 1 hour
+- `-P1D`: Last 1 day  
+- `-P7D`: Last 7 days
+- `-P1M`: Last 1 month
+- `-P1Y`: Last 1 year
+
+### Step 5: Widget Placement Strategy
+
+#### Dashboard Layout Planning
+
+CloudWatch dashboards use a 24-unit width grid system:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Widget (width=24)                                          │
+├──────────────────────────┬──────────────────────────────────┤
+│  Widget (width=12)       │  Widget (width=12)               │
+├─────────────┬────────────┼─────────────┬────────────────────┤
+│Widget (w=6) │Widget (w=6)│Widget (w=6) │Widget (w=6)        │
+└─────────────┴────────────┴─────────────┴────────────────────┘
+```
+
+#### Recommended Widget Placement
+
+1. **Full-width widgets (24 units)**: Important overview metrics
+2. **Half-width widgets (12 units)**: Detailed time-series analysis
+3. **Quarter-width widgets (6 units)**: Summary statistics and KPIs
+
+#### Adding Widgets in Logical Groups
+
+```python
+# Group 1: Overview widgets (full width)
+dashboard.add_widgets(
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} System Overview",
+        left=all_transfer_created_count + all_processing_latency,
+        width=24,
+        period=Duration.days(1),
+        start='-P30D'
+    )
+)
+
+# Group 2: Detailed analysis (half width)
+dashboard.add_widgets(
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} Transfer Activity",
+        left=all_transfer_created_count,
+        width=12,
+        period=Duration.hours(1),
+        start='-P7D'
+    ),
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} Processing Performance",
+        left=all_processing_latency,
+        width=12,
+        period=Duration.hours(1),
+        start='-P7D'
+    )
+)
+```
+
+### Step 6: Testing and Validation
+
+#### Validate Metric Availability
+
+Before deploying, verify your metrics exist and have data:
+
+```bash
+# Test metric data retrieval
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Diode \
+  --metric-name ProcessingLatency \
+  --dimensions Name=MappingId,Value=your-mapping-id \
+  --start-time $(date -d '1 day ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Average
+```
+
+#### Deploy and Test
+
+```bash
+# Synthesize to check for errors
+cdk synth
+
+# Deploy changes
+cdk deploy
+
+# Verify dashboard creation
+aws cloudwatch get-dashboard --dashboard-name YourDashboardName
+```
+
+### Step 7: Complete Example Implementation
+
+Here's a complete example of adding a new `ProcessingLatency` metric:
+
+```python
+# In diode_dashboard_stack.py, within the mission area loop:
+
+# 1. Initialize metric collection
+all_processing_latency = []
+
+# 2. Create metrics for each mapping
+for friendly_name, mapping_id in friendly_to_mapping_id.items():
+    # ... existing metric creation ...
+    
+    # Create new ProcessingLatency metric
+    processing_latency = cloudwatch.Metric(
+        namespace="AWS/Diode",
+        dimensions_map={"MappingId": mapping_id},
+        metric_name="ProcessingLatency",
+        statistic="Average",
+        label=f"{friendly_name} - ProcessingLatency"
+    )
+    
+    # Add to collection
+    all_processing_latency.append(processing_latency)
+
+# 3. Create widgets after the loop
+# Long-term trend widget
+dashboard.add_widgets(
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} Processing Latency: Last 30 Days",
+        left=all_processing_latency,
+        width=12,
+        period=Duration.days(1),
+        start='-P30D'
+    )
+)
+
+# Real-time monitoring widget
+dashboard.add_widgets(
+    cloudwatch.GraphWidget(
+        title=f"{mission_area} Processing Latency: Last 24 Hours",
+        left=all_processing_latency,
+        width=12,
+        period=Duration.minutes(5),
+        start='-P1D'
+    )
+)
+
+# Summary widgets for each mapping
+for i, (friendly_name, mapping_id) in enumerate(friendly_to_mapping_id.items()):
+    dashboard.add_widgets(
+        cloudwatch.SingleValueWidget(
+            metrics=[all_processing_latency[i]],
+            title=f"{friendly_name} Avg Latency - 24h",
+            width=6,
+            period=Duration.days(1)
+        )
+    )
+```
+
+### Best Practices for Adding Metrics
+
+#### 1. Metric Naming and Organization
+- Use descriptive, consistent naming for metric variables
+- Group related metrics together in collections
+- Follow existing naming patterns in the codebase
+
+#### 2. Widget Design
+- Place most important metrics in prominent positions
+- Use appropriate time ranges for different use cases
+- Group related widgets visually
+- Maintain consistent widget sizing within groups
+
+#### 3. Performance Considerations
+- Limit the number of metrics per widget (recommended: 5-10 max)
+- Use appropriate aggregation periods for time ranges
+- Consider dashboard loading performance with many widgets
+
+#### 4. Documentation
+- Document new metrics in code comments
+- Update this README with new metric descriptions
+- Maintain mapping documentation for operational teams
+
+### Troubleshooting New Metrics
+
+#### Common Issues
+
+**1. Metric Not Found**
+```bash
+# Verify metric exists
+aws cloudwatch list-metrics --namespace AWS/Diode --metric-name YourMetricName
+```
+
+**2. No Data Displayed**
+```bash
+# Check if metric has recent data
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Diode \
+  --metric-name YourMetricName \
+  --dimensions Name=MappingId,Value=your-mapping-id \
+  --start-time $(date -d '1 hour ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 300 \
+  --statistics Average
+```
+
+**3. Wrong Statistic Type**
+- Count metrics: Use `Sum`
+- Latency metrics: Use `Average`
+- Size metrics: Use `Sum` for totals, `Average` for rates
+
+**4. Dimension Mismatch**
+- Verify dimension names and values match exactly
+- Check for case sensitivity
+- Ensure mapping IDs are correct
+
 ## Advanced Features
 
 ### Dashboard Chunking
@@ -860,6 +1284,43 @@ cdk context --list
 cdk context --clear
 ```
 
+### Emergency Procedures
+
+#### Dashboard Recovery
+
+If dashboards are accidentally deleted or corrupted:
+
+```bash
+# Quick recovery - redeploy from last known good configuration
+git checkout last-known-good-commit
+cdk deploy --require-approval never
+
+# Verify recovery
+aws cloudwatch list-dashboards
+```
+
+#### Rollback Procedures
+
+```bash
+# Cancel in-progress CloudFormation update
+aws cloudformation cancel-update-stack --stack-name DiodeDashboardStack
+
+# Force rollback if stack is in UPDATE_ROLLBACK_FAILED state
+aws cloudformation continue-update-rollback --stack-name DiodeDashboardStack
+
+# Complete rollback to previous working version
+aws cloudformation update-stack \
+  --stack-name DiodeDashboardStack \
+  --template-body file://previous-working-template.json
+```
+
+#### Contact Information
+
+For critical issues requiring immediate attention:
+- **Operational Issues**: Refer to organizational Incident Response Procedures
+- **Technical Issues**: Contact the development team through established channels
+- **AWS Support**: Open support case for AWS service-related issues
+
 ### Debugging Techniques
 
 #### 1. Enable Debug Logging
@@ -892,6 +1353,270 @@ aws cloudwatch get-dashboard --dashboard-name YourDashboardName
 
 # Check SSM parameter
 aws ssm get-parameter --name "/diode/dashboards/complete-mappings"
+```
+
+#### 5. Widget Display Issues
+
+**Symptoms**: Widgets show "Invalid metric" or "Metric not found"
+
+**Causes**:
+- Metric name typos in code
+- Incorrect dimension values
+- Metrics not published yet
+- Wrong namespace specification
+
+**Solutions**:
+```bash
+# Verify exact metric names
+aws cloudwatch list-metrics --namespace AWS/Diode --query 'Metrics[].MetricName' --output table
+
+# Check specific metric with dimensions
+aws cloudwatch list-metrics --namespace AWS/Diode --metric-name TransferCreatedCount --query 'Metrics[].Dimensions'
+
+# Test metric data availability
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Diode \
+  --metric-name TransferCreatedCount \
+  --dimensions Name=MappingId,Value=your-mapping-id \
+  --start-time $(date -d '24 hours ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Sum
+```
+
+#### 6. Dashboard Loading Performance Issues
+
+**Symptoms**: Dashboards load slowly or timeout
+
+**Causes**:
+- Too many widgets on single dashboard
+- Long time ranges with high-resolution data
+- Network connectivity issues
+- CloudWatch API throttling
+
+**Solutions**:
+```bash
+# Check dashboard size
+aws cloudwatch get-dashboard --dashboard-name YourDashboardName --query 'length(DashboardBody)'
+
+# Monitor CloudWatch API usage
+aws logs describe-metric-filters --log-group-name CloudTrail
+
+# Test individual widget performance
+aws cloudwatch get-metric-widget-image \
+  --metric-widget '{"metrics":[["AWS/Diode","TransferCreatedCount","MappingId","your-mapping-id"]],"period":300,"stat":"Sum","region":"us-east-1","title":"Test Widget"}' \
+  --output-format png
+```
+
+**Performance Optimization**:
+- Reduce number of metrics per widget (max 10 recommended)
+- Use appropriate time periods (avoid 1-minute periods for long ranges)
+- Split large dashboards into multiple smaller ones
+- Consider using metric math for complex calculations
+
+#### 7. SSM Parameter Issues
+
+**Symptoms**: SSM parameter not created or contains incorrect data
+
+**Causes**:
+- Insufficient SSM permissions
+- Parameter name conflicts
+- JSON serialization errors
+
+**Solutions**:
+```bash
+# Check SSM permissions
+aws iam simulate-principal-policy \
+  --policy-source-arn $(aws sts get-caller-identity --query Arn --output text) \
+  --action-names ssm:PutParameter ssm:GetParameter \
+  --resource-arns "arn:aws:ssm:*:*:parameter/diode/dashboards/*"
+
+# List all DIODE-related parameters
+aws ssm get-parameters-by-path --path "/diode/dashboards" --recursive
+
+# Validate parameter JSON content
+aws ssm get-parameter --name "/diode/dashboards/complete-mappings" --query 'Parameter.Value' --output text | python -m json.tool
+```
+
+#### 8. Cross-Account Deployment Issues
+
+**Symptoms**: Deployment fails in target account
+
+**Causes**:
+- CDK not bootstrapped in target account
+- Cross-account role trust issues
+- Different region configurations
+
+**Solutions**:
+```bash
+# Verify bootstrap in target account
+aws cloudformation describe-stacks --stack-name CDKToolkit --region target-region --profile target-account-profile
+
+# Check cross-account role assumptions
+aws sts assume-role \
+  --role-arn "arn:aws:iam::TARGET-ACCOUNT:role/cdk-hnb659fds-deploy-role-TARGET-ACCOUNT-REGION" \
+  --role-session-name "test-session"
+
+# Verify region consistency
+echo "Source region: $CDK_DEFAULT_REGION"
+echo "Target region: $(aws configure get region --profile target-account-profile)"
+```
+
+#### 9. Mission Area Configuration Errors
+
+**Symptoms**: Some mission areas missing from dashboards
+
+**Causes**:
+- JSON syntax errors in cdk.json
+- Missing or empty mapping configurations
+- Case sensitivity issues
+
+**Solutions**:
+```bash
+# Validate cdk.json structure
+python -c "import json; print(json.load(open('cdk.json'))['context']['mapping_ids'])"
+
+# Check for empty configurations
+python -c "
+import json
+with open('cdk.json') as f:
+    data = json.load(f)
+    for mission, mappings in data['context']['mapping_ids'].items():
+        if not mappings:
+            print(f'Empty mappings for mission area: {mission}')
+        for friendly, mapping_id in mappings.items():
+            if not mapping_id:
+                print(f'Empty mapping ID for {mission}/{friendly}')
+"
+
+# Test context parameter loading
+cdk synth --quiet | grep -A 20 "mapping_ids"
+```
+
+#### 10. CloudFormation Stack Issues
+
+**Symptoms**: Stack creation or update fails
+
+**Causes**:
+- Resource naming conflicts
+- CloudFormation template size limits
+- Circular dependencies
+
+**Solutions**:
+```bash
+# Check stack events for detailed error messages
+aws cloudformation describe-stack-events --stack-name DiodeDashboardStack --query 'StackEvents[?ResourceStatus==`CREATE_FAILED` || ResourceStatus==`UPDATE_FAILED`]'
+
+# Validate CloudFormation template
+aws cloudformation validate-template --template-body file://cdk.out/DiodeDashboardStack.template.json
+
+# Check template size
+ls -lh cdk.out/DiodeDashboardStack.template.json
+
+# Identify resource naming conflicts
+aws cloudwatch list-dashboards --query 'DashboardEntries[?contains(DashboardName, `YourMissionArea`)]'
+```
+
+### Advanced Troubleshooting
+
+#### Metric Data Validation Script
+
+Create a validation script to test all configured metrics:
+
+```python
+#!/usr/bin/env python3
+import json
+import boto3
+from datetime import datetime, timedelta
+
+def validate_metrics():
+    # Load configuration
+    with open('cdk.json') as f:
+        config = json.load(f)
+    
+    cloudwatch = boto3.client('cloudwatch')
+    
+    # Test each mapping
+    for mission_area, mappings in config['context']['mapping_ids'].items():
+        print(f"\nValidating {mission_area}:")
+        
+        for friendly_name, mapping_id in mappings.items():
+            print(f"  Testing {friendly_name} ({mapping_id})...")
+            
+            # Test TransferCreatedCount metric
+            try:
+                response = cloudwatch.get_metric_statistics(
+                    Namespace='AWS/Diode',
+                    MetricName='TransferCreatedCount',
+                    Dimensions=[{'Name': 'MappingId', 'Value': mapping_id}],
+                    StartTime=datetime.utcnow() - timedelta(days=1),
+                    EndTime=datetime.utcnow(),
+                    Period=3600,
+                    Statistics=['Sum']
+                )
+                
+                if response['Datapoints']:
+                    print(f"    ✓ Data available ({len(response['Datapoints'])} points)")
+                else:
+                    print(f"    ⚠ No data points found")
+                    
+            except Exception as e:
+                print(f"    ✗ Error: {e}")
+
+if __name__ == '__main__':
+    validate_metrics()
+```
+
+#### Dashboard Health Check Script
+
+```bash
+#!/bin/bash
+# dashboard-health-check.sh
+
+echo "DIODE Dashboard Health Check"
+echo "============================"
+
+# Check CloudFormation stack status
+echo "1. CloudFormation Stack Status:"
+aws cloudformation describe-stacks --stack-name DiodeDashboardStack --query 'Stacks[0].StackStatus' --output text
+
+# List created dashboards
+echo -e "\n2. Created Dashboards:"
+aws cloudwatch list-dashboards --query 'DashboardEntries[?contains(DashboardName, `Dashboard`)].DashboardName' --output table
+
+# Check SSM parameter
+echo -e "\n3. SSM Parameter Status:"
+if aws ssm get-parameter --name "/diode/dashboards/complete-mappings" >/dev/null 2>&1; then
+    echo "✓ SSM parameter exists"
+else
+    echo "✗ SSM parameter missing"
+fi
+
+# Test metric availability
+echo -e "\n4. Sample Metric Test:"
+if aws cloudwatch list-metrics --namespace AWS/Diode --metric-name TransferCreatedCount --query 'Metrics[0]' >/dev/null 2>&1; then
+    echo "✓ DIODE metrics available"
+else
+    echo "✗ No DIODE metrics found"
+fi
+
+echo -e "\nHealth check complete."
+```
+
+#### Log Analysis for Common Errors
+
+```bash
+# Search CloudTrail logs for dashboard-related errors
+aws logs filter-log-events \
+  --log-group-name CloudTrail \
+  --filter-pattern "{ $.eventName = PutDashboard && $.errorCode exists }" \
+  --start-time $(date -d '1 day ago' +%s)000
+
+# Search for CDK deployment errors
+aws logs filter-log-events \
+  --log-group-name "/aws/codebuild/cdk-deploy" \
+  --filter-pattern "ERROR" \
+  --start-time $(date -d '1 day ago' +%s)000
 ```
 
 ## Security Considerations
