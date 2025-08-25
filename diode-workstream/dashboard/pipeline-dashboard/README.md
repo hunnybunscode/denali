@@ -8,16 +8,17 @@
 5. [Configuration](#configuration)
 6. [Dashboard Features](#dashboard-features)
 7. [Metrics Monitored](#metrics-monitored)
-8. [Implementation Details](#implementation-details)
-9. [Prerequisites](#prerequisites)
-10. [Installation and Setup](#installation-and-setup)
-11. [Deployment Instructions](#deployment-instructions)
-12. [Advanced Features](#advanced-features)
-13. [Testing](#testing)
-14. [Troubleshooting](#troubleshooting)
-15. [Security Considerations](#security-considerations)
-16. [Performance Considerations](#performance-considerations)
-17. [Maintenance and Updates](#maintenance-and-updates)
+8. [Creating Custom Metrics](#creating-custom-metrics)
+9. [Implementation Details](#implementation-details)
+10. [Prerequisites](#prerequisites)
+11. [Installation and Setup](#installation-and-setup)
+12. [Deployment Instructions](#deployment-instructions)
+13. [Advanced Features](#advanced-features)
+14. [Testing](#testing)
+15. [Troubleshooting](#troubleshooting)
+16. [Security Considerations](#security-considerations)
+17. [Performance Considerations](#performance-considerations)
+18. [Maintenance and Updates](#maintenance-and-updates)
 
 ## Overview
 
@@ -398,6 +399,304 @@ The application uses consistent aggregation strategies across all metrics:
 - **Time Range**: 6-month historical view (-P6M)
 - **Statistic**: Sum for all count and size metrics
 - **Update Frequency**: Real-time updates as metrics are published
+
+## Creating Custom Metrics
+
+### Overview
+
+Custom metrics allow you to track application-specific data that isn't available through standard AWS service metrics. This section demonstrates how to create and publish custom metrics from Lambda functions and display them on dashboards.
+
+### Example: Mission Area File Tracking
+
+This example shows how to track file processing metrics by mission area in the data-transfer-result Lambda function:
+
+#### 1. Publishing Custom Metrics in Lambda
+
+```python
+import boto3
+import json
+from datetime import datetime
+
+# Initialize CloudWatch client
+cloudwatch = boto3.client('cloudwatch')
+
+def lambda_handler(event, context):
+    # Extract mission area from file metadata or path
+    mission_area = extract_mission_area(event)
+    file_size = get_file_size(event)
+    
+    # Publish file count metric
+    cloudwatch.put_metric_data(
+        Namespace='DIODE/Pipeline',
+        MetricData=[
+            {
+                'MetricName': 'FilesProcessed',
+                'Dimensions': [
+                    {
+                        'Name': 'MissionArea',
+                        'Value': mission_area
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count',
+                'Timestamp': datetime.utcnow()
+            }
+        ]
+    )
+    
+    # Publish file size metric
+    cloudwatch.put_metric_data(
+        Namespace='DIODE/Pipeline',
+        MetricData=[
+            {
+                'MetricName': 'TotalFileSize',
+                'Dimensions': [
+                    {
+                        'Name': 'MissionArea',
+                        'Value': mission_area
+                    }
+                ],
+                'Value': file_size,
+                'Unit': 'Bytes',
+                'Timestamp': datetime.utcnow()
+            }
+        ]
+    )
+    
+    # Continue with existing Lambda logic
+    return process_file(event)
+
+def extract_mission_area(event):
+    """Extract mission area from S3 object key or metadata"""
+    # Example: extract from S3 key path like 'mission-area-1/data/file.txt'
+    s3_key = event['Records'][0]['s3']['object']['key']
+    return s3_key.split('/')[0] if '/' in s3_key else 'unknown'
+
+def get_file_size(event):
+    """Get file size from S3 event"""
+    return event['Records'][0]['s3']['object']['size']
+```
+
+#### 2. Batch Metric Publishing (Recommended)
+
+```python
+def publish_metrics_batch(mission_area, file_count, total_size):
+    """Publish multiple metrics in a single API call"""
+    cloudwatch.put_metric_data(
+        Namespace='DIODE/Pipeline',
+        MetricData=[
+            {
+                'MetricName': 'FilesProcessed',
+                'Dimensions': [{'Name': 'MissionArea', 'Value': mission_area}],
+                'Value': file_count,
+                'Unit': 'Count'
+            },
+            {
+                'MetricName': 'TotalFileSize',
+                'Dimensions': [{'Name': 'MissionArea', 'Value': mission_area}],
+                'Value': total_size,
+                'Unit': 'Bytes'
+            },
+            {
+                'MetricName': 'AverageFileSize',
+                'Dimensions': [{'Name': 'MissionArea', 'Value': mission_area}],
+                'Value': total_size / file_count if file_count > 0 else 0,
+                'Unit': 'Bytes'
+            }
+        ]
+    )
+```
+
+#### 3. Adding Custom Metrics to Dashboard
+
+```python
+# In pipeline_dashboard_stack.py
+
+def create_mission_area_widgets(self, dashboard):
+    """Create widgets for mission area custom metrics"""
+    
+    # Get list of mission areas from context or configuration
+    mission_areas = self.node.try_get_context("mission_areas") or [
+        "mission-area-1", "mission-area-2", "mission-area-3"
+    ]
+    
+    for mission_area in mission_areas:
+        # Files processed metric
+        files_processed = cloudwatch.Metric(
+            namespace="DIODE/Pipeline",
+            metric_name="FilesProcessed",
+            dimensions_map={"MissionArea": mission_area},
+            statistic="Sum"
+        )
+        
+        # Total file size metric
+        total_file_size = cloudwatch.Metric(
+            namespace="DIODE/Pipeline",
+            metric_name="TotalFileSize",
+            dimensions_map={"MissionArea": mission_area},
+            statistic="Sum"
+        )
+        
+        # Average file size metric
+        avg_file_size = cloudwatch.Metric(
+            namespace="DIODE/Pipeline",
+            metric_name="AverageFileSize",
+            dimensions_map={"MissionArea": mission_area},
+            statistic="Average"
+        )
+        
+        # Create widget for this mission area
+        dashboard.add_widgets(
+            cloudwatch.GraphWidget(
+                title=f"{mission_area} File Processing Metrics",
+                left=[files_processed],
+                right=[total_file_size, avg_file_size],
+                width=24,
+                period=Duration.hours(1),
+                start="-P7D"  # 7 days of data
+            )
+        )
+```
+
+#### 4. Configuration Update
+
+Add mission areas to your `cdk.json` configuration:
+
+```json
+{
+  "context": {
+    "av_scan_queue_name": "your-av-scan-queue-name",
+    "av_scan_dlq_name": "your-av-scan-dlq-name",
+    "asg_name": "your-autoscaling-group-name",
+    "monitored_lambda_functions": [
+      "bucket-object-tagger-dev",
+      "data-transfer-result"
+    ],
+    "mission_areas": [
+      "mission-area-1",
+      "mission-area-2",
+      "mission-area-3"
+    ]
+  }
+}
+```
+
+#### 5. Lambda IAM Permissions
+
+Ensure your Lambda execution role has CloudWatch permissions:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "cloudwatch:PutMetricData"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+### Custom Metric Best Practices
+
+#### 1. Namespace Organization
+- Use hierarchical namespaces: `DIODE/Pipeline`, `DIODE/Validation`
+- Avoid AWS service namespaces (AWS/*)
+- Keep namespace names consistent across applications
+
+#### 2. Dimension Strategy
+- Use meaningful dimension names (MissionArea, Environment, Component)
+- Limit dimensions to essential categorization (max 10 per metric)
+- Consider cardinality impact on costs
+
+#### 3. Metric Naming
+- Use descriptive names: `FilesProcessed`, `ProcessingDuration`
+- Follow consistent naming conventions
+- Include units in names when helpful: `FileSizeBytes`
+
+#### 4. Performance Optimization
+- Batch multiple metrics in single `put_metric_data` calls
+- Use appropriate metric resolution (standard vs high-resolution)
+- Consider async metric publishing for high-throughput functions
+
+#### 5. Cost Management
+- Monitor custom metric usage and costs
+- Use metric filters for log-based metrics when appropriate
+- Consider metric retention policies
+
+### Advanced Custom Metrics
+
+#### Metric Math for Calculated Values
+
+```python
+# Create calculated metrics using metric math
+processing_rate = cloudwatch.MathExpression(
+    expression="files / PERIOD(files)",
+    using_metrics={
+        "files": cloudwatch.Metric(
+            namespace="DIODE/Pipeline",
+            metric_name="FilesProcessed",
+            dimensions_map={"MissionArea": mission_area},
+            statistic="Sum"
+        )
+    },
+    label="Files per Second"
+)
+```
+
+#### Composite Alarms
+
+```python
+# Create alarms based on custom metrics
+files_alarm = cloudwatch.Alarm(
+    self, f"FilesProcessedAlarm-{mission_area}",
+    metric=files_processed,
+    threshold=100,
+    evaluation_periods=2,
+    alarm_description=f"Low file processing rate for {mission_area}"
+)
+```
+
+### Testing Custom Metrics
+
+#### 1. Local Testing
+
+```python
+# Test metric publishing locally
+import boto3
+from moto import mock_cloudwatch
+
+@mock_cloudwatch
+def test_metric_publishing():
+    cloudwatch = boto3.client('cloudwatch', region_name='us-east-1')
+    
+    # Test your metric publishing function
+    publish_metrics_batch('test-mission', 5, 1024000)
+    
+    # Verify metrics were published
+    metrics = cloudwatch.list_metrics(Namespace='DIODE/Pipeline')
+    assert len(metrics['Metrics']) > 0
+```
+
+#### 2. Integration Testing
+
+```bash
+# Verify metrics in AWS
+aws cloudwatch list-metrics --namespace DIODE/Pipeline
+
+# Get metric statistics
+aws cloudwatch get-metric-statistics \
+  --namespace DIODE/Pipeline \
+  --metric-name FilesProcessed \
+  --dimensions Name=MissionArea,Value=mission-area-1 \
+  --start-time $(date -d '1 hour ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 300 \
+  --statistics Sum
+```
 
 ## Implementation Details
 
