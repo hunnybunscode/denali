@@ -1,0 +1,8 @@
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBCluster
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+spec:  
+  enableIAMDatabaseAuthentication: true
+  kmsKeyID: alias/aws/rds

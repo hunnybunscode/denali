@@ -6,20 +6,22 @@ resources:
   - resource/keycloak/proxy.yaml
   - resource/keycloak/ingress-keycloak-app-internal.yaml
   - resource/keycloak/ingress-keycloak-app-x509-internal.yaml
-  # - resource/kube-system/proxy.yaml
 
 patches:
   - path: patch/keycloak/certificate/tls-certificate.yaml
   - path: patch/keycloak/ingress-keycloak-app-x509.yaml
   - path: patch/keycloak/ingress-keycloak-app.yaml
-  - path: patch/keycloak/keycloak-instance.yaml
+  - path: patch/keycloak/rds/keycloak-db-cluster.yaml
+  - path: patch/keycloak/rds/keycloak-db-sg.yaml
+  - path: patch/keycloak/rds/keycloak-db-subnets.yaml
+  # - path: patch/keycloak/keycloak-instance.yaml
   - path: patchesJson6902/keycloak/keycloak-instance.yaml
     target:
       kind: Keycloak
       version: v2alpha1
       name: keycloak-instance
       namespace: keycloak
-      
+
 # configMapGenerator:
 #   - name: dod-ca-bundle
 #     namespace: keycloak

@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak-operator
+spec:
+  template:
+    spec:
+      containers:
+        - name: keycloak-operator
+          image: 776732943381.dkr.ecr.us-east-1.amazonaws.com/keycloak-operator:26.2.5
+          env:
+            - name: RELATED_IMAGE_KEYCLOAK
+              value: 776732943381.dkr.ecr.us-east-1.amazonaws.com/keycloak-fips:26.3.1-fips

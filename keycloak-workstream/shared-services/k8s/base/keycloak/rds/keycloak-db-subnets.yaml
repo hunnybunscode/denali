@@ -1,0 +1,25 @@
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: Subnet
+metadata:
+  name: keycloak-db-subnet-1
+  namespace: keycloak
+spec:
+  vpcID: VPC_ID_PLACEHOLDER
+  cidrBlock: "10.0.0.0/28"
+  availabilityZone: us-gov-west-1a
+  tags:
+    - key: Name
+      value: "keycloak-db-private-subnet-1"
+---
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: Subnet
+metadata:
+  name: keycloak-db-subnet-2
+  namespace: keycloak
+spec:
+  vpcID: VPC_ID_PLACEHOLDER
+  cidrBlock: "10.0.0.16/28"
+  availabilityZone: us-gov-west-1b
+  tags:
+    - key: Name
+      value: "keycloak-db-private-subnet-2"

@@ -9,7 +9,7 @@ spec:
       spec:
         initContainers:
           - name: pki-initialize
-            image: 908027385618.dkr.ecr.us-west-1.amazonaws.com/keycloak-fips:26.3.2-fips
+            image: registry.access.redhat.com/ubi9/ubi-minimal:latest
             securityContext:
               privileged: false
               runAsUser: 0
