@@ -5,6 +5,7 @@ from aws_cdk import (
     Stack,
     aws_stepfunctions as sfn,
     aws_iam as iam,
+    CfnOutput,
 )
 from constructs import Construct
 from config.config import Config
@@ -112,6 +113,7 @@ class StepFunctionsStack(Stack):
             f"{config.namespace}-{config.version}-RemediationStepFunction",
             definition_string=json.dumps(remediation_definition),
             role_arn=state_machine_role.role_arn,
+            state_machine_name=f"{config.namespace}-{config.version}-RemediationStepFunction",
         )
 
         # Load the test step function definition
@@ -127,6 +129,15 @@ class StepFunctionsStack(Stack):
             f"{config.namespace}-{config.version}-TestStepFunction",
             definition_string=json.dumps(test_definition),
             role_arn=state_machine_role.role_arn,
+            state_machine_name=f"{config.namespace}-{config.version}-TestStepFunction",
+        )
+
+        # Export the remediation state machine ARN for cross-stack reference
+        CfnOutput(
+            self,
+            "RemediationStateMachineArn",
+            value=remediation_sf.attr_arn,
+            export_name=f"{config.namespace}-{config.version}-RemediationStateMachineArn"
         )
 
     def _replace_dynamic_values(self, definition, config):
@@ -148,7 +159,7 @@ class StepFunctionsStack(Stack):
             '{{GIT_FILE_CRUD}}': f"{namespace_prefix}{config.lambda_functions.git_file_crud}",
             '{{VERIFY_FINDINGS_RESOLVED}}': f"{namespace_prefix}{config.lambda_functions.verify_findings_resolved}",
             '{{GIT_PR_CRUD}}': f"{namespace_prefix}{config.lambda_functions.git_pr_crud}",
-            '{{REMEDIATION_STATE_MACHINE}}': f"{namespace_prefix}{config.remediation_state_machine}"
+            '{{REMEDIATION_STATE_MACHINE}}': f"{namespace_prefix}RemediationStepFunction"
         }
 
         for placeholder, value in replacements.items():

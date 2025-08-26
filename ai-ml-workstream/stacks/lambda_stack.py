@@ -2,6 +2,7 @@ from aws_cdk import (
     Stack,
     aws_lambda as _lambda,
     aws_iam as iam,
+    aws_ec2 as ec2,
     Duration,
     BundlingOptions,
 )
@@ -20,7 +21,8 @@ class LambdaStack(Stack):
             role_name=f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-LambdaRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
             ],
             permissions_boundary=iam.ManagedPolicy.from_managed_policy_arn(
                 self, "LambdaPermissionsBoundary",
@@ -35,7 +37,19 @@ class LambdaStack(Stack):
                 "dynamodb:*",
                 "ssm:*",
                 "secretsmanager:GetSecretValue",
-                "bedrock:InvokeModel"
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream"
+            ],
+            resources=["*"]
+        ))
+
+        # Add Step Functions permissions for nested executions
+        lambda_role.add_to_policy(iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "states:StartExecution",
+                "states:DescribeExecution",
+                "states:StopExecution"
             ],
             resources=["*"]
         ))
@@ -50,12 +64,22 @@ class LambdaStack(Stack):
                     image=_lambda.Runtime.PYTHON_3_9.bundling_image,
                     command=[
                         "bash", "-c",
-                        "pip install requests defusedxml==0.7.1 -t /asset-output/python && cp -r /asset-input/* /asset-output/"
+                        "pip install requests -t /asset-output/python && cp -r /asset-input/* /asset-output/"
                     ]
                 )
             ),
             compatible_runtimes=[_lambda.Runtime.PYTHON_3_9],
             description="Layer containing requests package"
+        )
+
+        # Lookup VPC and networking resources once
+        vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=config.networking.vpc_id)
+        subnets = [
+            ec2.Subnet.from_subnet_id(self, f"Subnet{i}", subnet.subnet_id)
+            for i, subnet in enumerate(config.networking.subnets)
+        ]
+        security_group = ec2.SecurityGroup.from_security_group_id(
+            self, "SecurityGroup", config.networking.security_group_id
         )
 
         # Create Lambda functions with actual code
@@ -82,5 +106,8 @@ class LambdaStack(Stack):
                 function_name=f"{config.namespace}-{config.version}-{func_name}",
                 role=lambda_role,
                 timeout=Duration.minutes(15),
-                layers=[requests_layer]
+                layers=[requests_layer],
+                vpc=vpc,
+                vpc_subnets=ec2.SubnetSelection(subnets=subnets),
+                security_groups=[security_group]
             )
