@@ -117,12 +117,16 @@ To see the full possible configuration, `/lib/interfaces.d.ts`
    export AWS_DEFAULT_REGION=<region>
    ```
 
-3. Deploy the CDK stacks
+3. Get all dependencies
+   ```bash
+   npm ci
+   ```
+4. Deploy the CDK stacks
    > NOTE: `--output`, `--debug` is **optional**
    ```bash
    cdk context --clear; cdk deploy --require-approval never --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force SharedServicesStack && cdk deploy --require-approval never --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
    ```
-4. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
+5. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
    Sample Command
    ```bash
    aws eks update-kubeconfig --name SharedServices --region us-east-1 --role-arn arn:aws:iam::01234567890101:role/cluster-SharedServices-stack-cluster-admin-role
@@ -187,7 +191,7 @@ To see the full possible configuration, `/lib/interfaces.d.ts`
 ### References
 * https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-enable-ssh-connections.html
 
-### Getting started
+### Getting started to log into EKS Cluster as cluster administrator
 
 1. Get **kubeconfig** from cluster
    Sample Command
