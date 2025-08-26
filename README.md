@@ -9,7 +9,6 @@ This AWS content is subject to the terms of C2E Task Order 5502/HM047623F0080
 - [Overview](#overview)
 - [Project Structure](#project-structure)
 - [CI/CD Configuration](#cicd-configuration)
-- [Quick Start](#quick-start)
 - [Contributing](#contributing)
 
 ## Overview
@@ -23,12 +22,11 @@ Project Denali is a comprehensive AWS infrastructure and security platform desig
 
 **Components:**
 - **[Shared Services](./keycloak-workstream/shared-services/)** - EKS-based Keycloak with hardened security ([README](./keycloak-workstream/shared-services/README.md))
-- **[Harbor Registry](./keycloak-workstream/harbor/)** - Container registry with vulnerability scanning ([README](./keycloak-workstream/harbor/README.md))
+- **[Shared Services Assets](./keycloak-workstream/shared-services/)** - Helper to move containers and helm charts for offline deployment ([README](./keycloak-workstream/shared-services-assets/README.md))
 - **[STIG EKS Image Builder](./keycloak-workstream/stig-eks-imagebuilder/)** - STIG-compliant AMI creation ([README](./keycloak-workstream/stig-eks-imagebuilder/README.md))
 - **[Limited Privilege Role Emulator](./keycloak-workstream/limited-privilage-role-emulator/)** - IAM role testing framework ([README](./keycloak-workstream/limited-privilage-role-emulator/README.md))
 - **[IAM Deploy Role Calculator](./keycloak-workstream/iam-deploy-role-calculator/)** - Permission analysis tool ([README](./keycloak-workstream/iam-deploy-role-calculator/README.md))
-- **[CDK Bootstrap](./keycloak-workstream/cdk-bootstrap/)** - CDK environment setup ([README](./keycloak-workstream/cdk-bootstrap/README.md))
-- **[ECR Cache Discovery](./keycloak-workstream/ECR-Cache-Discovery/)** - Container registry optimization research ([ECR Pull Through Cache Guide](./keycloak-workstream/ECR-Cache-Discovery/ECR-PULLTHROUGH.md))
+- **[CDK Bootstrap](./keycloak-workstream/cdk-bootstrap/)** - CDK Toolkit bootstrap setup for target environment. Provides enablement of CDK based projects ([README](./keycloak-workstream/cdk-bootstrap/README.md))
 
 ### 📊 [DataOps Workstream](./DataOps-Workstream/)
 **Purpose**: Data operations and analytics platform components  
@@ -72,64 +70,21 @@ Project Denali is a comprehensive AWS infrastructure and security platform desig
 - Commit message validation
 - Prevents committing sensitive data
 
-## Quick Start
 
-### Prerequisites
-- AWS CLI configured
-- Node.js 18+ and npm
-- AWS CDK v2
-- kubectl (for Kubernetes components)
-- Docker (for container components)
-- Pre-commit hooks installed: `pre-commit install`
-
-### Common Commands
-
-**CDK Projects:**
-```bash
-# Install dependencies
-npm install
-
-# Deploy infrastructure
-cdk deploy
-
-# Destroy infrastructure
-cdk destroy
-```
-
-**Kubernetes Projects:**
-Refer to individual workstream documentation for specific deployment instructions.
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Project Denali                         │
-├─────────────────────────────────────────────────────────────┤
-│  Identity & Access     │  Data Operations  │  Networking    │
-│  (Keycloak)           │  (DataOps)        │  (VPC/Endpoints)│
-├─────────────────────────────────────────────────────────────┤
-│  High Performance     │  Remote Desktop   │  Cross-Account  │
-│  Computing (HPC)      │  (NiceDCV)        │  (Diode)        │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                     Project Denali                           │
+├──────────────────────────────────────────────────────────────┤
+│  Identity & Access     │  Data Operations  │  Networking     │
+│  (Keycloak)            │  (DataOps)        │  (VPC/Endpoints)│
+├──────────────────────────────────────────────────────────────┤
+│  High Performance      │  Remote Desktop   │  Cross-Account  │
+│  Computing (HPC)       │  (NiceDCV)        │  (Diode)        │
+└──────────────────────────────────────────────────────────────┘
 ```
-
-## Security & Compliance
-
-### STIG Compliance
-- Hardened container images via Iron Bank
-- STIG-compliant AMI creation
-- Security scanning and vulnerability management
-
-### Government Standards
-- FIPS 140-2 compliance
-- DoD certificate integration
-- Air-gapped deployment support
-
-### Security Features
-- mTLS authentication
-- Network segmentation
-- Encrypted storage and transit
-- Comprehensive audit logging
 
 ## Development Workflow
 

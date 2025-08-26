@@ -126,6 +126,7 @@ To see the full possible configuration, `/lib/interfaces.d.ts`
    npm ci
    ```
 4. Deploy the CDK stacks
+   > Make sure the terminal session has IAM credentials entered prior before executing
    > NOTE: `--output`, `--debug` is **optional**
    ```bash
    cdk context --clear; cdk deploy --require-approval never --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force SharedServicesStack && cdk deploy --require-approval never --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
@@ -286,3 +287,8 @@ curl -vkL https://k8s-keycloakwebui-98c2b921dc-1216040023.us-gov-west-1.elb.amaz
 ```bash
 ./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/shared-services/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-72) -RoleArn arn:aws:iam::012345678901:role/cdk-hnb659fds-cfn-exec-role-012345678901-us-west-1 
 ```
+
+## Interface Documentation
+
+### Overview
+The `lib/interfaces.d.ts` file defines TypeScript interfaces for configuring AWS infrastructure components in the shared services project. These interfaces provide type safety and structure for deployment configurations, particularly focused on EKS clusters, Route 53 hosted zones, and associated AWS resources. This is used for the creation of the `env/<environment>/configuration.yaml`
