@@ -6,7 +6,7 @@ This document summarizes the findings from the security scans performed on the D
 
 ### Critical Findings
 
-1. **XML External Entity (XXE) Vulnerability in parse_fortify_findings_dynamodb/index.py**
+1. ~~**XML External Entity (XXE) Vulnerability in parse_fortify_findings_dynamodb/index.py**~~ `FIXED`
    - **Severity**: ERROR
    - **Tool**: Semgrep
    - **Location**: `ai-ml-workstream/stacks/step_functions_stack/lambdas/parse_fortify_findings_dynamodb/index.py`
@@ -40,7 +40,7 @@ This document summarizes the findings from the security scans performed on the D
 
 ### High Severity Findings
 
-1. **Missing Timeout in HTTP Requests**
+1. ~~**Missing Timeout in HTTP Requests**~~ `FIXED`
    - **Severity**: WARNING
    - **Tool**: Semgrep/Bandit
    - **Location**: Multiple Lambda functions in `stacks/step_functions_stack/lambdas/`
