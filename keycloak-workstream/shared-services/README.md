@@ -35,6 +35,10 @@ It is possible to disable mTLS requirements if you don't want to support direct 
 ### Enablement
 * Keycloak
 
+### AWS Controllers for Kubernetes (ACK) Capabilities
+* EC2 - Security Groups, Subnets
+* Amazon Relational Database Service (Amazon RDS)
+
 ## Useful commands
 
 * `npm run build`   compile typescript to js

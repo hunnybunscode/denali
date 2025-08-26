@@ -1,10 +1,10 @@
-# CDK Bootstrap Project
+# CDK Toolkit Bootstrap Project
 
 This project helps you bootstrap AWS CDK resources in your AWS account.
 
 ## Overview
 
-The AWS CDK Bootstrap process sets up the necessary resources in your AWS account to deploy CDK applications. This includes:
+Based on the CDK toolkit template, the AWS CDK Bootstrap process sets up the necessary resources in your AWS account to deploy CDK applications. This includes:
 
 - An S3 bucket for storing deployment artifacts
 - IAM roles for CDK deployment
@@ -28,12 +28,12 @@ The default environment is `dev`
 | ------------------------------------- | ------------------------------------------- | ------------------------------------------------ | -------- |
 | environment.name                      | Name of the environment being bootstrapped  | standard-dev                                     | Yes      |
 | environment.region                    | AWS region where resources will be deployed | us-west-1                                        | Yes      |
-| environment.account                   | AWS account ID for deployment               | "908027385618"                                   | Yes      |
+| environment.account                   | AWS account ID for deployment               | "012345678901"                                   | Yes      |
 | environment.execute                   | Flag to control execution of bootstrap      | false                                            | No       |
 | environment.enableRoles               | Flag to create the default CDK roles        | true                                             | No       |
 | environment.qualifier                 | Value to control qualifier of bootstrap     | hnb659fds                                        | No       |
 | environment.iam.prefix                | Prefix for IAM resource names               | AFC2S                                            | No       |
-| environment.iam.permissionBoundaryArn | ARN of IAM permission boundary policy       | arn:aws:iam::908027385618:policy/ProjAdminPolicy | No       |
+| environment.iam.permissionBoundaryArn | ARN of IAM permission boundary policy       | arn:aws:iam::012345678901:policy/ProjAdminPolicy | No       |
 
 
 Sample Configuration
@@ -42,11 +42,11 @@ Sample Configuration
 environment:
   name: standard-dev
   region: us-west-1
-  account: "908027385618"
+  account: "012345678901"
   execute: false
   iam:
     prefix: AFC2S
-    permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+    permissionBoundaryArn: arn:aws:iam::012345678901:policy/ProjAdminPolicy
 ```
 
 ## Installation
@@ -81,11 +81,11 @@ import { DefaultStackSynthesizer } from "aws-cdk-lib";
 {
     synthesizer: new DefaultStackSynthesizer({
         qualifier: "a",
-        cloudFormationExecutionRole: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-cfn-exec-role-908027385618-us-east-1`,
-        deployRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-deploy-role-908027385618-us-east-1`,
-        fileAssetPublishingRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-file-publishing-role-908027385618-us-east-1`,
-        imageAssetPublishingRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-ipr-908027385618-us-east-1`,
-        lookupRoleArn: `arn:aws:iam::908027385618:role/AFC2S-cdk-a-lookup-role-908027385618-us-east-1`,
+        cloudFormationExecutionRole: `arn:aws:iam::012345678901:role/AFC2S-cdk-a-cfn-exec-role-012345678901-us-east-1`,
+        deployRoleArn: `arn:aws:iam::012345678901:role/AFC2S-cdk-a-deploy-role-012345678901-us-east-1`,
+        fileAssetPublishingRoleArn: `arn:aws:iam::012345678901:role/AFC2S-cdk-a-file-publishing-role-012345678901-us-east-1`,
+        imageAssetPublishingRoleArn: `arn:aws:iam::012345678901:role/AFC2S-cdk-a-ipr-012345678901-us-east-1`,
+        lookupRoleArn: `arn:aws:iam::012345678901:role/AFC2S-cdk-a-lookup-role-012345678901-us-east-1`,
   })
 }
 ```
