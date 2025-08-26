@@ -14,6 +14,11 @@ class Networking:
     security_group_id: str
 
 @dataclass
+class Permissions:
+    boundary_policy_arn: str
+    role_prefix: str
+
+@dataclass
 class LambdaFunctions:
     git_branch_crud: str
     git_issues_crud: str
@@ -33,17 +38,24 @@ class Config:
     version: str
     networking: Networking
     lambda_functions: LambdaFunctions
+    permissions: Permissions
+    remediation_state_machine: str
 
 def get_configs(config_file: str) -> Config:
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
-    
+
     networking = Networking(
         vpc_id=config['networking']['vpc_id'],
         subnets=[Subnet(**s) for s in config['networking']['subnets']],
         security_group_id=config['networking']['security_group_id']
     )
-    
+
+    permissions = Permissions(
+        boundary_policy_arn=config['permissions']['boundary_policy_arn'],
+        role_prefix=config['permissions']['role_prefix']
+    )
+
     lambda_functions = LambdaFunctions(
         git_branch_crud=config['lambda_functions']['git_branch_crud'],
         git_issues_crud=config['lambda_functions']['git_issues_crud'],
@@ -56,11 +68,13 @@ def get_configs(config_file: str) -> Config:
         verify_findings_resolved=config['lambda_functions']['verify_findings_resolved'],
         git_pr_crud=config['lambda_functions']['git_pr_crud']
     )
-    
+
     return Config(
         namespace=config['namespace'],
         version=config['version'],
         region=config['region'],
         networking=networking,
-        lambda_functions=lambda_functions
+        lambda_functions=lambda_functions,
+        permissions=permissions,
+        remediation_state_machine=config['remediation_state_machine']
     )
