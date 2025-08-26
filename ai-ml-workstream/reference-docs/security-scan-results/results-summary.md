@@ -20,7 +20,7 @@ The Deliverable Security Review identified several security concerns that should
 
 ### Critical Issues:
 
-1. **XML External Entity (XXE) Vulnerability**
+1. ~~**XML External Entity (XXE) Vulnerability**~~ `FIXED`
    - The parse_fortify_findings_dynamodb Lambda function uses the standard XML library, which is vulnerable to XXE attacks.
    - This could allow an attacker to read arbitrary files, perform server-side request forgery, or cause denial of service.
 
@@ -28,7 +28,7 @@ The Deliverable Security Review identified several security concerns that should
    - Multiple instances of hardcoded secrets were detected in the codebase.
    - This violates security best practices and could lead to unauthorized access if the code is exposed.
 
-3. **Missing HTTP Request Timeouts**
+3. ~~**Missing HTTP Request Timeouts**~~ `FIXED`
    - Multiple Lambda functions make HTTP requests without timeouts.
    - This could lead to Lambda functions hanging indefinitely, causing increased costs and potential denial of service.
 
