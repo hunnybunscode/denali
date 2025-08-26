@@ -26,3 +26,6 @@ lambda_functions:
   git_pr_crud: "Git_PR_CRUD"
 
 remediation_state_machine: "DenaliPOC-Remediation-Test"
+
+bedrock:
+  model_id: "meta.llama3-70b-instruct-v1:0"

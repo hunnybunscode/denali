@@ -1,0 +1,225 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Parameterized SSM Document for Fortify Scan with Cross-Account IAM'
+
+Parameters:
+  StackPrefix:
+    Type: String
+    Default: 'DenaliPOC'
+    Description: 'Prefix for resource names'
+  
+  DocumentName:
+    Type: String
+    Default: 'FortifyScan-LibNDCmath'
+    Description: 'Name suffix for the SSM document'
+  
+  RepoUrl:
+    Type: String
+    Default: 'https://your-repo-here.git'
+    Description: 'Git repository URL to scan'
+  
+  FindingsRepoUrl:
+    Type: String
+    Default: 'https://your-repo-here.git'
+    Description: 'Git repository URL for scan results'
+  
+  DestinationDir:
+    Type: String
+    Default: '/home/ec2-user/vobs/src/common/libsrc/libNDCmath'
+    Description: 'Destination directory for cloned code'
+  
+  FortifyScriptPath:
+    Type: String
+    Default: '/home/ec2-user/run_fortify_scan_libNDCmath.sh'
+    Description: 'Path to Fortify scan script'
+  
+  CrossAccountRoleArn:
+    Type: String
+    Description: 'ARN of cross-account role for SSM execution'
+    Default: ''
+  
+  TrustedAccountIds:
+    Type: CommaDelimitedList
+    Description: 'List of trusted AWS account IDs for cross-account access'
+    Default: ''
+
+Conditions:
+  HasCrossAccountRole: !Not [!Equals [!Ref CrossAccountRoleArn, '']]
+
+Resources:
+  # Cross-Account Execution Role
+  SSMExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${StackPrefix}-${DocumentName}-ExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: 'sts:AssumeRole'
+          - !If
+            - HasCrossAccountRole
+            - Effect: Allow
+              Principal:
+                AWS: !Split
+                  - ','
+                  - !Sub
+                    - 'arn:${AWS::Partition}:iam::${inner}:root'
+                    - inner: !Join
+                        - ':root,arn:${AWS::Partition}:iam::'
+                        - !Ref TrustedAccountIds
+              Action: 'sts:AssumeRole'
+            - !Ref 'AWS::NoValue'
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+      Policies:
+        - PolicyName: FortifyScanPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:SendCommand'
+                  - 'ssm:GetCommandInvocation'
+                  - 'ssm:DescribeInstanceInformation'
+                  - 'ssm:ListCommandInvocations'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeInstanceStatus'
+                Resource: '*'
+
+  # Instance Profile for EC2 instances
+  SSMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref SSMInstanceRole
+
+  SSMInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${StackPrefix}-${DocumentName}-InstanceRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+
+  # SSM Document
+  FortifyScanDocument:
+    Type: 'AWS::SSM::Document'
+    Properties:
+      DocumentType: Command
+      Name: !Sub '${StackPrefix}-${DocumentName}'
+      Content:
+        schemaVersion: '2.2'
+        description: 'Runs Fortify scan on specified repository'
+        parameters:
+          BranchName:
+            type: String
+            description: 'Branch name to checkout and scan'
+            default: 'main'
+          RepoUrl:
+            type: String
+            description: 'Repository URL to clone'
+            default: !Ref RepoUrl
+          FindingsRepoUrl:
+            type: String
+            description: 'Findings repository URL'
+            default: !Ref FindingsRepoUrl
+        mainSteps:
+          - action: aws:runShellScript
+            name: RunFortifyScan
+            inputs:
+              runCommand:
+                - |
+                  #!/bin/bash
+                  exec su - ec2-user << 'EOF'
+                  
+                  # Configuration from parameters
+                  REPO_URL="{{ RepoUrl }}"
+                  BRANCH_NAME="{{ BranchName }}"
+                  FINDINGS_REPO_URL="{{ FindingsRepoUrl }}"
+                  TEMP_CLONE_DIR="/tmp/$(basename $REPO_URL .git)"
+                  DESTINATION_DIR="${DestinationDir}"
+                  FINDINGS_DIR="/home/ec2-user/$(basename $FINDINGS_REPO_URL .git)"
+                  FORTIFY_SCAN_SCRIPT="${FortifyScriptPath}"
+
+                  cleanup() {
+                      echo "Cleaning up temporary directory..."
+                      rm -rf "$TEMP_CLONE_DIR"
+                  }
+
+                  set -e
+                  trap cleanup EXIT
+
+                  echo "Creating temporary directory..."
+                  mkdir -p "$TEMP_CLONE_DIR"
+
+                  echo "Cloning repository: $REPO_URL"
+                  git clone "$REPO_URL" "$TEMP_CLONE_DIR"
+
+                  cd "$TEMP_CLONE_DIR"
+                  echo "Checking out branch: $BRANCH_NAME"
+                  git checkout -b "$BRANCH_NAME" "origin/$BRANCH_NAME"
+
+                  echo "Copying files to destination..."
+                  cp -R "$TEMP_CLONE_DIR"/* "$DESTINATION_DIR"
+
+                  if [ -d "$FINDINGS_DIR" ]; then
+                      echo "Removing existing findings directory..."
+                      rm -rf "$FINDINGS_DIR"
+                  fi
+                  
+                  echo "Cloning findings repository..."
+                  git clone "$FINDINGS_REPO_URL" "$FINDINGS_DIR"
+                  cd "$FINDINGS_DIR"
+
+                  if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+                      echo "Checking out existing branch: $BRANCH_NAME"
+                      git checkout "$BRANCH_NAME"
+                      git pull origin "$BRANCH_NAME"
+                  else
+                      echo "Creating new branch: $BRANCH_NAME"
+                      git checkout -b "$BRANCH_NAME"
+                      git push -u origin "$BRANCH_NAME"
+                  fi
+
+                  echo "Running Fortify scan..."
+                  $FORTIFY_SCAN_SCRIPT
+
+                  echo "Committing scan results..."
+                  git add .
+                  git commit -m "Fortify scan results - $(date '+%Y-%m-%d %H:%M:%S')"
+                  git push origin $BRANCH_NAME
+
+                  echo "Fortify scan completed successfully!"
+                  EOF
+      DocumentFormat: YAML
+      TargetType: '/AWS::EC2::Instance'
+
+Outputs:
+  SSMDocumentName:
+    Description: 'Name of the created SSM Document'
+    Value: !Ref FortifyScanDocument
+    Export:
+      Name: !Sub '${AWS::StackName}-DocumentName'
+  
+  ExecutionRoleArn:
+    Description: 'ARN of the SSM execution role'
+    Value: !GetAtt SSMExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ExecutionRole'
+  
+  InstanceProfileArn:
+    Description: 'ARN of the instance profile'
+    Value: !GetAtt SSMInstanceProfile.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceProfile'

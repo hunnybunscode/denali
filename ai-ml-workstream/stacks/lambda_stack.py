@@ -97,6 +97,13 @@ class LambdaStack(Stack):
         }
 
         for func_name, code_path in lambda_configs.items():
+            environment_vars = {}
+    
+            # Add model ID for bedrock function
+            if func_name == config.lambda_functions.bedrock_llm_call:
+                environment_vars['BEDROCK_MODEL_ID'] = config.bedrock.model_id
+
+     
             _lambda.Function(
                 self,
                 f"{config.namespace}-{config.version}-{func_name}",
@@ -109,5 +116,9 @@ class LambdaStack(Stack):
                 layers=[requests_layer],
                 vpc=vpc,
                 vpc_subnets=ec2.SubnetSelection(subnets=subnets),
-                security_groups=[security_group]
+                security_groups=[security_group],
+                environment=environment_vars
             )
+
+               
+            
