@@ -5,7 +5,7 @@
   },
   {
     "ParameterKey": "aaPermissionBoundaryArn",
-    "ParameterValue": "arn:aws-us-gov:iam::354049455466:policy/ProjAdminPolicy"
+    "ParameterValue": "arn:aws-us-gov:iam::YOUR-ACCOUNT-ID:policy/ProjAdminPolicy"
   },
   {
     "ParameterKey": "Qualifier",
