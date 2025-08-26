@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-keycloak-app-x509
+  namespace: keycloak
+  annotations:
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-FIPS-2023-04
+
+spec:
+  ingressClassName: alb
+  rules:
+    - host: mtls.sso.denali.jktruong.people.aws.dev
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: service-keycloak-instance
+                port:
+                  name: ui

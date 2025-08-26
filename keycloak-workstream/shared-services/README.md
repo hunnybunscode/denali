@@ -1,18 +1,39 @@
 # Welcome to Shared Services project
 
 The CDK portion will create the necessary infrastructure needed to deploy the Shared Services Applications.
+This will create the basic EKS cluster with a managed node group of elastic compute cloud (EC2).
 
-The `k8s/overlay/dev` contains the actual applications
+The default environment deployment: `dev` for internal development
+The suggested environment deployment: `standard-dev` to provide a sample set of configurations needed for a successful deployment.
 
-It is possible to disable mTLS requirements if you don't want to support direct integration of smartcard authentication.
+The `k8s/overlay/[XXXXXXXXXXX]` contains the actual deployment of applications.
+
+It is possible to disable mTLS requirements if you don't want to support direct integration of smartcard or Public Key Infrastructure (PKI) authentication.
 
 ## Architecture Diagram
 
 ![Keycloak Architecture](documents/Keycloak-Architecture.jpg)
 
 ## Services
+
+### Core Essentials (All EKS addons deployed)
+* amazon-vpc-cni-k8s - Default Kubernetes (K8s) Container Network Interface (CNI)
+* core-dns - DNS server/forwarder for K8s 
+* kube-proxy - network proxy for K8s
+* aws-load-balancer-controller - AWS ALB/NLB controller for K8s services
+* cluster-autoscaler - Automatically adjusts node count based on resource demands
+* metrics-server - Collects resource metrics from nodes and pods
+* cert-manager - X.509 certificate management for K8s
+* external-dns - Manages external DNS records for K8s services
+* ebs-csi-driver - AWS EBS Container Storage Interface driver
+* efs-csi-driver - AWS EFS Container Storage Interface driver
+* secrets-store-csi-driver - Secrets Store CSI driver for K8s
+* cloudwatch-observability - Amazon CloudWatch container insights
+* nginx-ingress - Alternative Ingress over aws-load-balancer-controller
+* aws-controllers-k8s - Define and use AWS service resources directly from K8s
+
+### Enablement
 * Keycloak
-* Squid Proxy
 
 ## Useful commands
 
@@ -25,9 +46,41 @@ It is possible to disable mTLS requirements if you don't want to support direct 
 
 ## Prerequisites
 * NodeJS 20.X
-* OpenJDK 17 SDK
+* OpenJDK 21 SDK
 * A valid domain with management
 * Able to create Domain Delegates from your primary Domain
+* CDK Toolkit must be installed to account on target region 
+* Helm 3+
+* kubectl - K8s client at least 1.30
+
+## AWS API Endpoint Access Requirements
+* Govcloud (West)
+  - *.autoscaling.us-gov-west-1.amazonaws.com
+  - *.cloudformation.us-gov-west-1.amazonaws.com
+  - *.cloudtrail.us-gov-west-1.amazonaws.com
+  - *.cloudwatch.us-gov-west-1.amazonaws.com
+  - *.ebs.us-gov-west-1.amazonaws.com
+  - *.ec2.us-gov-west-1.amazonaws.com
+  - *.ecr.us-gov-west-1.amazonaws.com
+  - *.ecs.us-gov-west-1.amazonaws.com
+  - *.eks.us-gov-west-1.amazonaws.com
+  - *.dcr.ecr.us-gov-west-1.amazonaws.com
+  - *.elasticfilesystem.us-gov-west-1.amazonaws.com
+  - *.elasticloadbalancing.us-gov-west-1.amazonaws.com
+  - *.kms.us-gov-west-1.amazonaws.com
+  - *.lambda.us-gov-west-1.amazonaws.com
+  - *.logs.us-gov-west-1.amazonaws.com
+  - *.monitoring.us-gov-west-1.amazonaws.com
+  - *.rds.us-gov-west-1.amazonaws.com
+  - *.redshift.us-gov-west-1.amazonaws.com
+  - *.s3.us-gov-west-1.amazonaws.com
+  - *.secretsmanager.us-gov-west-1.amazonaws.com  
+  - *.ssm.us-gov-west-1.amazonaws.com
+  - *.states.us-gov-west-1.amazonaws.com    
+  - sts.us-gov-west-1.amazonaws.com
+  - acm.us-gov-west-1.amazonaws.com
+  - route53.us-gov-west-1.amazonaws.com
+  - *.us-gov-west-1.eks.amazonaws.com
 
 ### Subnet Tagging 
 * All public facing subnets to be used as an ingress to the services have have the following tags to support [Subnet auto-discovery](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/subnet_discovery/). Value can be 1 or Empty Value
@@ -36,33 +89,48 @@ It is possible to disable mTLS requirements if you don't want to support direct 
   * `kubernetes.io/role/internal-elb`
 * To specify **pods** deployment subnets using [vpc-cni subnet discovery](https://github.com/aws/amazon-vpc-cni-k8s?tab=readme-ov-file#enable_subnet_discovery-v1180). Value can be 1 or Empty Value
   * `kubernetes.io/role/cni`
+* All public facing subnets must have the following CDK key/value pair tags 
+  * `aws-cdk:subnet-type` = `Public`
+* All private facing subnets must have the following CDK key/value pair tags 
+  * `aws-cdk:subnet-type` = `Private`
+* All isolated facing subnets must have the following CDK key/value pair tags 
+  * `aws-cdk:subnet-type` = `Isolated`
 
-## Notes on Update the Configuration
+## Deployment
+> All commands are written for Linux Bash.
+> For all other terminal, make adjustments.
+
+### Notes on Update the Configuration
 All configurations are stored inside the folder `env`. By default, it will use the `/env/dev/configuration.yaml` as environment **dev**.
 In order to use alternative `configuration.yaml` files, create a subfolder inside `/env` and export the environment variable **ENVIRONMENT** with the folder name.
 
-## To Deploy the Stack
-> Create DNS Hosted Zones and EKS Cluster(s)
+### To Deploy the Stack
+To see the full possible configuration, `/lib/interfaces.d.ts`
 
 1. Update or Create a new Configuration in `/env/<folder>`. The default environment if not specified environment variable `ENVIRONMENT` is **dev**, which resolves to use the configuration.yaml `configuration.yaml` inside `/env/dev`
    > NOTE: ENVIRONMENT variable is the name of the subfolder in `/env`. 
    ```bash
    export ENVIRONMENT=dev
    ```
+2. Set the AWS Default Region if it is not `us-east-1`
+   ```bash
+   export AWS_DEFAULT_REGION=<region>
+   ```
 
-2. Deploy the stack
+3. Deploy the CDK stacks
    > NOTE: `--output`, `--debug` is **optional**
    ```bash
    cdk context --clear; cdk deploy --require-approval never --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force SharedServicesStack && cdk deploy --require-approval never --all --debug --output $AWS_PROFILE.$AWS_DEFAULT_REGION.cdk.out --force
    ```
-3. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
+4. Execute the `aws eks update-config` command output (`clusterSharedServicesstackConfigCommand`) by the stack  
    Sample Command
    ```bash
-   aws eks update-kubeconfig --name SharedServices --region us-east-1 --role-arn arn:aws:iam::992382523718:role/cluster-SharedServices-stack-cluster-admin-role
+   aws eks update-kubeconfig --name SharedServices --region us-east-1 --role-arn arn:aws:iam::01234567890101:role/cluster-SharedServices-stack-cluster-admin-role
    ```
 
-## To deploy Keycloak with RDS
-> Deploy Keycloak with Aurora PostgreSQL database
+### To deploy Keycloak
+> NOTE: You must update all k8s manifest under `/k8s/overlay/$ENVIRONMENT` to match your target environment in order to successfully deploy
+> Sample configurations are located in `/k8s/overlay/standard-dev`
 
 1. Build the mTLS AWS Load Balancer Service Provider Interface (SPI) Plugin for Keycloak
    ```bash
@@ -71,34 +139,30 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    cd -
    ```
 
-2. Generate RDS resources
+2. Deploy the operators
    ```bash
-   ./k8s/base/keycloak/scripts/pre-deploy-keycloak.sh [cluster-name] [region]
+   kubectl apply --kustomize k8s/overlay/$ENVIRONMENT
    ```
 
-3. Deploy infrastructure resources (RDS, etc.)
+3. Deploy applications
    ```bash
-   kubectl apply --kustomize k8s/overlay/dev
+   kubectl apply --kustomize k8s/overlay/$ENVIRONMENT/post
    ```
 
-4. Wait for RDS cluster to be available
+## Notes on Services
+### Keycloak
+
+#### Upgrade Keycloak Operator
+1. Navigate to `k8s/base/keycloak-operator`
+2. The run the following command in terminal
    ```bash
-   kubectl get dbcluster -n keycloak
-   # Wait for STATUS: available
+   curl https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloaks.k8s.keycloak.org-v1.yml --clobber --output keycloaks.k8s.keycloak.org-v1.yml;
+
+   curl https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml --clobber --output keycloakrealmimports.k8s.keycloak.org-v1.yml;
+
+   curl https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.3.3/kubernetes/kubernetes.yml --clobber --output kubernetes.yml;
    ```
 
-5. Update files with actual RDS endpoint and secret names
-   ```bash
-   ./k8s/base/keycloak/scripts/post-deploy-keycloak.sh [cluster-name] [region]
-   ```
-
-6. Deploy applications
-   ```bash
-   kubectl apply --kustomize k8s/overlay/dev/post
-   ```
-
-
-## Services
 ### NiFiKop
 
 #### Upgrade helm templates
@@ -109,7 +173,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
     oci://ghcr.io/konpyutaika/helm-charts/nifikop \
     --namespace=nifikop \
     --include-crds \
-    --set image.tag=v1.13.0-release \
+    --set image.tag=v1.14.2-release \
     --set resources.requests.memory=256Mi \
     --set resources.requests.cpu=250m \
     --set resources.limits.memory=256Mi \
@@ -118,14 +182,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
     --set namespaces={"nifi,nifikop"} | kubectl slice --output-dir .
    ```
 
-
-#### (Internal) Scan for IAM Role Action
-```bash
-./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/shared-services/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-72) -RoleArn arn:aws:iam::908027385618:role/cdk-hnb659fds-cfn-exec-role-908027385618-us-west-1 
-```
-
-
-## (Isolated Cluster) Access to Local Machine using SSM
+## (Private / Isolated Cluster) Access to Local Machine using SSM
 > This is meant for a local machine that have internet connectivity to AWS Endpoint Services
 ### References
 * https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-enable-ssh-connections.html
@@ -136,7 +193,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    Sample Command
    >Adjust partition, account id region
    ```bash
-   aws eks update-kubeconfig --name SharedServices-GA --region us-east-1 --role-arn arn:aws:iam::908027385618:role/AWSAccelerator-ClusterAdminRole-SharedServices-GA
+   aws eks update-kubeconfig --name SharedServices-GA --region us-east-1 --role-arn arn:aws:iam::012345678901:role/AWSAccelerator-ClusterAdminRole-SharedServices
    ```
 2. Retrieve private key from [AWS System Manager > Parameter Store](https://console.aws.amazon.com/systems-manager/parameters).  
    Name is usually under `/ec2/keypair/xxxxxxxxx`.  
@@ -160,7 +217,7 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    ```
 6. Update the kubeconfig of the target cluster with proxy
    ```bash
-   kubectl config set-cluster arn:aws:eks:us-east-1:908027385618:cluster/SharedServices-GA --proxy-url socks5://localhost:8080
+   kubectl config set-cluster arn:aws:eks:us-east-1:012345678901:cluster/SharedServices-GA --proxy-url socks5://localhost:8080
    ```
 
 7. Verify by running `kubectl get pod -A`
@@ -201,11 +258,16 @@ In order to use alternative `configuration.yaml` files, create a subfolder insid
    squid               squid-deployment-79df4b678-8l6d4                                  1/1     Running            0                  16h
    ```
 
-### Troubleshooting
+## Troubleshooting
 
-#### Sample command to test ALB routing
+### Sample command to test ALB routing
 > For domain routing is not ready or configured
 
 ```bash
 curl -vkL https://k8s-keycloakwebui-98c2b921dc-1216040023.us-gov-west-1.elb.amazonaws.com/admin --header 'Host: sso.denali.jktruong.people.aws.dev'
+```
+
+## (Internal) Scan for IAM Role Action
+```bash
+./generateIAMAction.ps1 -Enhance -TemplateFile (Get-ChildItem -File -Filter *.template.json -Path /Users/jktruong/workspace/engagements/denali/project-denali/keycloak-workstream/shared-services/denali-project-consultants-Admin.us-west-1.cdk.out | Select-Object -ExpandProperty FullName) -Since (Get-Date).AddHours(-72) -RoleArn arn:aws:iam::012345678901:role/cdk-hnb659fds-cfn-exec-role-012345678901-us-west-1 
 ```

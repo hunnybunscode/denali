@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-certificate
+  namespace: keycloak
+spec:
+  dnsNames:
+    - keycloak
+    - keycloak.keycloak.svc
+    - keycloak.keycloak.svc.cluster.local
+
+    - sso.denali.jktruong.people.aws.dev.internal
+    - mtls.denali.jktruong.people.aws.dev.internal
+
+    - sso.denali.jktruong.people.aws.dev
+    - mtls.sso.denali.jktruong.people.aws.dev
