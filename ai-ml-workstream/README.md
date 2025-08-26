@@ -1,85 +1,322 @@
-# Denali AI-ML Workstream
-This repo contains the CDK application that defines the infrastructure for the AI-ML workstream of this project. This project implements an automated security vulnerability remediation system for software development, leveraging AWS Step Functions and Lambda functions to create a streamlined workflow. The system analyzes code using Fortify scans to detect security vulnerabilities, then utilizes AI, specifically a Large Language Model (LLM) through Amazon Bedrock, to automatically generate fixes for identified issues. It interacts with a version control system (Gitea) to manage code changes, including creating branches, committing fixes, and opening pull requests, while tracking the remediation process through issue management in the repository. Data about findings and fixes are stored and managed using DynamoDB. 
+<!--
+Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties.
+-->
 
-## Project Structure:
-- stacks/: This directory contains all the Python CDK stacks defining the infrastructure
-- app.py: The top-level script contain all the build logic for deploying the infrastructure defined in "stacks"
-- config/: Contains configuration files and utilities
-    - deployment_config.yaml: Main configuration file you need to modify
-    - config.py: Configuration loading and processing
-- stacks/: Contains the main stack definitions
-    - stacks/step_functions_stack/: Contains Step Function definitions
-    - stacks/step_functions_stack/lambdas/: Contains Lambda function code
+# Denali AI-ML Code Modernization Workstream: Automated Security Remediation
 
-## Deployment
+An intelligent, automated security vulnerability remediation system that leverages AWS Step Functions, Lambda, and Amazon Bedrock to analyze, fix, and validate security issues in your codebase.
 
-### Create config file
+## 🎯 Overview
 
-To deploy, you need to pass in a configuration file. An example is provided at config/deployment_config.yaml. You need to update this file with your specific settings:
+This system transforms traditional security vulnerability management from a manual, time-intensive process into an automated, AI-powered workflow. It integrates with your existing development tools (Git repositories, Fortify scans) and uses Large Language Models through Amazon Bedrock to generate intelligent code fixes.
+
+### Key Benefits
+- **Automated Remediation**: AI-powered fixes for common security vulnerabilities
+- **Integrated Workflow**: Seamless integration with Git repositories
+- **Scalable Processing**: Handles multiple vulnerabilities in parallel
+- **Human Oversight**: Maintains human review and approval in the process
+- **Audit Trail**: Complete tracking of all remediation activities
+
+## 🏗️ Architecture
+
+![Architecture Diagram](docs/architecture/architecture.png)
+
+The system uses a microservices architecture built on AWS serverless technologies:
+
+- **AWS Step Functions**: Orchestrates the entire remediation workflow
+- **AWS Lambda**: Executes individual processing steps (Git operations, AI analysis, etc.)
+- **Amazon Bedrock**: Provides AI-powered code analysis and remediation
+- **Amazon DynamoDB**: Stores vulnerability findings and remediation status
+- **AWS Systems Manager**: Triggers Fortify scans on EC2 instances
+- **Git Integration**: Manages code changes, branches, and pull requests
+
+## 🔄 Denali GenAI Code Modernization Workflow
+
+The automated remediation process follows these steps:
+
+1. **Manual Trigger** - User initiates vulnerability remediation workflow
+2. **Fortify Scan** - Execute security scan on target repository
+3. **Parse & Store Results** - Extract findings from FVDL and store in DynamoDB
+4. **Per-Finding Processing** - Launch secondary workflow for each vulnerability
+5. **Retrieve Source Code** - Fetch vulnerable code from Git repository
+6. **AI Analysis & Fix** - Bedrock LLM analyzes code and generates remediation
+7. **Apply Code Changes** - Create branch and apply AI-generated fixes
+8. **Verification Scan** - Run post-remediation scan to validate fix
+9. **Decision & PR Creation** - Create Pull Request if fix successful, flag if failed
+10. **Human Review & Merge** - Security reviewer approves and merges changes
+
+## 🚀 Quick Start
+
+### Prerequisites
+- AWS Account with appropriate permissions
+- Python 3.9+ and Node.js 20+
+- Docker installed and running
+- Access to Amazon Bedrock models (Claude 3.7 Sonnet)
+- Git repositories for source code and scan results
+
+### 1. Clone and Setup
+```bash
+git clone <repository-url>
+cd ai-ml-workstream
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+npm install -g aws-cdk
 ```
+
+### 2. Configure Your Environment
+Edit `config/deployment_config.yaml`:
+```yaml
 namespace: "your-name"  # Replace with your identifier
 version: "v1"
-region: "us-gov-west-1"  # Your AWS region
+region: "us-gov-west-1"
+permissions:
+  boundary_policy_arn: "arn:aws-us-gov:iam::YOUR-ACCOUNT-ID:policy/YourPolicyName"
+  role_prefix: "AFC2S"
 networking:
-  vpc_id: "vpc-xxxxxx"               # Replace with your VPC ID
+  vpc_id: "vpc-YOUR-VPC-ID"
   subnets:
-    - subnet_id: "subnet-xxxxxx"     # Replace with your subnet IDs
+    - subnet_id: "subnet-YOUR-SUBNET-ID-1"
       availability_zone: "us-gov-west-1a"
-    - subnet_id: "subnet-yyyyyy"
+    - subnet_id: "subnet-YOUR-SUBNET-ID-2"
       availability_zone: "us-gov-west-1b"
-  security_group_id: "sg-xxxxxx"     # Replace with your security group ID
+  security_group_id: "sg-YOUR-SECURITY-GROUP-ID"
 ```
 
-### Deploy
-
-#### Using Makefile (Recommended)
-The project includes a Makefile for simplified deployment:
-
+### 3. Deploy Infrastructure
 ```bash
-# Deploy with default config (uses config/deployment_config.yaml)
-make deploy
-
-# Deploy with custom config file
-make deploy CONFIG_FILE=path/to/your/config.yaml
-
-# Synthesize CloudFormation templates
-make synth
-
 # Bootstrap CDK (first time only)
 make bootstrap
 
-# Clean up/destroy resources
-make clean
+# Deploy the infrastructure
+make deploy
 ```
 
-**First-time deployment:**
+### 4. Verify Deployment
 ```bash
-make bootstrap  # One-time CDK setup
-make deploy     # Deploy the infrastructure
+# Check deployed stacks
+aws cloudformation describe-stacks --stack-name your-namespace-v1-LambdaStack
+aws cloudformation describe-stacks --stack-name your-namespace-v1-StepFunctionsStack
+
+# List Step Functions
+aws stepfunctions list-state-machines --region us-gov-west-1
 ```
 
-#### Using CDK directly
-Alternatively, you can use CDK commands directly:
+## 📁 Project Structure
+
+```
+ai-ml-workstream/
+├── README.md                           # This file
+├── app.py                             # CDK application entry point
+├── Makefile                           # Deployment automation
+├── requirements.txt                   # Python dependencies
+├── requirements-dev.txt               # Development dependencies
+├── config/
+│   ├── deployment_config.yaml         # Main configuration file
+│   └── config.py                      # Configuration loading logic
+├── stacks/
+│   ├── lambda_stack.py                # Lambda functions and IAM roles
+│   └── step_functions_stack/          # Step Functions definitions
+│       ├── step_functions_stack.py    # Step Functions CDK stack
+│       ├── lambdas/                   # Lambda function source code
+│       └── step_functions/            # Step Function JSON definitions
+├── docs/
+│   ├── architecture/                  # Architecture diagrams
+│   └── deployment/                    # Detailed deployment guide
+├── bootstrap/                         # Custom CDK bootstrap templates
+│   ├── custom-bootstrap-template.yaml # AFC2S-compliant bootstrap template
+│   ├── bootstrap-parameters-projadmin.json # Bootstrap parameters
+│   └── scripts/                       # Bootstrap deployment scripts
+│       ├── deploy_bootstrap.sh        # Bootstrap deployment script
+│       └── check_bootstrap_roles.py   # Role validation script
+├── layers/                            # Lambda layers for shared dependencies
+├── reference-docs/                    # Additional documentation
+│   ├── DEPLOYMENT_GUIDE.md           # Comprehensive deployment guide
+│   └── CUSTOM_BOOTSTRAP_REQUIREMENTS.md # Bootstrap setup requirements
+└── tests/                            # Unit and integration tests
+    └── unit/                         # Unit test files
+```
+
+## 🔧 Configuration
+
+### Lambda Functions
+The system includes these Lambda functions (configurable names):
+
+| Function | Purpose | Default Name |
+|----------|---------|--------------|
+| Git Branch CRUD | Branch management operations | `Git_Branch_CRUD` |
+| Git Issues CRUD | Issue tracking operations | `Git_Issues_CRUD` |
+| Git Code Merge and Push | Code integration operations | `Git_Code_Merge_and_Push` |
+| Create DynamoDB Table | Database table management | `Create_DynamoDB_Table` |
+| Parse Fortify Findings | FVDL parsing and processing | `Parse_Fortify_Findings_into_DynamoDB` |
+| DynamoDB Table Scan | Vulnerability data retrieval | `DynamoDB_Table_Scan` |
+| Bedrock LLM Call | AI-powered code analysis | `Code_Remediation_Bedrock` |
+| Git File CRUD | File-level Git operations | `Git_Grab_File` |
+| Verify Findings Resolved | Post-fix validation | `Verify_Findings_Resolved` |
+| Git PR CRUD | Pull request management | `Git_PR_CRUD` |
+
+### Key Configuration Options
+
+**Severity Filtering**: The `dynamodb_table_scan` lambda supports filtering by vulnerability severity:
+- Missing `minSeverity`: Returns findings of any severity
+- Set `minSeverity` to `4`: Returns only High and Critical findings
+- Supports values 1-5 (Low to Critical)
+
+**Branch Management**: The `git_branch_crud` lambda supports different creation behaviors:
+- Default: Standard branch creation
+- `create_behavior: "delete_if_exists"`: Deletes existing branch before creating new one
+
+## 🔐 Security Features
+
+### AWS Security Compliance
+- **IAM Roles**: All roles use AFC2S prefix and permissions boundaries
+- **VPC Deployment**: Lambda functions deployed in private subnets
+- **Least Privilege**: Minimal required permissions for each component
+- **Encryption**: Data encrypted at rest and in transit
+
+### Code Security
+- **Secure Git Operations**: API tokens stored in AWS Secrets Manager
+- **Input Validation**: All user inputs validated and sanitized
+- **Error Handling**: Comprehensive error handling prevents information leakage
+- **Audit Logging**: All operations logged to CloudWatch
+
+## 🛠️ Advanced Usage
+
+### Custom Repository Configuration
+To use your own Git repositories:
+
+1. **Update Secrets Manager**:
+   ```bash
+   aws secretsmanager update-secret \
+     --secret-id "git/api/token" \
+     --secret-string "your-git-api-token"
+   ```
+
+2. **Configure Network Access**: Ensure Lambda functions can reach your Git server
+
+3. **Update SSM Document**: Modify the Fortify scan document with your repository URLs
+
+### Cross-Account Deployment
+For deploying across AWS accounts:
+
+1. **Fortify Account**: Create cross-account IAM role and SSM document
+2. **Solution Account**: Update Step Functions to assume cross-account role
+3. **Network Configuration**: Set up VPC peering or Transit Gateway if needed
+
+### Monitoring and Observability
+- **CloudWatch Logs**: All Lambda functions log to CloudWatch
+- **Step Functions Monitoring**: Built-in execution tracking and error handling
+- **Custom Metrics**: Emit custom metrics for remediation success rates
+- **Bedrock Logging**: Optional model invocation logging for compliance
+
+## 📚 Documentation
+
+- **[Deployment Guide](docs/deployment/DEPLOYMENT_GUIDE.md)**: Comprehensive deployment instructions
+- **[Architecture Documentation](docs/architecture/)**: Detailed system architecture
+- **[Security Guidelines](.kiro/steering/security-remediation-guidelines.md)**: Security implementation standards
+- **[Bootstrap Requirements](reference-docs/CUSTOM_BOOTSTRAP_REQUIREMENTS.md)**: Custom CDK bootstrap setup
+
+## 🧪 Testing and Execution
+
+### Current Test Status
+The project currently has placeholder test files but no implemented unit tests. The test framework is set up for future development.
+
+### Triggering the Workflow
+
+To trigger the main remediation workflow, use this sample JSON payload:
+
+```json
+{
+  "repository_url": "https://your-git-server.com/api/v1/repos/owner/repository",
+  "branch_name": "main",
+  "scan_type": "fortify",
+  "severity_threshold": 4,
+  "auto_merge": false,
+  "notification_email": "security-team@yourorg.com",
+  "metadata": {
+    "project_name": "sample-project",
+    "scan_id": "scan-2024-001",
+    "requester": "security-team"
+  }
+}
+```
+
+Execute the workflow:
 ```bash
-cdk synth --context config_file=path/to/config.yaml
-cdk deploy --context config_file=path/to/config.yaml
+aws stepfunctions start-execution \
+  --state-machine-arn "arn:aws-us-gov:states:us-gov-west-1:ACCOUNT-ID:stateMachine:your-namespace-v1-MainRemediationWorkflow" \
+  --input file://sample-workflow-input.json \
+  --name "remediation-$(date +%Y%m%d-%H%M%S)"
 ```
 
-### Security Considerations
-- Resources are isolated through the namespace system
-- Lambda functions are deployed in VPC for network isolation
-- Security groups should be configured with minimum required access
-- Ensure not to commit personal AWS resource IDs to version control
+## 🔄 Deployment Options
 
-### dynamodb_table_scan lambda
-- Path: ai-ml-workstream/stacks/step_functions_stack/lambdas/dynamodb_table_scan
-- Uses a minSeverity payload value to filter the findings returned by severity.
-  - A missing minSeverity value returns findings of any severity.
-  - Setting the minSeverity value will turn on filtering so that the lambda only returns findings with that severity or higher. 
-  - Example: a "4" minSeverity would only return findings with 4 and above severity (highs and criticals)
+### Option 1: Makefile (Recommended)
+```bash
+make deploy                    # Deploy with default config
+make deploy CONFIG_FILE=custom.yaml  # Deploy with custom config
+make synth                     # Generate CloudFormation templates
+make clean                     # Destroy all resources
+```
 
-### get_branch_crud lambda
-- Path: ai-ml-workstream/stacks/step_functions_stack/lambdas/git_branch_crud
-- Uses a create_behavior payload value to modify the behavior of the 'create' workflow.
-  - A missing create_behavior property will not change the default create branch behavior.
-  - Setting the create_behavior to the value 'delete_if_exists' will modify the behavior. Before attempting to create the branch the lambda will delete the branch if it already exists.
+### Option 2: Direct CDK Commands
+```bash
+cdk deploy --all --context config_file=config/deployment_config.yaml
+cdk destroy --all --context config_file=config/deployment_config.yaml
+```
+
+### Option 3: CloudFormation Templates
+```bash
+# Synthesize templates first
+cdk synth --all --context config_file=config/deployment_config.yaml
+
+# Deploy using CloudFormation
+aws cloudformation deploy \
+  --template-file cdk.out/YourStack-LambdaStack.template.json \
+  --stack-name YourStack-LambdaStack \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+**CDK Bootstrap Errors**: Use the custom bootstrap template with AFC2S prefix
+```bash
+cdk bootstrap --template bootstrap/custom-bootstrap-template.yaml
+```
+
+**Bedrock Access Denied**: Ensure model access is requested in your AWS account
+```bash
+# Test model access
+aws bedrock-runtime invoke-model --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
+```
+
+**VPC Connectivity Issues**: Verify security groups allow outbound HTTPS traffic
+```bash
+# Test from Lambda subnet
+curl -I https://your-git-server.com
+```
+
+**Permission Boundary Issues**: Ensure all IAM roles have the correct permissions boundary attached
+
+### Getting Help
+- Check CloudWatch Logs for detailed error messages
+- Review Step Functions execution history for workflow failures
+- Verify AWS credentials and permissions
+- Ensure all prerequisites are met (Bedrock access, Git connectivity, etc.)
+
+
+
+## 🆘 Support
+
+For issues, questions, or support:
+- Review the comprehensive [Deployment Guide](docs/deployment/DEPLOYMENT_GUIDE.md)
+- Check the [Architecture Documentation](docs/architecture/)
+- Consult AWS documentation for service-specific issues
+
+---
