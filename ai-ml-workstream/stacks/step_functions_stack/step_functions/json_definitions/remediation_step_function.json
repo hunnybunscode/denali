@@ -467,17 +467,17 @@
         },
         {
           "Next": "Finding Not Resolved",
-          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) = (0) and ($states.input.comparison_results.summary.resolved_count) = (0) %}",
-          "Comment": "Finding Not Resolved"
+          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) = (0) and ($states.input.comparison_results.summary.resolved_count) = (0) and $attempt_count < $input.retry_max %}",
+          "Comment": "Finding Not Resolved and max retries not reached."
         },
         {
           "Next": "New Findings Created",
-          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) > (0) %}",
-          "Comment": "New Findings Found"
+          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) > (0) and $attempt_count < $input.retry_max %}",
+          "Comment": "New Findings Found and max retries not reached"
         },
         {
           "Next": "Failed to Fix (Retry Max Hit)",
-          "Condition": "{% $attempt_count = $input.retry_max %}",
+          "Condition": "{% $attempt_count >= $input.retry_max %}",
           "Comment": "Retry Max Reached"
         }
       ],
