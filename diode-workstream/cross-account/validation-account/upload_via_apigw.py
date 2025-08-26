@@ -57,12 +57,19 @@ INVOKE_URL = os.getenv("INVOKE_URL")
 ###################################################################################
 
 
-def main(bucket_name: str, key_name: str, prefix: str, filepath: str, credentials):
+def main(
+    bucket_name: str,
+    key_name: str,
+    kms_key_id: str,
+    prefix: str,
+    filepath: str,
+    credentials,
+):
     method = "POST"
     service = "execute-api"
 
     validate_invoke_url()
-    params = dict(bucket=bucket_name, key=prefix + key_name)
+    params = dict(bucket=bucket_name, key=prefix + key_name, kms_key_id=kms_key_id)
     request = AWSRequest(method, INVOKE_URL, params=params)
     SigV4Auth(credentials, service, REGION).add_auth(request)
     presigned_url = get_presigned_post_url(method, request, params)
@@ -125,6 +132,10 @@ def upload_file(presigned_url: dict, file_path: str, params: dict):
         response = requests.post(  # nosemgrep use-raise-for-status
             presigned_url["url"],
             data=presigned_url["fields"],
+            headers={
+                "x-amz-server-side-encryption": "aws:kms",
+                "x-amz-server-side-encryption-aws-kms-key-id": params["kms_key_id"],
+            },
             files=files,
             timeout=300,  # Adjust this as necessary
         )
@@ -152,14 +163,23 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--bucket",
+        required=True,
         type=str,
         help="Specify the name of a bucket to which you want to upload a file",
     )
 
     parser.add_argument(
         "--filepath",
+        required=True,
         type=str,
         help="Specify the path of a file to upload",
+    )
+
+    parser.add_argument(
+        "--kms-key-id",
+        required=True,
+        type=str,
+        help="Specify the customer-managed KMS key ID to encrypt the file with",  # noqa: E501
     )
 
     parser.add_argument(
@@ -186,6 +206,7 @@ if __name__ == "__main__":
     main(
         bucket_name=args.bucket,
         key_name=path.name,
+        kms_key_id=args.kms_key_id,
         prefix=prefix,
         filepath=filepath,
         credentials=credentials,

@@ -27,7 +27,70 @@ Parameters:
     Type: String
     Description: The S3 prefix list ID to use for the pipeline
 
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
+  IngestKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for ingest stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow cryptographic operations via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
+          - Sid: Allow logs service principal to use the key
+            # https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+
+  IngestKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/ingest-stack-${ResourceSuffix}
+      TargetKeyId: !Ref IngestKmsKey
+
   ObjectTaggerRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -74,61 +137,9 @@ Resources:
                 Resource: !GetAtt AvScanQueue.Arn
               - Effect: Allow
                 Action:
-                  - s3:GetObjectTagging
-                  - s3:PutObjectTagging
-                  - s3:GetBucketTagging
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-                Condition:
-                  StringEquals:
-                    s3:ResourceAccount: !Ref AWS::AccountId
-
-  PresignedUrlGeneratorRole:
-    Type: AWS::IAM::Role
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
-            reason: An explicit name is required
-    Properties:
-      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
-      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: PresignedUrlGeneratorRolePolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
-              - Effect: Deny
-                Action:
-                  - ec2:CreateNetworkInterface
-                  - ec2:DeleteNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DescribeSubnets
-                  - ec2:DetachNetworkInterface
-                  - ec2:AssignPrivateIpAddresses
-                  - ec2:UnassignPrivateIpAddresses
-                Resource: "*"
-                Condition:
-                  ArnEquals:
-                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
-              - Effect: Allow
-                Action: s3:PutObject
-                Resource: !Sub arn:${AWS::Partition}:s3:::*
-                Condition:
-                  StringEquals:
-                    s3:ResourceAccount: !Ref AWS::AccountId
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt IngestKmsKey.Arn
 
   APILambdaInvokeRole:
     Type: AWS::IAM::Role
@@ -147,6 +158,10 @@ Resources:
             Principal:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
+            # This condition does NOT allow apigateway to assume the role
+            # Condition:
+            #   StringEquals:
+            #     aws:SourceAccount: !Ref AWS::AccountId
       Policies:
         - PolicyName: APILambdaInvokeRolePolicy
           PolicyDocument:
@@ -161,7 +176,8 @@ Resources:
     UpdateReplacePolicy: Retain
     DeletionPolicy: Delete
     Properties:
-      RetentionInDays: 731
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt IngestKmsKey.Arn
 
   AvScanDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -170,7 +186,10 @@ Resources:
     Properties:
       MessageRetentionPeriod: 1209600 # 14 days
       ReceiveMessageWaitTimeSeconds: 20
-      KmsMasterKeyId: alias/aws/sqs
+      # Encryption here may not be necessary; moving a message to a DLQ doesn't affect its encryption
+      # https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-server-side-encryption.html#sqs-encryption-what-does-sse-encrypt
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
 
   AvScanQueue:
     Type: AWS::SQS::Queue
@@ -179,7 +198,8 @@ Resources:
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
-      KmsMasterKeyId: alias/aws/sqs
+      KmsMasterKeyId: !GetAtt IngestKmsKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300 # 5 minutes (default)
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt AvScanDeadLetterQueue.Arn
         maxReceiveCount: 5
@@ -236,7 +256,6 @@ Resources:
       Environment:
         Variables:
           AV_SCAN_QUEUE_URL: !Ref AvScanQueue
-          ACCOUNT_ID: !Ref AWS::AccountId
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaFunctionSecurityGroup
@@ -246,8 +265,6 @@ Resources:
           import json
           import logging
           import os
-          from functools import reduce
-          from urllib.parse import unquote_plus
 
           import boto3  # type: ignore
           from botocore.config import Config  # type: ignore
@@ -257,77 +274,22 @@ Resources:
 
 
           AV_SCAN_QUEUE_URL = os.environ["AV_SCAN_QUEUE_URL"]
-          ACCOUNT_ID = os.environ["ACCOUNT_ID"]
-          KEYS_TO_COMBINE = {"DataOwner", "DataSteward", "KeyOwner", "GovPOC"}
 
           config = Config(retries={"max_attempts": 5, "mode": "standard"})
-          S3_CLIENT = boto3.client("s3", config=config)
           SQS_CLIENT = boto3.client("sqs", config=config)
 
 
           def lambda_handler(event, context):
               logger.info(f"Event: {json.dumps(event, default=str)}")
-              record: dict = event["Records"][0]
-              bucket = record["s3"]["bucket"]["name"]
-              key = unquote_plus(record["s3"]["object"]["key"])
-              principal_id = record.get("userIdentity", {}).get("principalId", "")
-              source_ip = record.get("requestParameters", {}).get("sourceIPAddress", "")
-
-              tagset = get_bucket_tags(bucket)
-              tag_indexes_to_remove = sorted(
-                  [index for index, tag in enumerate(tagset) if tag["Key"] in KEYS_TO_COMBINE],
-                  reverse=True,
-              )
-
-              tags_to_combine = sorted(
-                  [tagset.pop(index) for index in tag_indexes_to_remove],
-                  key=lambda x: x["Key"],
-              )
-
-              tagset.extend(
-                  [
-                      reduce(
-                          lambda t1, t2: {
-                              "Key": f'{t1["Key"]} / {t2["Key"]}',
-                              "Value": f'{t1["Value"]} / {t2["Value"]}',
-                          },
-                          tags_to_combine,
-                      ),
-                      {"Key": "PrincipalId / SourceIp", "Value": f"{principal_id} / {source_ip}"},
-                  ],
-              )
-
-              add_tags_to_object(bucket, key, tagset)
-              send_to_sqs(bucket, key)
+              send_to_sqs(event)
               logger.info("SUCCESS")
 
 
-          def get_bucket_tags(bucket: str):
-              logger.info(f"Getting tags for {bucket}")
-              params = dict(Bucket=bucket, ExpectedBucketOwner=ACCOUNT_ID)
-              tagset: list[dict[str, str]] = S3_CLIENT.get_bucket_tagging(**params)["TagSet"]
-              user_tagset = [tag for tag in tagset if not tag["Key"].startswith("aws:")]
-              logger.info(f"Retrieved the tags: {user_tagset}")
-              return user_tagset
-
-
-          def add_tags_to_object(bucket: str, key: str, tagset: list[dict[str, str]]):
-              logger.info(f"Adding tags to {bucket}/{key}")
-              S3_CLIENT.put_object_tagging(
-                  Bucket=bucket,
-                  Key=key,
-                  Tagging={"TagSet": tagset},
-                  ExpectedBucketOwner=ACCOUNT_ID,
-              )
-
-
-          def send_to_sqs(bucket, key):
-              logger.info(f"Sending a message to the SQS queue for {bucket}/{key}")
+          def send_to_sqs(event: dict):
+              logger.info("Sending a message to the SQS queue")
               SQS_CLIENT.send_message(
                   QueueUrl=AV_SCAN_QUEUE_URL,
-                  MessageBody=json.dumps(
-                      {"detail": {"requestParameters": {"bucketName": bucket, "key": key}}},
-                  ),
+                  MessageBody=json.dumps(event),
               )
 
   BucketObjectTaggerPermission:
@@ -369,7 +331,10 @@ Resources:
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
-          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          config = Config(
+              retries={"max_attempts": 5, "mode": "standard"},
+              signature_version="s3v4",
+          )
           S3_CLIENT = boto3.client("s3", config=config)
 
 
@@ -378,11 +343,24 @@ Resources:
 
               bucket = event["queryStringParameters"]["bucket"]
               key = event["queryStringParameters"]["key"]
+              kms_key_id = event["queryStringParameters"]["kms_key_id"]
 
               logger.info(f"Bucket: {bucket}")
               logger.info(f"Key: {key}")
+              logger.info(f"KMS Key ID: {kms_key_id}")
 
-              response = S3_CLIENT.generate_presigned_post(Bucket=bucket, Key=key)
+              fields = {
+                  "x-amz-server-side-encryption": "aws:kms",
+                  "x-amz-server-side-encryption-aws-kms-key-id": kms_key_id,
+              }
+
+              params = dict(
+                  Bucket=bucket,
+                  Key=key,
+                  Fields=fields,
+                  Conditions=[{k: v} for k, v in fields.items()],
+              )
+              response = S3_CLIENT.generate_presigned_post(**params)
 
               logger.info(f"Response Body: {response}")
 
@@ -393,6 +371,55 @@ Resources:
               }
 
               return response
+
+  PresignedUrlGeneratorRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      # Note that there is a dependency on this name
+      RoleName: !Sub ${IamPrefix}-PresignedUrlGeneratorRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: PresignedUrlGeneratorRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Security best practice: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html#configuration-vpc-best-practice-security
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DetachNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+                Condition:
+                  ArnEquals:
+                    lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:presigned-url-generator-${ResourceSuffix}
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::*
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
 
   FileUploader:
     Type: AWS::ApiGateway::RestApi
@@ -504,6 +531,7 @@ Resources:
   ### WEB ACL RESOURCES
   IngestAPIWebACL:
     Type: AWS::WAFv2::WebACL
+    Condition: IsLowSide
     Properties:
       Description: WAF for API Gateway protection
       Scope: REGIONAL
@@ -566,6 +594,7 @@ Resources:
   # WAF Association with API Gateway stages
   WebACLAssociationAPI:
     Type: AWS::WAFv2::WebACLAssociation
+    Condition: IsLowSide
     DependsOn: FileUploaderDeploymentStageProd
     Properties:
       ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${FileUploader}/stages/prod
@@ -574,6 +603,7 @@ Resources:
   # WAF Logging
   WAFLogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: IsLowSide
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -584,6 +614,7 @@ Resources:
 
   WAFLoggingConfiguration:
     Type: AWS::WAFv2::LoggingConfiguration
+    Condition: IsLowSide
     Properties:
       LogDestinationConfigs:
         - !GetAtt WAFLogGroup.Arn
@@ -592,6 +623,7 @@ Resources:
   # Cloudwatch Metric Filter
   MetricFilter:
     Type: AWS::Logs::MetricFilter
+    Condition: IsLowSide
     Properties:
       FilterName: WAF Rule Action
       FilterPattern: '{ $.action = "*" }'
@@ -607,6 +639,7 @@ Resources:
 
   InsightsRuleClientIpAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-ClientIpAllowed
       RuleState: ENABLED
@@ -638,6 +671,7 @@ Resources:
 
   InsightsRuleClientIpBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-ClientIpBlocked
       RuleState: ENABLED
@@ -669,6 +703,7 @@ Resources:
 
   InsightsRuleCountryAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-CountryAllowed
       RuleState: ENABLED
@@ -700,6 +735,7 @@ Resources:
 
   InsightsRuleCountryBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-CountryBlocked
       RuleState: ENABLED
@@ -731,6 +767,7 @@ Resources:
 
   InsightsRuleUriAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-UriAllowed
       RuleState: ENABLED
@@ -762,6 +799,7 @@ Resources:
 
   InsightsRuleUriBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-UriBlocked
       RuleState: ENABLED
@@ -793,6 +831,7 @@ Resources:
 
   InsightsRuleTerminatingRuleAllowed:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-TerminatingRuleAllowed
       RuleState: ENABLED
@@ -824,6 +863,7 @@ Resources:
 
   InsightsRuleTerminatingRuleBlocked:
     Type: AWS::CloudWatch::InsightRule
+    Condition: IsLowSide
     Properties:
       RuleName: !Sub ${WAFLogGroup}-TerminatingRuleBlocked
       RuleState: ENABLED
@@ -855,6 +895,7 @@ Resources:
 
   AlarmBlockRatio:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -903,6 +944,7 @@ Resources:
 
   AlarmClientIpAllowed:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -930,6 +972,7 @@ Resources:
 
   AlarmClientIpBlocked:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsLowSide
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -957,6 +1000,7 @@ Resources:
 
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
+    Condition: IsLowSide
     Properties:
       DashboardName: !Ref WAFLogGroup
       DashboardBody: !Sub >
@@ -1403,17 +1447,36 @@ Resources:
         }
 
 Outputs:
+  IngestKmsKeyArn:
+    Description: KMS Key Arn for the Ingest Stack
+    Value: !GetAtt IngestKmsKey.Arn
+
   AvScanQueueUrl:
     Description: Queue URL of the SQS AV Scan Queue
     Value: !Ref AvScanQueue
-    Export:
-      Name: !Sub aftac-pipeline-av-scan-queue-${ResourceSuffix}
 
   AvScanQueueName:
     Description: Name of the SQS AV Scan Queue
     Value: !GetAtt AvScanQueue.QueueName
+    # TODO: Remove this export once it's not referenced anywhere
     Export:
       Name: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
+
+  AvScanQueueArn:
+    Description: ARN of the SQS AV Scan Queue
+    Value: !GetAtt AvScanQueue.Arn
+
+  AvScanDeadLetterQueueUrl:
+    Description: Queue URL of the SQS AV Scan Dead Letter Queue
+    Value: !Ref AvScanDeadLetterQueue
+
+  AvScanDeadLetterQueueName:
+    Description: Name of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.QueueName
+
+  AvScanDeadLetterQueueArn:
+    Description: ARN of the SQS AV Scan Dead Letter Queue
+    Value: !GetAtt AvScanDeadLetterQueue.Arn
 
   BucketObjectTaggerArn:
     Description: ARN of the Object Tagger Lambda Function
@@ -1422,5 +1485,5 @@ Outputs:
       Name: !Sub aftac-pipeline-object-tagger-${ResourceSuffix}
 
   PresignedUrlGeneratorInvokeUrl:
-    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.amazonaws.com/prod/upload
+    Value: !Sub https://${FileUploader}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/upload
     Description: URL of the Presign Generator API Endpoint

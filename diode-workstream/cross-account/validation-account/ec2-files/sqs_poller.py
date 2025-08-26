@@ -1,14 +1,18 @@
+import errno
 import json
 import logging
 import time
 from logging.handlers import TimedRotatingFileHandler
 
-from config import approved_filetypes
 from config import file_handler_config
+from config import instance_info
 from config import resource_suffix
 from config import ssm_params
+from utils import await_clamd
 from utils import change_message_visibility
+from utils import get_instance_id
 from utils import get_params_values
+from utils import mark_instance_as_unhealthy
 from utils import receive_sqs_message
 from validation import validate_file
 
@@ -27,6 +31,14 @@ def main():
     # TODO: Use signal to gracefully exit in case of instance termination
     # TODO: Implement a health check
 
+    instance_info["instance_id"] = get_instance_id()
+
+    clamd_ready = await_clamd()
+    if not clamd_ready:
+        logger.error("Marking the instance as unhealthy")
+        mark_instance_as_unhealthy(instance_info["instance_id"])
+        return
+
     ttl = 60
     clock = -ttl  # To enable the first run within the while loop
 
@@ -36,25 +48,6 @@ def main():
             if time.perf_counter() >= clock + ttl:
                 logger.info("Refreshing SSM parameters")
                 get_params_values(ssm_params)
-                approved_filetypes.clear()
-                approved_filetypes.extend(
-                    [
-                        *(
-                            ssm_params[f"/pipeline/ApprovedFileTypes-{resource_suffix}"]
-                            .replace(".", "")
-                            .replace(" ", "")
-                            .split(",")
-                        ),
-                        *(
-                            ssm_params[
-                                f"/pipeline/DfdlApprovedFileTypes-{resource_suffix}"
-                            ]
-                            .replace(".", "")
-                            .replace(" ", "")
-                            .split(",")
-                        ),
-                    ],
-                )
                 clock = time.perf_counter()
 
             queue_url = ssm_params[f"/pipeline/AvScanQueueUrl-{resource_suffix}"]
@@ -74,17 +67,26 @@ def main():
             if receive_count > 1:
                 logger.warning(f"This message has been received {receive_count} times")
                 change_message_visibility(queue_url, receipt_handle, receive_count * 30)
-            message_body = json.loads(message["Body"])
-            bucket = message_body["detail"]["requestParameters"]["bucketName"]
-            key = message_body["detail"]["requestParameters"]["key"]
-            validate_file(bucket, key, receipt_handle)
+
+            message_body: dict = json.loads(message["Body"])
+            s3_event: dict = message_body["Records"][0]
+            validate_file(s3_event, receipt_handle)
 
             logger.info("-" * 100)
+
+        except OSError as e:
+            if e.errno == errno.ENOSPC:
+                logger.exception("No space left on device")
+                mark_instance_as_unhealthy(instance_info["instance_id"])
+                return
+            else:
+                logger.exception("Other OSError")
+                raise
 
         except Exception as e:
             logger.exception(e)
             logger.info(
-                "Sleeping for 3 seconds, before proceeding to receive the next message",
+                "Sleeping for 3 seconds, before proceeding to receive the next message",  # noqa: E501
             )
             time.sleep(3)  # nosemgrep arbitrary-sleep
 

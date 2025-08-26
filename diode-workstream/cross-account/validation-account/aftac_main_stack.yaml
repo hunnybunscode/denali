@@ -9,6 +9,12 @@ Metadata:
           - ResourceSuffix
 
       - Label:
+          default: Templates Location
+        Parameters:
+          - TemplateBucketName
+          - TemplatePrefix
+
+      - Label:
           default: Networking
         Parameters:
           - VpcId
@@ -18,29 +24,33 @@ Metadata:
           - DDBPrefixListId
 
       - Label:
-          default: Logging Stack
-        Parameters:
-          - TemplateURLLoggingStack
-
-      - Label:
-          default: Ingest Stack
-        Parameters:
-          - TemplateURLIngestStack
-
-      - Label:
           default: Pipeline Stack
         Parameters:
-          - TemplateURLPipelineStack
           - PipelineStackDiodeAccountId
           - PipelineStackPipelineAmiId
-          - PipelineStackApprovedFileTypes
           - PipelineStackDfdlApprovedFileTypes
+          - PipelineExemptFileTypes
+          - EmailEndPoint
           - PipelineStackDiodeSimulatorInstanceRole
 
       - Label:
-          default: STFP Stack
+          default: Queue Monitoring Configuration
         Parameters:
-          - TemplateURLSftpServerStack
+          - AvScanQueueThreshold
+          - TransferQueueThreshold
+          - ResultQueueThreshold
+          - QueueMonitoringInterval
+
+      - Label:
+          default: SSM Agent Update Configuration
+        Parameters:
+          - SsmAgentUpdateInterval
+          - MaxConcurrency
+          - MaxErrors
+
+      - Label:
+          default: SFTP Stack
+        Parameters:
           - SftpServerStackSftpServerSubnetIds
           - SftpServerIngressRuleCIDR
 
@@ -49,9 +59,9 @@ Metadata:
         Parameters:
           - TranstionToGlacierIR
           - TransitionToDeepArchive
-          - LongTermStorageBucketExpirationInDays
           - FailedTransferBucketExpirationInDays
           - DataTransferBucketExpirationInDays
+          - DfdlInputBucketExpirationInDays
           - InvalidFilesBucketExpirationInDays
           - AccessLogBucketExpirationInDays
 
@@ -62,6 +72,10 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
+      TemplateBucketName:
+        default: Template Bucket Name
+      TemplatePrefix:
+        default: Template Prefix
       VpcId:
         default: VPC ID
       VpcCidr:
@@ -72,24 +86,32 @@ Metadata:
         default: S3 Prefix List ID
       DDBPrefixListId:
         default: DynamoDB Prefix List ID
-      TemplateURLLoggingStack:
-        default: Logging Stack Template URL
-      TemplateURLIngestStack:
-        default: Ingest Stack Template URL
-      TemplateURLPipelineStack:
-        default: Pipeline Stack Template URL
       PipelineStackDiodeSimulatorInstanceRole:
         default: Pipeline Stack Diode Simulator Instance Role
       PipelineStackPipelineAmiId:
         default: Pipeline Stack Pipeline AMI ID
-      PipelineStackApprovedFileTypes:
-        default: Approved File Types
       PipelineStackDfdlApprovedFileTypes:
         default: DFDL Approved File Types
+      PipelineExemptFileTypes:
+        default: Exempt File Types
       PipelineStackDiodeAccountId:
         default: Pipeline Stack Diode Account ID
-      TemplateURLSftpServerStack:
-        default: SFTP Server Stack Template URL
+      EmailEndPoint:
+        default: Email End Point
+      AvScanQueueThreshold:
+        default: AV Scan Queue Threshold
+      TransferQueueThreshold:
+        default: Transfer Queue Threshold
+      ResultQueueThreshold:
+        default: Result Queue Threshold
+      QueueMonitoringInterval:
+        default: Queue Monitoring Interval
+      SsmAgentUpdateInterval:
+        default: SSM Agent Update Interval
+      MaxConcurrency:
+        default: Max Concurrency
+      MaxErrors:
+        default: Max Errors
       SftpServerStackSftpServerSubnetIds:
         default: SFTP Server Stack SFTP Server Subnet IDs
       SftpServerIngressRuleCIDR:
@@ -98,12 +120,12 @@ Metadata:
         default: Object Transition To Glacier_IR
       TransitionToDeepArchive:
         default: Object Transition To Deep Archive
-      LongTermStorageBucketExpirationInDays:
-        default: Object Expiration In Days For Long Term Storage Bucket
       FailedTransferBucketExpirationInDays:
         default: Object Expiration In Days For Failed Transfer Bucket
       DataTransferBucketExpirationInDays:
         default: Object Expiration In Days For Data Transfer Bucket
+      DfdlInputBucketExpirationInDays:
+        default: Object Expiration In Days For Dfdl Input Bucket
       InvalidFilesBucketExpirationInDays:
         default: Object Expiration In Days For Invalid Files Bucket
       AccessLogBucketExpirationInDays:
@@ -120,7 +142,7 @@ Parameters:
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
     ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
@@ -130,6 +152,16 @@ Parameters:
       only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
     AllowedPattern: ^[a-z0-9-]{1,20}$
     ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  TemplateBucketName:
+    Type: String
+    Description: Name of S3 bucket that contains the CloudFormation templates
+
+  TemplatePrefix:
+    Type: String
+    Description: The prefix for the CloudFormation templates.
+    AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
+    ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -155,24 +187,6 @@ Parameters:
     AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be a valid DynamoDB Prefix List ID
 
-  TemplateURLLoggingStack:
-    Type: String
-    Description: >
-      S3 URL for Logging Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_logging_stack.yaml
-
-  TemplateURLIngestStack:
-    Type: String
-    Description: >
-      S3 URL for Ingest Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_ingest_stack.yaml
-
-  TemplateURLPipelineStack:
-    Type: String
-    Description: >
-      S3 URL for Pipeline Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_pipeline_stack.yaml
-
   PipelineStackPipelineAmiId:
     Type: AWS::EC2::Image::Id
     Description: The AMI ID to use for the pipeline.
@@ -182,7 +196,7 @@ Parameters:
     Description: >
       If using a Diode Simulator, the ARN of the role associated with the instance profile for the Diode Simulator instance.
       Otherwise, leave it blank.
-    AllowedPattern: ^$|^arn:(aws|aws-us-gov):iam::\d{12}:role/.*
+    AllowedPattern: ^$|^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::\d{12}:role/.*
 
   PipelineStackDiodeAccountId:
     Type: String
@@ -190,21 +204,75 @@ Parameters:
     AllowedPattern: ^\d{12}$
     ConstraintDescription: Must be a valid 12-digit AWS account ID
 
-  PipelineStackApprovedFileTypes:
-    Type: CommaDelimitedList
-    Description: A comma-separated list of file types allowed through the validation pipeline
-    Default: csv, flac, wav, mp4, txt, json, zip
-
   PipelineStackDfdlApprovedFileTypes:
     Type: CommaDelimitedList
-    Description: A comma-separated list of file types allowed through the DFDL validation pipeline
-    Default: infoset, xml
+    Description: A comma-separated list of file extensions (without leading dots) allowed through the DFDL validation pipeline
+    Default: xml
 
-  TemplateURLSftpServerStack:
+  PipelineExemptFileTypes:
+    Type: CommaDelimitedList
+    Description: A comma-separated list of file extensions (without leading dots) that should bypass file type validation
+    Default: csv
+
+  EmailEndPoint:
     Type: String
-    Description: >
-      S3 URL for SFTP Server Stack.
-      For example, https://<bucket-name>.s3.us-gov-west-1.amazonaws.com/aftac_sftp_stack.yaml
+    Description: (Optional) Email address to receive SNS notifications for infected, invalid, and failed transfer files
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    ConstraintDescription: Must be a valid email end point
+
+  AvScanQueueThreshold:
+    Type: Number
+    Description: Alert threshold for AV Scan Queue
+    Default: 50
+    MinValue: 1
+
+  TransferQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Transfer Queue
+    Default: 50
+    MinValue: 1
+
+  ResultQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Result Queue
+    Default: 50
+    MinValue: 1
+
+  QueueMonitoringInterval:
+    Type: String
+    Description: How frequently to check SQS Queue metrics
+    Default: rate(30 minutes)
+    AllowedPattern: ^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: >-
+      Must be a valid rate.
+      https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html
+
+  SsmAgentUpdateInterval:
+    Type: String
+    Description: >-
+      Determines whether and when the SSM Agent is updated on all EC2 scanner instances.
+      Default value of "cron(0 0 ? * SUNL *)" sets the schedule to the last Sunday of every month at 12:00 AM UTC.
+      For more options, go to https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html.
+      If you leave this blank, SSM Agent will stop being updated.
+    Default: cron(0 0 ? * SUNL *)
+    AllowedPattern: ^$|^cron\(.*\)$ # |^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: >-
+      Must be either blank or a valid cron.
+      https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html
+
+  MaxConcurrency:
+    Type: String
+    Description: The maximum number of managed nodes, in percentage, on which to update SSM Agent at the same time.
+    Default: 100%
+    AllowedPattern: ^([1-9]|[1-9][0-9]|100)%$
+    ConstraintDescription: Must be a valid percentage between 1% and 100%.
+
+  MaxErrors:
+    Type: String
+    Description: The number of errors, in percentage, that are allowed before stopping the SSM Agent update.
+    Default: 10%
+    AllowedPattern: ^([0-9]|[1-9][0-9]|100)%$
+    ConstraintDescription: Must be a valid percentage between 0% and 100%.
 
   SftpServerStackSftpServerSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
@@ -213,7 +281,7 @@ Parameters:
   SftpServerIngressRuleCIDR:
     Type: String
     Description: CIDR block for SFTP server ingress rule
-    Default: 0.0.0.0/0
+    Default: 127.0.0.1/32
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
@@ -227,11 +295,6 @@ Parameters:
     Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
     Default: 150
 
-  LongTermStorageBucketExpirationInDays:
-    Type: Number
-    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
-    Default: 391
-
   FailedTransferBucketExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the FAILED TRANSFER Bucket.
@@ -240,6 +303,11 @@ Parameters:
   DataTransferBucketExpirationInDays:
     Type: Number
     Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
+    Default: 365
+
+  DfdlInputBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the DFDL Bucket.
     Default: 365
 
   InvalidFilesBucketExpirationInDays:
@@ -252,13 +320,19 @@ Parameters:
     Description: Enter the number of days you want to keep objects in the ACCESS LOGGING Bucket.
     Default: 365
 
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
   LoggingStack:
     Type: AWS::CloudFormation::Stack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLLoggingStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_logging_stack.yaml
       Parameters:
         ResourceSuffix: !Ref ResourceSuffix
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
@@ -271,7 +345,7 @@ Resources:
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLIngestStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_ingest_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -283,11 +357,11 @@ Resources:
 
   PipelineStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: IngestStack
+    # DependsOn: IngestStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLPipelineStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_pipeline_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -297,26 +371,43 @@ Resources:
         PrivateSubnetIds: !Join [",", !Ref PrivateSubnetIds]
         S3PrefixListId: !Ref S3PrefixListId
         DDBPrefixListId: !Ref DDBPrefixListId
-        ApprovedFileTypes: !Join [",", !Ref PipelineStackApprovedFileTypes]
         DfdlApprovedFileTypes:
           !Join [",", !Ref PipelineStackDfdlApprovedFileTypes]
+        ExemptFileTypes: !Join [",", !Ref PipelineExemptFileTypes]
+        EmailEndPoint: !Ref EmailEndPoint
+        AccessLogBucketName: !GetAtt LoggingStack.Outputs.AccessLogBucketName
+        IngestKmsKeyArn: !GetAtt IngestStack.Outputs.IngestKmsKeyArn
+        AvScanQueueName: !GetAtt IngestStack.Outputs.AvScanQueueName
+        AvScanQueueUrl: !GetAtt IngestStack.Outputs.AvScanQueueUrl
+        AvScanQueueArn: !GetAtt IngestStack.Outputs.AvScanQueueArn
+        AvScanDeadLetterQueueName: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueName
+        AvScanDeadLetterQueueArn: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueArn
+        AvScanDeadLetterQueueUrl: !GetAtt IngestStack.Outputs.AvScanDeadLetterQueueUrl
+        TransferQueueThreshold: !Ref TransferQueueThreshold
+        ResultQueueThreshold: !Ref ResultQueueThreshold
+        AvScanQueueThreshold: !Ref AvScanQueueThreshold
+        QueueMonitoringInterval: !Ref QueueMonitoringInterval
         DiodeAccountId: !Ref PipelineStackDiodeAccountId
         PipelineAmiId: !Ref PipelineStackPipelineAmiId
         DiodeSimulatorInstanceRole: !Ref PipelineStackDiodeSimulatorInstanceRole
+        SsmAgentUpdateInterval: !Ref SsmAgentUpdateInterval
+        MaxConcurrency: !Ref MaxConcurrency
+        MaxErrors: !Ref MaxErrors
         TranstionToGlacierIR: !Ref TranstionToGlacierIR
         TransitionToDeepArchive: !Ref TransitionToDeepArchive
-        LongTermStorageBucketExpirationInDays: !Ref LongTermStorageBucketExpirationInDays
         InvalidFilesBucketExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
         FailedTransferBucketExpirationInDays: !Ref FailedTransferBucketExpirationInDays
         DataTransferBucketExpirationInDays: !Ref DataTransferBucketExpirationInDays
+        DfdlInputBucketExpirationInDays: !Ref DfdlInputBucketExpirationInDays
 
   SftpServerStack:
     Type: AWS::CloudFormation::Stack
+    Condition: IsLowSide
     DependsOn: PipelineStack
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
-      TemplateURL: !Ref TemplateURLSftpServerStack
+      TemplateURL: !Sub https://${TemplateBucketName}.s3.${AWS::Region}.${AWS::URLSuffix}/${TemplatePrefix}/aftac_sftp_stack.yaml
       Parameters:
         IamPrefix: !Ref IamPrefix
         PermissionsBoundaryPolicyArn: !Ref PermissionsBoundaryPolicyArn
@@ -325,3 +416,24 @@ Resources:
         SftpServerSubnetIds:
           !Join [",", !Ref SftpServerStackSftpServerSubnetIds]
         SftpServerIngressRuleCIDR: !Ref SftpServerIngressRuleCIDR
+
+Outputs:
+  # Value required in the Diode account
+  DataTransferBucketName:
+    Description: Data Transfer Bucket Name
+    Value: !GetAtt PipelineStack.Outputs.DataTransferBucketName
+
+  # Value required in the Diode account
+  DataTransferSqsQueueArn:
+    Description: Data Transfer SQS Queue ARN
+    Value: !GetAtt PipelineStack.Outputs.DataTransferSqsQueueArn
+
+  # Value required in the Diode account
+  DataTransferResultSqsQueueArn:
+    Description: Data Transfer Result SQS Queue ARN
+    Value: !GetAtt PipelineStack.Outputs.DataTransferResultSqsQueueArn
+
+  # Value required in the Diode account
+  PipelineKmsKeyArn:
+    Description: Pipeline KMS Key ARN
+    Value: !GetAtt PipelineStack.Outputs.PipelineKmsKeyArn

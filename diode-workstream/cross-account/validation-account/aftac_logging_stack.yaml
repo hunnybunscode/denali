@@ -32,7 +32,7 @@ Resources:
           - Sid: Allow administration of the key via IAM policies
             Effect: Allow
             Principal:
-              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+              AWS: !Ref AWS::AccountId
             NotAction:
               - kms:Encrypt
               - kms:Decrypt
@@ -43,11 +43,10 @@ Resources:
           - Sid: Allow use of the key only for AWS via IAM policies
             Effect: Allow
             Principal:
-              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+              AWS: !Ref AWS::AccountId
             Action:
               - kms:Encrypt
               - kms:Decrypt
-              - kms:DescribeKey
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
               - kms:CreateGrant
@@ -80,6 +79,12 @@ Resources:
               - kms:GenerateDataKey
               - kms:Decrypt
             Resource: "*"
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/logging-stack-${ResourceSuffix}
+      TargetKeyId: !Ref KmsKey
 
   AccessLogBucket:
     Type: AWS::S3::Bucket
@@ -165,9 +170,3 @@ Outputs:
     Value: !Ref AccessLogBucket
     Export:
       Name: !Sub access-logs-bucket-${ResourceSuffix}
-
-  KMSArn:
-    Description: KMS Key ARN for the S3 Logging Bucket
-    Value: !GetAtt KmsKey.Arn
-    Export:
-      Name: !Sub kms-key-${ResourceSuffix}

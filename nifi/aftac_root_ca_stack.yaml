@@ -1,0 +1,100 @@
+Description: Creates a Root CA
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Configuration
+        Parameters:
+          - ResourceSuffix
+
+    ParameterLabels:
+      ResourceSuffix:
+        default: Resource Suffix
+
+Parameters:
+  ResourceSuffix:
+    Type: String
+    Description: >
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+Resources:
+  RootCertificateAuthorityKey:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub root-ca-key-${ResourceSuffix}
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  RootCertificateAuthorityCertificate:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub root-ca-certificate-${ResourceSuffix}
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for Root CA stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/root-ca-${ResourceSuffix}
+      TargetKeyId: !Ref KmsKey
+
+Outputs:
+  RootCAKey:
+    Description: >
+      Locate the secret with the Secret ARN value, then run and store as plaintext the output of a command such as the following:
+      "openssl genrsa -out ca.key 2048 && cat ca.key".
+    Value: !Ref RootCertificateAuthorityKey
+
+  RootCACert:
+    Description: >
+      Locate the secret with the Secret ARN value, then run and store as plaintext the output of a command such as the following:
+      "openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=nifi/O=DoD/C=US && cat ca.pem && shred -u ca.key ca.pem"
+    Value: !Ref RootCertificateAuthorityCertificate
+
+  KmsKeyArn:
+    Description: ARN of the KMS key that protects the root CA
+    Value: !GetAtt KmsKey.Arn

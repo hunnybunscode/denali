@@ -45,6 +45,12 @@ Parameters:
     AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be valid route table IDs.
 
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+
 Resources:
   DynamoDbVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -103,13 +109,20 @@ Resources:
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
 
+  # Note: As of now, this is NOT supported in usibe1-az1
   SqsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
         - !GetAtt VpcEndpointSecurityGroup.GroupId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.sqs
+      ServiceName: !If
+        - IsLCK
+        - !Sub gov.sgov.sc2s.${AWS::Region}.sqs
+        - !If
+          - IsDCA
+          - !Sub gov.ic.c2s.${AWS::Region}.sqs
+          - !Sub com.amazonaws.${AWS::Region}.sqs
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
@@ -131,18 +144,42 @@ Resources:
       PrivateDnsEnabled: true
       SecurityGroupIds:
         - !GetAtt VpcEndpointSecurityGroup.GroupId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
+      ServiceName: !If
+        - IsLCK
+        - !Sub gov.sgov.sc2s.${AWS::Region}.sns
+        - !If
+          - IsDCA
+          - !Sub gov.ic.c2s.${AWS::Region}.sns
+          - !Sub com.amazonaws.${AWS::Region}.sns
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId
 
   ImagebuilderVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Condition: IsLowSide
     Properties:
       PrivateDnsEnabled: true
       SecurityGroupIds:
         - !GetAtt VpcEndpointSecurityGroup.GroupId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.imagebuilder
+      SubnetIds: !Ref PrivateSubnetIds
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+
+  AutoScalingVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VpcEndpointSecurityGroup.GroupId
+      ServiceName: !If
+        - IsLCK
+        - !Sub gov.sgov.sc2s.${AWS::Region}.autoscaling
+        - !If
+          - IsDCA
+          - !Sub gov.ic.c2s.${AWS::Region}.autoscaling
+          - !Sub com.amazonaws.${AWS::Region}.autoscaling
       SubnetIds: !Ref PrivateSubnetIds
       VpcEndpointType: Interface
       VpcId: !Ref VpcId

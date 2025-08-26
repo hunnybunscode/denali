@@ -37,13 +37,21 @@ Parameters:
     AllowedPattern: ^ami-[0-9a-f]{17}$
     ConstraintDescription: Must be a valid AMI ID
 
-  ApprovedFileTypes:
-    Type: String
-    Description: The list of approved file types
-
   DfdlApprovedFileTypes:
     Type: String
     Description: The list of approved file types for DFDL
+
+  ExemptFileTypes:
+    Type: String
+    Description: The list of exempt file types
+
+  EmailEndPoint:
+    Type: String
+    Description: The email address to use for SNS notifications
+
+  IngestKmsKeyArn:
+    Type: String
+    Description: The ARN of the KMS key encrypting the resources in Ingest Stack
 
   DiodeAccountId:
     Type: String
@@ -55,6 +63,18 @@ Parameters:
     Type: String
     Description: ARN of the IAM role associated with the Diode Simulator instance profile
 
+  SsmAgentUpdateInterval:
+    Type: String
+    Description: Determines whether and when the SSM Agent is updated on EC2 scanner instances.
+
+  MaxConcurrency:
+    Type: String
+    Description: The maximum number of EC2 scanner instances, in percentage, on which to update SSM Agent at the same time.
+
+  MaxErrors:
+    Type: String
+    Description: Maximum allowable error percentage before aborting the SSM Agent update process.
+
   TranstionToGlacierIR:
     Type: Number
     Description: Enter the number of days after which to transition to Glacier Instant Retrieval (IR) storage class.
@@ -62,10 +82,6 @@ Parameters:
   TransitionToDeepArchive:
     Type: Number
     Description: Enter the number of days after which to transition to Deep Archive storage class. Must be at least 90 days after Glacier IR transition.
-
-  LongTermStorageBucketExpirationInDays:
-    Type: Number
-    Description: Enter the number of days you want to keep objects in the LONG TERM STORAGE Bucket.
 
   InvalidFilesBucketExpirationInDays:
     Type: Number
@@ -79,10 +95,142 @@ Parameters:
     Type: Number
     Description: Enter the number of days you want to keep objects in the DATA TRANSFER Bucket.
 
+  DfdlInputBucketExpirationInDays:
+    Type: Number
+    Description: Enter the number of days you want to keep objects in the Dfdl Input Bucket.
+
+  AccessLogBucketName:
+    Type: String
+    Description: The name of the access log bucket.
+
+  AvScanQueueName:
+    Type: String
+    Description: The name of the AV Scan Queue.
+
+  AvScanQueueUrl:
+    Type: String
+    Description: The URL of the AV Scan Queue.
+
+  AvScanQueueArn:
+    Type: String
+    Description: The ARN of the AV Scan Queue.
+
+  AvScanDeadLetterQueueName:
+    Type: String
+    Description: The name of the AV Scan Dead Letter Queue.
+
+  AvScanDeadLetterQueueUrl:
+    Type: String
+    Description: The URL of the AV Scan Dead Letter Queue.
+
+  AvScanDeadLetterQueueArn:
+    Type: String
+    Description: The ARN of the AV Scan Dead Letter Queue.
+
+  TransferQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Transfer Queue
+
+  ResultQueueThreshold:
+    Type: Number
+    Description: Alert threshold for Result Queue
+
+  AvScanQueueThreshold:
+    Type: Number
+    Description: Alert threshold for AV Scan Queue
+
+  QueueMonitoringInterval:
+    Type: String
+    Description: How frequently to check SQS Queue metrics (in minutes)
+
 Conditions:
   UseDiodeSimulator: !Not [!Equals [!Ref DiodeSimulatorInstanceRole, ""]]
+  SendEmailNotifications: !Not [!Equals [!Ref EmailEndPoint, ""]]
+  ExemptFileTypesBlank: !Equals [!Ref ExemptFileTypes, ""]
 
 Resources:
+  PipelineKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for pipeline
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow cryptographic operations via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sqs.${AWS::Region}.amazonaws.com
+          - Sid: Allow EC2 scanner role to encrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt Ec2ScannerRole.Arn
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+          - Sid: Allow Transfer Result Lambda execution role to encrypt and decrypt
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt TransferResultLambdaRole.Arn
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sqs.${AWS::Region}.amazonaws.com
+          - Sid: Allow Data Transfer Lambda execution role to decrypt
+            Effect: Allow
+            Principal:
+              AWS: !Ref DiodeAccountId
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  - !Sub s3.${AWS::Region}.amazonaws.com
+                  - !Sub sqs.${AWS::Region}.amazonaws.com
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
+
+  PipelineKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/pipeline-stack-${ResourceSuffix}
+      TargetKeyId: !Ref PipelineKmsKey
+
   Ec2ScannerRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -91,6 +239,7 @@ Resources:
           - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
             reason: An explicit name is required
     Properties:
+      # Note that there is a dependency on this name
       RoleName: !Sub ${IamPrefix}-Ec2ScannerRole-${ResourceSuffix}
       PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
       Description: Role to be assumed by EC2 Anti-Virus Scanner instances
@@ -107,7 +256,7 @@ Resources:
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
-        - PolicyName: Ec2ScannerCwLogsPolicy
+        - PolicyName: CwLogsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -120,7 +269,7 @@ Resources:
                   - cloudwatch:PutMetricData
                 Effect: Allow
                 Resource: "*"
-        - PolicyName: Ec2ScannerSqsPolicy
+        - PolicyName: SqsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -131,7 +280,7 @@ Resources:
                   - sqs:SendMessage
                   - sqs:ChangeMessageVisibility
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
-        - PolicyName: Ec2ScannerS3Policy
+        - PolicyName: S3Policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -144,21 +293,43 @@ Resources:
                   - s3:ListBucket
                   - s3:PutObject
                   - s3:PutObjectTagging
+                  - s3:GetBucketTagging
                 Resource: "*"
-        - PolicyName: Ec2ScannerSnsPolicy
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+        - PolicyName: SnsPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: sns:Publish
                 Resource: "*"
-        - PolicyName: Ec2ScannerEc2Policy
+        - PolicyName: Ec2Policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: ec2:DescribeTags
                 Resource: "*"
+        - PolicyName: KmsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref IngestKmsKeyArn
+        - PolicyName: Ec2AutoScalingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:SetInstanceHealth
+                Resource: "*" # Can't reference the auto scaling group ARN due to a circular dependency
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
 
   Ec2ScannerInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -215,10 +386,10 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:*
               - Effect: Allow
                 Action: sns:Publish
-                Resource: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*
+                Resource: !Ref FailedTransferTopic
               - Effect: Allow
                 Action: dynamodb:PutItem
-                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:*
+                Resource: !GetAtt TransferStatusTable.Arn
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -248,7 +419,8 @@ Resources:
       # ReservedConcurrentExecutions: 50
       Environment:
         Variables:
-          FAILED_TRANSFER_TOPIC_ARN: !GetAtt FailedTransferTopic.TopicArn
+          QUEUE_URL: !Ref TransferResultQueue
+          FAILED_TRANSFER_TOPIC_ARN: !Ref FailedTransferTopic
           DATA_TRANSFER_BUCKET: !Ref DataTransferBucket
           DYNAMODB_TABLE_NAME: !Ref TransferStatusTable
           FAILED_TRANSFER_BUCKET: !Ref FailedTransferBucket
@@ -269,12 +441,16 @@ Resources:
           from botocore.config import Config  # type: ignore
           from botocore.exceptions import ClientError  # type: ignore
 
-          DDB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
+          QUEUE_URL = os.environ["QUEUE_URL"]
+
           DATA_TRANSFER_BUCKET = os.environ["DATA_TRANSFER_BUCKET"]
-          FAILED_TRANSFER_TOPIC_ARN = os.environ["FAILED_TRANSFER_TOPIC_ARN"]
           FAILED_TRANSFER_BUCKET = os.environ["FAILED_TRANSFER_BUCKET"]
+
+          DDB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
+          FAILED_TRANSFER_TOPIC_ARN = os.environ["FAILED_TRANSFER_TOPIC_ARN"]
           ACCOUNT_ID = os.environ["ACCOUNT_ID"]
 
+          SUCCEEDED = "SUCCEEDED"
           DATA_TAG_KEY = "DataOwner / DataSteward / GovPOC / KeyOwner"
           UNKNOWNS = ["Unknown"] * 4
 
@@ -282,6 +458,7 @@ Resources:
           DDB_CLIENT = boto3.client("dynamodb", config=config)
           S3_CLIENT = boto3.client("s3", config=config)
           SNS_CLIENT = boto3.client("sns", config=config)
+          SQS_CLIENT = boto3.client("sqs", config=config)
 
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
@@ -290,62 +467,147 @@ Resources:
           def lambda_handler(event, context):
               logger.info(f"Event: {json.dumps(event, default=str)}")
 
-              data = json.loads(event["Records"][0]["body"])
-              bucket = data["bucket"]
+              message = event["Records"][0]
+              # SentTimestamp is in the epoch time in milliseconds
+              timestamp = int(message["attributes"]["SentTimestamp"]) / 1000
+              receipt_handle = message["receiptHandle"]
+              data = json.loads(message["body"])
+              # bucket = data["bucket"]
               key = data["key"]
               status = data["status"]
 
-              data_tag_values = get_data_tag_values(bucket, key)
-              put_item_in_ddb(data, *data_tag_values)
+              try:
+                  # TODO: Get the tags passed from the message
+                  data_tag_values = get_data_tag_values(key)
+              except ClientError as e:
+                  error_code = e.response["Error"]["Code"]
+                  # MethodNotAllowed error can be raised against a delete marker
+                  if error_code in ("404", "NoSuchKey") or (
+                      error_code == "MethodNotAllowed" and not object_exists(key)
+                  ):
+                      logger.warning(f"{key} not found")
+                      delete_sqs_message(receipt_handle)
+                      return
+                  raise
 
-              if status != "SUCCEEDED":
-                  logger.info(
-                      f"Data transfer failed; copying {bucket}/{key} to {FAILED_TRANSFER_BUCKET}",  # noqa: E501
+              put_item_in_ddb(timestamp, data, *data_tag_values)
+
+              if status != SUCCEEDED:
+                  logger.warning(f"Data transfer failed for {key}")
+                  copy_object_to_failed_transfer_bucket(key)
+                  send_sns_notification_on_failed_transfer(key)
+
+              # Delete it from the transfer bucket whether the transfer was successful or not
+              delete_object_from_transfer_bucket(key)
+
+              delete_sqs_message(receipt_handle)
+
+
+          def copy_object_to_failed_transfer_bucket(key: str):
+              logger.info(
+                  f"Copying {key} from {DATA_TRANSFER_BUCKET} to {FAILED_TRANSFER_BUCKET}",
+              )
+              try:
+                  S3_CLIENT.copy_object(
+                      # Source bucket/key/owner
+                      CopySource={"Bucket": DATA_TRANSFER_BUCKET, "Key": key},
+                      ExpectedSourceBucketOwner=ACCOUNT_ID,
+                      # Destination bucket/key/owner
+                      Bucket=FAILED_TRANSFER_BUCKET,
+                      Key=key,
+                      ExpectedBucketOwner=ACCOUNT_ID,
                   )
-                  # Copy the failed S3 object to the failed transfer bucket
-                  copy_object(DATA_TRANSFER_BUCKET, FAILED_TRANSFER_BUCKET, key)
-                  # Send a message to the SNS topic for failed data transfers
-                  send_transfer_error_message(key)
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                      logger.warning(f"{key} not found")
+                      return
+                  raise
 
-              delete_object(DATA_TRANSFER_BUCKET, key)
+
+          def send_sns_notification_on_failed_transfer(key: str):
+              logger.info("Sending an SNS message regarding the failed transfer")
+              SNS_CLIENT.publish(
+                  TopicArn=FAILED_TRANSFER_TOPIC_ARN,
+                  Subject="Failed Cross Domain Transfer",
+                  Message=(
+                      f"The file, {key}, was NOT successfully transferred.\n"
+                      f"It has been saved in the Failed Transfer Bucket: {FAILED_TRANSFER_BUCKET}"
+                  ),
+              )
 
 
-          def get_data_tag_values(bucket: str, key: str) -> list[str]:
+          def delete_object_from_transfer_bucket(key: str):
+              logger.info(f"Deleting {DATA_TRANSFER_BUCKET}/{key}")
+              try:
+                  S3_CLIENT.delete_object(
+                      Bucket=DATA_TRANSFER_BUCKET,
+                      Key=key,
+                      ExpectedBucketOwner=ACCOUNT_ID,
+                  )
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                      logger.warning(f"{key} not found")
+                      return
+                  raise
+
+
+          def get_data_tag_values(key: str) -> list[str]:
               """
               Returns values for tag key `DataOwner / DataSteward / GovPOC / KeyOwner`
               as individual values in a list.\n
               If the tag is not set, returns "Unknown" x 4 in a list.
               """
-              logger.info(f"Getting tags for {bucket}/{key}")
-              try:
-                  tags = get_object_tags(bucket, key)
-                  data_tag_value = tags.get(DATA_TAG_KEY)
-                  if data_tag_value is None:
-                      logger.warning(f"The object did not have {DATA_TAG_KEY} tag key")
-                      return UNKNOWNS
-                  logger.info("Successfully retrieved the data tag value")
-                  return [tag.strip() for tag in data_tag_value.split("/")]
-              except ClientError as e:
-                  logger.error(f"Failed to get object tags: {e}")
+              logger.info(f"Getting tags for {key}")
+              tags = get_object_tags(key)
+              data_tag_value = tags.get(DATA_TAG_KEY)
+              if data_tag_value is None:
+                  logger.warning(f"The object did not have {DATA_TAG_KEY} tag key")
                   return UNKNOWNS
+              logger.info("Successfully retrieved the data tag value")
+              return [tag.strip() for tag in data_tag_value.split("/")]
 
 
-          def get_object_tags(bucket: str, key: str) -> dict[str, str]:
+          def get_object_tags(key: str) -> dict[str, str]:
               """
               Returns `TagSet` for `key` in `bucket` in a dict.
               """
               tag_set = S3_CLIENT.get_object_tagging(
-                  Bucket=bucket,
+                  Bucket=DATA_TRANSFER_BUCKET,
                   Key=key,
                   ExpectedBucketOwner=ACCOUNT_ID,
               )["TagSet"]
 
               tags = {tag["Key"]: tag["Value"] for tag in tag_set}
-              logger.info(f"Tags for {bucket}/{key}: {tags}")
+              logger.info(f"Tags for {key}: {tags}")
               return tags
 
 
+          def object_exists(key: str) -> bool:
+              # When an object does not exist:
+              # With ListBucket permission on the bucket, Amazon S3 returns 404 Not Found error.
+              # Without ListBucket permission, Amazon S3 returns 403 Forbidden error.
+
+              try:
+                  S3_CLIENT.head_object(
+                      Bucket=DATA_TRANSFER_BUCKET,
+                      Key=key,
+                      ExpectedBucketOwner=ACCOUNT_ID,
+                  )
+                  return True
+              except ClientError as e:
+                  if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                      logger.warning(f"{key} not found")
+                      return False
+                  raise
+
+
+          def delete_sqs_message(receipt_handle: str):
+              logger.info("Deleting message from the queue")
+              SQS_CLIENT.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=receipt_handle)
+
+
           def put_item_in_ddb(
+              timestamp: float,
               data: dict,
               data_owner: str,
               data_steward: str,
@@ -360,12 +622,16 @@ Resources:
                       "s3Key": {"S": s3_key},  # partition key
                       "timestamp": {
                           "S": str(
-                              datetime.now(zoneinfo.ZoneInfo("America/New_York")),  # sort key
+                              datetime.fromtimestamp(
+                                  timestamp,
+                                  zoneinfo.ZoneInfo("America/New_York"),  # sort key
+                              ),
                           ),
                       },
                       "mappingId": {"S": data["mappingId"]},
                       "status": {"S": data["status"]},
                       "transferId": {"S": data["transferId"]},
+                      "error": {"S": data["error"]},
                       "dataOwner": {"S": data_owner},
                       "dataSteward": {"S": data_steward},
                       "govPoc": {"S": gov_poc},
@@ -374,100 +640,24 @@ Resources:
               )
               logger.info("Successfully added the entry")
 
-
-          def send_transfer_error_message(key: str):
-              logger.info("Sending an SNS message regarding the failed transfer")
-              SNS_CLIENT.publish(
-                  TopicArn=FAILED_TRANSFER_TOPIC_ARN,
-                  Subject="Failed Cross Domain Transfer",
-                  Message=(
-                      f"The file {key} was NOT successfully transferred.\n"
-                      "It has been moved from the Data Transfer bucket to "
-                      f"the following location:\n{FAILED_TRANSFER_BUCKET}/{key}"
-                  ),
-              )
-
-
-          def copy_object(src_bucket: str, dest_bucket: str, key: str):
-              logger.info(f"Copying {src_bucket}/{key} to {dest_bucket}/{key}")
-              S3_CLIENT.copy_object(
-                  # Source bucket/key/owner
-                  CopySource={"Bucket": src_bucket, "Key": key},
-                  ExpectedSourceBucketOwner=ACCOUNT_ID,
-                  # Destination bucket/key/owner
-                  Bucket=dest_bucket,
-                  Key=key,
-                  ExpectedBucketOwner=ACCOUNT_ID,
-              )
-              logger.info("Successfully copied the object")
-
-
-          def delete_object(bucket: str, key: str):
-              logger.info(f"Deleting {bucket}/{key}")
-              S3_CLIENT.delete_object(
-                  Bucket=bucket,
-                  Key=key,
-                  ExpectedBucketOwner=ACCOUNT_ID,
-              )
-              logger.info("Successfully deleted the object")
-
-  LongTermStorageBucket:
-    Type: AWS::S3::Bucket
-    UpdateReplacePolicy: Delete
-    DeletionPolicy: Delete
-    Properties:
-      LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: LifeCycleRule-1
-            Status: Enabled
-            Transitions:
-              - TransitionInDays: !Ref TranstionToGlacierIR
-                StorageClass: GLACIER_IR
-              - TransitionInDays: !Ref TransitionToDeepArchive
-                StorageClass: DEEP_ARCHIVE
-            ExpirationInDays: !Ref LongTermStorageBucketExpirationInDays
-            NoncurrentVersionExpiration:
-              NoncurrentDays: 1
-
-  LongTermStorageBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref LongTermStorageBucket
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Deny
-            Principal:
-              AWS: "*"
-            Action: s3:*
-            Resource:
-              - !Sub ${LongTermStorageBucket.Arn}
-              - !Sub ${LongTermStorageBucket.Arn}/*
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-
   QuarantineBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -476,8 +666,11 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   QuarantineBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -499,12 +692,22 @@ Resources:
 
   InvalidFilesBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -513,8 +716,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -527,6 +728,9 @@ Resources:
             ExpirationInDays: !Ref InvalidFilesBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   InvalidFilesBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -548,12 +752,22 @@ Resources:
 
   FailedTransferBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -562,8 +776,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -576,6 +788,9 @@ Resources:
             ExpirationInDays: !Ref FailedTransferBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   FailedTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -597,13 +812,23 @@ Resources:
 
   DataTransferBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
     DependsOn: TransferQueuePolicy
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
       LoggingConfiguration:
-        DestinationBucketName:
-          Fn::ImportValue: !Sub access-logs-bucket-${ResourceSuffix}
+        DestinationBucketName: !Ref AccessLogBucketName
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
@@ -616,8 +841,6 @@ Resources:
         QueueConfigurations:
           - Event: s3:ObjectCreated:*
             Queue: !GetAtt TransferQueue.Arn
-      VersioningConfiguration:
-        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: LifeCycleRule-1
@@ -630,6 +853,9 @@ Resources:
             ExpirationInDays: !Ref DataTransferBucketExpirationInDays
             NoncurrentVersionExpiration:
               NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   DataTransferBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -653,7 +879,10 @@ Resources:
             Action:
               - s3:GetObject
               - s3:GetObjectTagging
-            Resource: !Sub ${DataTransferBucket.Arn}/*
+              - s3:ListBucket
+            Resource:
+              - !Sub ${DataTransferBucket.Arn}
+              - !Sub ${DataTransferBucket.Arn}/*
             Condition:
               ArnEquals:
                 aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
@@ -666,8 +895,53 @@ Resources:
               Action:
                 - s3:GetObject
                 - s3:GetObjectTagging
-              Resource: !Sub ${DataTransferBucket.Arn}/*
+                - s3:ListBucket
+              Resource:
+                - !Sub ${DataTransferBucket.Arn}
+                - !Sub ${DataTransferBucket.Arn}/*
             - !Ref AWS::NoValue
+
+  DfdlInputBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21 # Ensure the S3 bucket has versioning enabled
+            comment: Versioning not enabled intentionally
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt PipelineKmsKey.Arn
+            BucketKeyEnabled: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogBucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: LifeCycleRule-1
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: !Ref TranstionToGlacierIR
+                StorageClass: GLACIER_IR
+              - TransitionInDays: !Ref TransitionToDeepArchive
+                StorageClass: DEEP_ARCHIVE
+            ExpirationInDays: !Ref DfdlInputBucketExpirationInDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarkerLifecycleRule
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   LambdaFunctionsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -714,11 +988,27 @@ Resources:
       DisplayName: Infected File SNS Topic
       KmsMasterKeyId: alias/aws/sns
 
+  InfectedFileTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref InfectedFileTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
   InvalidFilesTopic:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Invalid File SNS Topic
       KmsMasterKeyId: alias/aws/sns
+
+  InvalidFilesTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref InvalidFilesTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
 
   AutoScalingGroupLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -728,6 +1018,14 @@ Resources:
           Arn: !GetAtt Ec2ScannerInstanceProfile.Arn
         ImageId: !Ref PipelineAmiId
         InstanceType: m5.large
+        BlockDeviceMappings:
+          # TODO: Get the device name dynamically
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 50
+              VolumeType: gp3
+              # Encrypted: true
+              # KmsKeyId: !Ref PipelineKmsKey
         Monitoring:
           Enabled: false
         MetadataOptions:
@@ -754,7 +1052,6 @@ Resources:
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref AutoScalingGroupLaunchTemplate
-        # TODO: Determine if we need to set this to Default using an API
         Version: !GetAtt AutoScalingGroupLaunchTemplate.DefaultVersionNumber
       MaxSize: "12"
       MinSize: "2"
@@ -763,6 +1060,20 @@ Resources:
         - Key: Name
           PropagateAtLaunch: false
           Value: !Sub ValidationPipeline/AutoScalingGroup-${ResourceSuffix}
+
+  SsmAgentUpdateAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: !Sub UpdateSSMAgent-${ResourceSuffix}
+      Name: AWS-UpdateSSMAgent
+      ScheduleExpression: !Ref SsmAgentUpdateInterval
+      ApplyOnlyAtCronInterval: true
+      MaxConcurrency: !Ref MaxConcurrency
+      MaxErrors: !Ref MaxErrors
+      Targets:
+        - Key: tag:Name
+          Values:
+            - !Sub ValidationPipeline/ValidationInstance-${ResourceSuffix}
 
   AsgScaleUpAction:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -954,8 +1265,7 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Dimensions:
         - Name: QueueName
-          Value:
-            Fn::ImportValue: !Sub aftac-pipeline-av-scan-queue-name-${ResourceSuffix}
+          Value: !Ref AvScanQueueName
       EvaluationPeriods: 1
       MetricName: ApproximateNumberOfMessagesVisible
       Namespace: AWS/SQS
@@ -979,9 +1289,19 @@ Resources:
       DisplayName: FailedTransferTopic
       KmsMasterKeyId: alias/aws/sns
 
+  FailedTransferTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref FailedTransferTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
   TransferResultEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
+      BatchSize: 1
+      Enabled: true
       EventSourceArn: !GetAtt TransferResultQueue.Arn
       FunctionName: !Ref TransferResultLambda
 
@@ -995,7 +1315,7 @@ Resources:
       # KmsMasterKeyId: alias/aws/sqs
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt TransferDlq.Arn
-        maxReceiveCount: 1
+        maxReceiveCount: 5 # This should match the number defined in data transfer Lambda function in the Diode account
 
   TransferQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -1027,12 +1347,22 @@ Resources:
               - sqs:ReceiveMessage
               - sqs:DeleteMessage
               - sqs:GetQueueAttributes
+              - sqs:ChangeMessageVisibility
             Resource: !GetAtt TransferQueue.Arn
             Condition:
               ArnEquals:
                 aws:PrincipalArn: !Sub arn:${AWS::Partition}:iam::${DiodeAccountId}:role/${IamPrefix}-DataTransferLambdaRole-${ResourceSuffix}
       Queues:
         - !Ref TransferQueue
+
+  TransferResultDlq:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
 
   TransferResultQueue:
     Type: AWS::SQS::Queue
@@ -1041,10 +1371,11 @@ Resources:
     Properties:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
-      # KmsMasterKeyId: alias/aws/sqs
-      # RedrivePolicy:
-      #   deadLetterTargetArn: String
-      #   maxReceiveCount: 1
+      VisibilityTimeout: 30 # Default value
+      KmsMasterKeyId: !GetAtt PipelineKmsKey.Arn
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TransferResultDlq.Arn
+        maxReceiveCount: 5
 
   TransferResultQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -1112,21 +1443,21 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
-  ApprovedFileTypesParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /pipeline/ApprovedFileTypes-${ResourceSuffix}
-      Description: Filetypes which are authorized for low to high transfer
-      Type: StringList
-      Value: !Ref ApprovedFileTypes
-
   DfdlApprovedFileTypesParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /pipeline/DfdlApprovedFileTypes-${ResourceSuffix}
-      Description: Filetypes which are authorized for low to high transfer after DFDL Conversion
+      Description: File types which are authorized for low to high transfer after DFDL Conversion
       Type: StringList
       Value: !Ref DfdlApprovedFileTypes
+
+  ExemptFileTypesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/ExemptFileTypes-${ResourceSuffix}
+      Description: File types that should bypass file type validation
+      Type: StringList
+      Value: !If [ExemptFileTypesBlank, " ", !Ref ExemptFileTypes]
 
   InvalidFilesBucketNameParameter:
     Type: AWS::SSM::Parameter
@@ -1142,7 +1473,7 @@ Resources:
       Name: !Sub /pipeline/InvalidFilesTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which fail content-type validation are published to.
       Type: String
-      Value: !GetAtt InvalidFilesTopic.TopicArn
+      Value: !Ref InvalidFilesTopic
 
   DataTransferIngestBucketNameParameter:
     Type: AWS::SSM::Parameter
@@ -1152,6 +1483,14 @@ Resources:
       Type: String
       Value: !Ref DataTransferBucket
 
+  DfdlInputBucketNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /pipeline/DfdlInputBucketName-${ResourceSuffix}
+      Description: Name of the bucket where files are staged for diode processing
+      Type: String
+      Value: !Ref DfdlInputBucket
+
   QuarantineBucketNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -1160,21 +1499,253 @@ Resources:
       Type: String
       Value: !Ref QuarantineBucket
 
-  LongTermStorageBucketNameParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /pipeline/LongTermStorageBucketName-${ResourceSuffix}
-      Description: Name of the Archive Bucket
-      Type: String
-      Value: !Ref LongTermStorageBucket
-
   QuarantineTopicARNParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /pipeline/QuarantineTopicArn-${ResourceSuffix}
       Description: ARN of the SNS Topic where files which are deemed to potentially contain malware are published to.
       Type: String
-      Value: !GetAtt InfectedFileTopic.TopicArn
+      Value: !Ref InfectedFileTopic
+
+  QueueMonitorTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Queue Monitor Alert Topic
+      KmsMasterKeyId: alias/aws/sns
+
+  QueueMonitorTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref QueueMonitorTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
+  QueueMonitorDLQTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Queue Monitor DLQ Topic
+      KmsMasterKeyId: alias/aws/sns
+
+  QueueMonitorDLQTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: SendEmailNotifications
+    Properties:
+      TopicArn: !Ref QueueMonitorDLQTopic
+      Protocol: email
+      Endpoint: !Ref EmailEndPoint
+
+  QueueMonitorLogGroup:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/queue-monitor-${ResourceSuffix}
+      RetentionInDays: 90
+
+  QueueMonitorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-QueueMonitor-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt QueueMonitorLogGroup.Arn
+        - PolicyName: AllowSQSAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt TransferQueue.Arn
+                  - !GetAtt TransferDlq.Arn
+                  - !GetAtt TransferResultQueue.Arn
+                  - !GetAtt TransferResultDlq.Arn
+                  - !Ref AvScanQueueArn
+                  - !Ref AvScanDeadLetterQueueArn
+
+        - PolicyName: AllowSNSPublish
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource:
+                  - !Ref QueueMonitorTopic
+                  - !Ref QueueMonitorDLQTopic
+
+  QueueMonitorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub queue-monitor-${ResourceSuffix}
+      Handler: index.lambda_handler
+      Role: !GetAtt QueueMonitorRole.Arn
+      Runtime: python3.11
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      DeadLetterConfig:
+        TargetArn: !Ref QueueMonitorDLQTopic
+      LoggingConfig:
+        LogGroup: !Ref QueueMonitorLogGroup
+      Environment:
+        Variables:
+          TOPIC_ARN: !Ref QueueMonitorTopic
+          TRANSFER_QUEUE_NAME: !GetAtt TransferQueue.QueueName
+          TRANSFER_DLQ_NAME: !GetAtt TransferDlq.QueueName
+          TRANSFER_RESULT_QUEUE_NAME: !GetAtt TransferResultQueue.QueueName
+          TRANSFER_RESULT_DLQ_NAME: !GetAtt TransferResultDlq.QueueName
+          AV_SCAN_QUEUE_NAME: !Ref AvScanQueueName
+          AV_SCAN_DLQ_NAME: !Ref AvScanDeadLetterQueueName
+          AV_SCAN_QUEUE_URL: !Ref AvScanQueueUrl
+          AV_SCAN_DLQ_URL: !Ref AvScanDeadLetterQueueUrl
+          TRANSFER_QUEUE_URL: !Ref TransferQueue
+          TRANSFER_DLQ_URL: !Ref TransferDlq
+          RESULT_QUEUE_URL: !Ref TransferResultQueue
+          RESULT_DLQ_URL: !Ref TransferResultDlq
+          TRANSFER_QUEUE_THRESHOLD: !Ref TransferQueueThreshold
+          RESULT_QUEUE_THRESHOLD: !Ref ResultQueueThreshold
+          AV_SCAN_QUEUE_THRESHOLD: !Ref AvScanQueueThreshold
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          from datetime import datetime, timezone
+
+          import boto3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          SQS = boto3.client('sqs')
+          SNS = boto3.client('sns')
+
+          QUEUE_CONFIGS = [
+              {
+                  "name": os.environ['TRANSFER_QUEUE_NAME'],
+                  "url": os.environ['TRANSFER_QUEUE_URL'],
+                  "threshold": int(os.environ['TRANSFER_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['TRANSFER_DLQ_NAME'],
+                  "url": os.environ['TRANSFER_DLQ_URL'],
+                  "threshold": 1
+              },
+              {
+                  "name": os.environ['TRANSFER_RESULT_QUEUE_NAME'],
+                  "url": os.environ['RESULT_QUEUE_URL'],
+                  "threshold": int(os.environ['RESULT_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['TRANSFER_RESULT_DLQ_NAME'],
+                  "url": os.environ['RESULT_DLQ_URL'],
+                  "threshold": 1
+              },
+              {
+                  "name": os.environ['AV_SCAN_QUEUE_NAME'],
+                  "url": os.environ['AV_SCAN_QUEUE_URL'],
+                  "threshold": int(os.environ['AV_SCAN_QUEUE_THRESHOLD'])
+              },
+              {
+                  "name": os.environ['AV_SCAN_DLQ_NAME'],
+                  "url": os.environ['AV_SCAN_DLQ_URL'],
+                  "threshold": 1
+              }
+          ]
+
+          def check_queue(queue_config):
+              try:
+                  response = SQS.get_queue_attributes(
+                      QueueUrl=queue_config['url'],
+                      AttributeNames=['ApproximateNumberOfMessages']
+                  )
+                  messages = int(response['Attributes']['ApproximateNumberOfMessages'])
+                  return {
+                      'name': queue_config['name'],
+                      'messages': messages,
+                      'threshold': queue_config['threshold'],
+                      'exceeds_threshold': messages > queue_config['threshold']
+                  }
+              except Exception as e:
+                  logger.error(f"Error checking queue {queue_config['name']}: {str(e)}")
+                  return None
+
+          def lambda_handler(event, context):
+              alerts = []
+              error_queues = []
+
+              for queue_config in QUEUE_CONFIGS:
+                  status = check_queue(queue_config)
+                  if status is None:
+                      error_queues.append(queue_config['name'])
+                  elif status['exceeds_threshold']:
+                      alerts.append(status)
+
+              logger.info(f"Error queues: {error_queues}")
+              if error_queues:
+                  message = f"Queue Error - {datetime.now(timezone.utc).isoformat()}\n\n"
+                  message += "The following queue(s) could not be checked:\n\n"
+
+                  for error_queue in error_queues:
+                      message += f"Queue: {error_queue}\n\n"
+
+                  SNS.publish(
+                      TopicArn=os.environ['TOPIC_ARN'],
+                      Subject="Queue Monitor Errors",
+                      Message=message
+                  )
+
+              logger.info(f"Alerts: {alerts}")
+              if alerts:
+                  message = f"Queue Alert - {datetime.now(timezone.utc).isoformat()}\n\n"
+                  message += "The following queue(s) have exceeded their thresholds:\n\n"
+
+                  for alert in alerts:
+                      message += f"Queue: {alert['name']}\n"
+                      message += f"Current Messages: {alert['messages']}\n"
+                      message += f"Threshold: {alert['threshold']}\n\n"
+
+                  SNS.publish(
+                      TopicArn=os.environ['TOPIC_ARN'],
+                      Subject="Queue Monitor Alert",
+                      Message=message
+                  )
+
+              logger.info("Lambda execution completed")
+
+  QueueMonitorScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Trigger queue monitoring Lambda function
+      ScheduleExpression: !Ref QueueMonitoringInterval
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt QueueMonitorFunction.Arn
+          Id: QueueMonitorFunction
+
+  QueueMonitorLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref QueueMonitorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt QueueMonitorScheduleRule.Arn
 
 Outputs:
   DataTransferBucketName:
@@ -1188,3 +1759,29 @@ Outputs:
   DataTransferResultSqsQueueArn:
     Description: Data Transfer Result SQS Queue ARN
     Value: !GetAtt TransferResultQueue.Arn
+
+  DfdlInputBucketName:
+    Description: Dfdl Bucket Name
+    Value: !Ref DfdlInputBucket
+
+  PipelineKmsKeyArn:
+    Description: Pipeline KMS Key ARN
+    Value: !GetAtt PipelineKmsKey.Arn
+
+  PipelineAutoScalingGroupName:
+    Description: Pipeline AutoScaling Group Name
+    Value: !Ref PipelineAutoScalingGroup
+    Export:
+      Name: !Sub aftac-pipeline-asg-name-${ResourceSuffix}
+
+  LaunchTemplateId:
+    Description: Launch Template ID
+    Value: !Ref AutoScalingGroupLaunchTemplate
+    Export:
+      Name: !Sub aftac-pipeline-launch-template-name-${ResourceSuffix}
+
+  Ec2ScannerRoleArn:
+    Description: ARN of the role used by the EC2 Scanner
+    Value: !GetAtt Ec2ScannerRole.Arn
+    Export:
+      Name: !Sub aftac-pipeline-ec2-scanner-role-arn-${ResourceSuffix}

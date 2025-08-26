@@ -91,14 +91,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
-                  - s3:GetBucketAcl
                   - s3:PutBucketAcl
                   - s3:GetObject
                   - s3:GetObjectVersion
-                  - s3:PutObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:DeleteObject
                   - s3:DeleteObjectVersion
                   - s3:ListBucket
-                  - s3:DeleteObject
                   - s3:GetBucketLocation
                 Resource: !Sub arn:${AWS::Partition}:s3:::*
 

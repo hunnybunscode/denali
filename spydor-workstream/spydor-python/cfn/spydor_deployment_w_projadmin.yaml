@@ -1,0 +1,714 @@
+Parameters:
+
+  ContainerImage:
+    Type: String
+    Description: The ECR image URI that contains the application
+    Default: tomcat:9.0
+  ContainerPort:
+    Type: String
+    Description: The port on which the targets receive traffic. This port is used unless you specify a port override when registering the target.
+    Default: 8080
+  HealthCheckSuccessCode:
+    Type: String
+    Description: The success code for the Container health check
+    Default: 200
+  HealthCheckPath:
+    Type: String
+    Description: The path for the Container health check
+    Default: /
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The CIDR block to use for VPC.  It is recommended not to use a cidr block that overlaps with any existing CIDRs within the same account.
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The Subnet IDs (must select 2) that will be used for the Load Balancer.  These Subnets must exist in separate Availability Zones
+  FargateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The Subnet IDs (must select 2) that will be used for the Fargate Cluster.  These Subnets must exist in separate Availability Zones
+
+  DatabaseSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The Subnet IDs (must select 2) that will be used for the Database.  These Subnets must exist in separate Availability Zones
+
+
+
+
+  TaskCpu:
+    Type: String
+    Description: The CPU Units for the Fargate Task
+    Default: '512'
+    AllowedValues:
+      - '256'
+      - '512'
+      - '1024'
+      - '2048'
+      - '4096'
+      - '8192'
+
+  TaskMemory:
+    Type: String
+    Description: The memory (MB) for the Fargate task
+    Default: '1024'
+    AllowedValues:
+      - '512'
+      - '1024'
+      - '2048'
+      - '3072'
+      - '4096'
+      - '5120'
+      - '6144'
+      - '7168'
+      - '8192'
+
+  RdsLicenseModel:
+    Type: String
+    Description: The license model for the Oracle RDS instance
+    Default: 'bring-your-own-license'
+    AllowedValues:
+      - 'bring-your-own-license'
+      - 'license-included'
+  RdsInstanceClass:
+    Type: String
+    Description: The instance class for the Oracle RDS instance
+    Default: 'db.t3.medium'
+    AllowedValues:
+      - 'db.t3.medium'
+      - 'db.t3.large'
+      - 'db.m5.large'
+      - 'db.m5.medium'
+  RdsProvisionedStorage:
+    Type: String
+    Description: The provisioned storage for the Oracle RDS instance in Gigabytes.
+    Default: '100'
+  RdsEngineVersion:
+    Type: String
+    Description: The Oracle engine version for the Oracle RDS instance.
+    Default: 19.0.0.0.ru-2025-07.rur-2025-07.r1
+
+
+  PermissionsBoundaryArn:
+    Type: String
+    Description: The ARN of the IAM Permissions Boundary Policy to attach to all IAM Roles
+  RolePrefix:
+    Type: String
+    Description: The prefix for the IAM roles to be created as required by the Permissions Boundary
+    Default: AFC2S_
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "PROJADMIN Requirements"
+        Parameters:
+          - RolePrefix
+          - PermissionsBoundaryArn
+      - Label:
+          default: "Application Configuration"
+        Parameters:
+          - ContainerImage
+          - ContainerPort
+          - HealthCheckPath
+          - HealthCheckSuccessCode
+          - spidorSslCertArn
+      - Label:
+          default: "Task Configuration"
+        Parameters:
+          - TaskCpu
+          - TaskMemory
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VpcId
+          - PublicSubnetIds
+          - FargateSubnetIds
+          - DatabaseSubnetIds
+
+      - Label:
+          default: "Database Configuration"
+        Parameters:
+          - RdsLicenseModel
+          - RdsInstanceClass
+          - RdsProvisionedStorage
+Resources:
+
+  spidorinfraalbsg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: spidorInfraStack/spidor_infra_alb_sg
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          Description: 'from 0.0.0.0/0:80'
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          Description: 'from 0.0.0.0/0:443'
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      VpcId:
+        Ref: VpcId
+
+  spidorinfrafargatesg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: spidorInfraStack/spidor_infra_fargate_sg
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId:
+        Ref: VpcId
+
+  spidorinfrafargatesgfromspidorInfraStackspidorinfraalbsg:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: !Sub 'from spidorInfraStackspidorinfraalbsg:${ContainerPort}'
+      FromPort: !Ref ContainerPort
+      GroupId:
+        'Fn::GetAtt':
+          - spidorinfrafargatesg
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - spidorinfraalbsg
+          - GroupId
+      ToPort: !Ref ContainerPort
+
+  spidorinfradatabasesg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: spidorInfraStack/spidor_infra_database_sg
+      SecurityGroupEgress:
+        - CidrIp: 255.255.255.255/32
+          Description: Disallow all traffic
+          FromPort: 252
+          IpProtocol: icmp
+          ToPort: 86
+      VpcId:
+        Ref: VpcId
+
+  spidorinfradatabasesgfromspidorInfraStackspidorinfrafargatesg:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: 'from spidorInfraStackspidorinfrafargatesg1:1521'
+      FromPort: 1521
+      GroupId:
+        'Fn::GetAtt':
+          - spidorinfradatabasesg
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - spidorinfrafargatesg
+          - GroupId
+      ToPort: 1521
+
+  spidorinfraefssg:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: spidorInfraStack/spidor_infra_efs_sg
+      SecurityGroupEgress:
+        - CidrIp: 255.255.255.255/32
+          Description: Disallow all traffic
+          FromPort: 252
+          IpProtocol: icmp
+          ToPort: 86
+      VpcId:
+        Ref: VpcId
+
+  spidorinfraefssgfromspidorInfraStackspidorinfrafargates:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: 'from spidorInfraStackspidorinfrafargatesg:2049'
+      FromPort: 2049
+      GroupId:
+        'Fn::GetAtt':
+          - spidorinfraefssg
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        'Fn::GetAtt':
+          - spidorinfrafargatesg
+          - GroupId
+      ToPort: 2049
+
+  spidorinfracluster:
+    Type: 'AWS::ECS::Cluster'
+
+  spidorinfrafargateloggroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: /aws/ecs/spidor-infra-fargate
+      RetentionInDays: 7
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  spidorinfralogsbucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  spidorinfralogsbucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:
+        Ref: spidorinfralogsbucket
+      PolicyDocument:
+        Statement:
+          - Action: 's3:*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Resource:
+              - 'Fn::GetAtt':
+                  - spidorinfralogsbucket
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - spidorinfralogsbucket
+                        - Arn
+                    - /*
+        Version: '2012-10-17'
+
+  spidorinframdlbucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  spidorinframdlbucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:
+        Ref: spidorinframdlbucket
+      PolicyDocument:
+        Statement:
+          - Action: 's3:*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+            Effect: Deny
+            Principal:
+              AWS: '*'
+            Resource:
+              - 'Fn::GetAtt':
+                  - spidorinframdlbucket
+                  - Arn
+              - 'Fn::Join':
+                  - ''
+                  - - 'Fn::GetAtt':
+                        - spidorinframdlbucket
+                        - Arn
+                    - /*
+        Version: '2012-10-17'
+
+  # VPC Endpoints for AWS Services
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds: []
+
+  ECRDkrVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  ECRApiVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.api'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  CloudWatchLogsVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  CloudWatchMonitoringVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.monitoring'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SSMMessagesVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  SecretsManagerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcEndpointType: Interface
+      SubnetIds: !Ref FargateSubnetIds
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  # Security Group for VPC Endpoints
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC endpoints
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref spidorinfrafargatesg
+          Description: Allow HTTPS from Fargate tasks
+      SecurityGroupEgress:
+        - CidrIp: 255.255.255.255/32
+          Description: Disallow all outbound traffic
+          FromPort: 252
+          IpProtocol: icmp
+          ToPort: 86
+
+  spidorinfraefs:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      Encrypted: true
+      ## Not Available in IsoB
+      # BackupPolicy:
+      #   Status: ENABLED
+      FileSystemPolicy:
+        Statement:
+          - Action:
+              - 'elasticfilesystem:ClientRootAccess'
+              - 'elasticfilesystem:ClientWrite'
+              - 'elasticfilesystem:ClientMount'
+            Condition:
+              Bool:
+                'elasticfilesystem:AccessedViaMountTarget': 'true'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+        Version: '2012-10-17'
+# Test With ProjAdmin
+      FileSystemTags:
+        - Key: Name
+          Value: spidorInfraStack/spidor_infra_efs
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+
+  spidorinfraefsEfsMountTargetFargateSubnet1:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId:
+        Ref: spidorinfraefs
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - spidorinfraefssg
+            - GroupId
+      SubnetId: !Select [0,FargateSubnetIds]
+  spidorinfraefsEfsMountTargetFargateSubnet2:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId:
+        Ref: spidorinfraefs
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - spidorinfraefssg
+            - GroupId
+      SubnetId: !Select [1,FargateSubnetIds]
+
+  spidorinfradbSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnet group for spidor_infra_db database
+      SubnetIds: !Ref DatabaseSubnetIds
+
+  spidorinfradbSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Description:
+        'Fn::Join':
+          - ''
+          - - 'Generated by the CDK for stack: '
+            - Ref: 'AWS::StackName'
+      GenerateSecretString:
+        ExcludeCharacters: ' %+~`#$&*()|[]{}:;<>?!''/@"\'
+        GenerateStringKey: password
+        PasswordLength: 30
+        SecretStringTemplate: '{"username":"admin"}'
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  spidorinfradbSecretAttachment:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Properties:
+      SecretId:
+        Ref: spidorinfradbSecret
+      TargetId:
+        Ref: spidorinfradb
+      TargetType: 'AWS::RDS::DBInstance'
+
+  spidorinfradb:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllocatedStorage: !Ref RdsProvisionedStorage
+      CopyTagsToSnapshot: true
+      LicenseModel: !Ref RdsLicenseModel
+      DBInstanceClass: !Ref RdsInstanceClass
+      DBSubnetGroupName:
+        Ref: spidorinfradbSubnetGroup
+      Engine: oracle-ee
+      EngineVersion: !Ref RdsEngineVersion
+      MasterUserPassword:
+        'Fn::Join':
+          - ''
+          - - '{{resolve:secretsmanager:'
+            - Ref: spidorinfradbSecret
+            - ':SecretString:password::}}'
+      MasterUsername:
+        'Fn::Join':
+          - ''
+          - - '{{resolve:secretsmanager:'
+            - Ref: spidorinfradbSecret
+            - ':SecretString:username::}}'
+      MultiAZ: true
+      PubliclyAccessible: false
+      StorageType: gp3
+      VPCSecurityGroups:
+        - 'Fn::GetAtt':
+            - spidorinfradatabasesg
+            - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+
+  spidorinfrafargatetaskTaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Ref PermissionsBoundaryArn
+      RoleName: 
+        Fn::Join:
+          - ''
+          - - !Ref RolePrefix
+            - "spidorInfraFargateTaskRole"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+
+  spidorinfrafargatetaskExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      PermissionsBoundary: !Ref PermissionsBoundaryArn
+      RoleName: 
+        Fn::Join:
+          - ''
+          - - !Ref RolePrefix
+            - "spidorInfraFargateTaskExecutionRole"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - 'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  spidorinfrafargatetask:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      ContainerDefinitions:
+        - Essential: true
+          Image: !Ref ContainerImage
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: spidorinfrafargateloggroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: spidor_infra_fargate
+          MountPoints:
+            - ContainerPath: /mnt/efs
+              ReadOnly: false
+              SourceVolume: efs-volume
+          Name: spidor_infra_fargate_container
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+      Cpu: !Ref TaskCpu
+      Family: spidorInfraStackspidorinfrafargatetask
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn:
+        'Fn::GetAtt':
+          - spidorinfrafargatetaskTaskRole
+          - Arn
+      ExecutionRoleArn:
+        'Fn::GetAtt':
+          - spidorinfrafargatetaskExecutionRole
+          - Arn
+      Volumes:
+        - EFSVolumeConfiguration:
+            FilesystemId:
+              Ref: spidorinfraefs
+          Name: efs-volume
+
+  spidorinfraalb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: 'false'
+      Scheme: internet-facing
+      SecurityGroups:
+        - 'Fn::GetAtt':
+            - spidorinfraalbsg
+            - GroupId
+      Subnets: !Ref PublicSubnetIds
+      Type: application
+
+# Allow HTTP Traffic
+  spidorinfraalbspidorlistener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: spidortargetgroup
+          Type: forward
+      LoadBalancerArn:
+        Ref: spidorinfraalb
+      Port: 80
+      Protocol: HTTP
+
+# Redirect HTTP to HTTPS
+  # spidorinfraalbhttpsredirect:
+  #   Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  #   Properties:
+  #     DefaultActions:
+  #       - Type: redirect
+  #         RedirectConfig:
+  #           Port: 443
+  #           Protocol: HTTPS
+  #           StatusCode: HTTP_301
+  #     LoadBalancerArn:
+  #       Ref: spidorinfraalb
+  #     Port: 80
+  #     Protocol: HTTP
+
+  # spidorinfraalbhttpslistener:
+  #   Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  #   Properties:
+  #     DefaultActions:
+  #       - TargetGroupArn:
+  #           Ref: spidortargetgroup
+  #         Type: forward
+  #     LoadBalancerArn:
+  #       Ref: spidorinfraalb
+  #     Port: 443
+  #     Protocol: HTTPS
+  #     Certificates:
+  #       - CertificateArn: !Ref spidorSslCertArn
+
+
+  spidorinfrafargateserviceService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster:
+        Ref: spidorinfracluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      EnableECSManagedTags: false
+      HealthCheckGracePeriodSeconds: 60
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: spidor_infra_fargate_container
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn:
+            Ref: spidortargetgroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - 'Fn::GetAtt':
+                - spidorinfrafargatesg
+                - GroupId
+          Subnets: !Ref FargateSubnetIds
+      TaskDefinition:
+        Ref: spidorinfrafargatetask
+    DependsOn:
+      - spidorinfraalbspidorlistener
+      - spidorinfrafargatetaskTaskRole
+
+  spidortargetgroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckPath: !Ref HealthCheckPath
+      Matcher:
+        HttpCode: !Ref HealthCheckSuccessCode
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: 'false'
+      TargetType: ip
+      VpcId:
+        Ref: VpcId
+
+

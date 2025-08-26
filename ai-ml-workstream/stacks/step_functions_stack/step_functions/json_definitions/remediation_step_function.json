@@ -1,0 +1,569 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Grab File Contents from Git",
+  "States": {
+    "Grab File Contents from Git": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_FILE_CRUD}}",
+        "Payload": {
+          "repo_url": "{% $states.input.original_input.codeRepo %}",
+          "file_path": "{% $states.input.fortify_finding.sourceFileRelative %}",
+          "branch": "{% $states.input.original_input.mainBranch %}",
+          "secret_name": "gitea/api/token"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Pass",
+      "Assign": {
+        "input": "{% $states.input.original_input %}",
+        "fortify_finding": "{% $states.input.fortify_finding %}",
+        "init": true
+      }
+    },
+    "Pass": {
+      "Type": "Pass",
+      "Next": "Fix Finding with Claud3.5 Bedrock",
+      "Output": {
+        "payload": {
+          "fortify_result": "{% $fortify_finding %}",
+          "file_content": "{% $states.input.content %}"
+        }
+      },
+      "Assign": {
+        "file_content": "{% $states.input.content %}",
+        "attempt_count": 0
+      }
+    },
+    "Fix Finding with Claud3.5 Bedrock": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{BEDROCK_LLM_CALL}}",
+        "Payload": "{% $states.input.payload %}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Initilize Git?",
+      "Assign": {
+        "llm_output": "{% $states.result.Payload %}"
+      }
+    },
+    "Initilize Git?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Parallel",
+          "Condition": "{% ($init) = (true) %}"
+        },
+        {
+          "Next": "Is False Positive?",
+          "Condition": "{% ($init) = (false) %}"
+        }
+      ]
+    },
+    "Parallel": {
+      "Type": "Parallel",
+      "Next": "Init Complete",
+      "Branches": [
+        {
+          "StartAt": "Create Branch in Code Repo",
+          "States": {
+            "Create Branch in Code Repo": {
+              "Type": "Task",
+              "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_BRANCH_CRUD}}",
+                "Payload": {
+                  "operation": "create",
+                  "repo_url": "{% $input.codeRepo %}",
+                  "base_branch": "{% $input.mainBranch %}",
+                  "branch_name": "{% $llm_output.branchName %}",
+                  "secret_name": "{% $input.secretName %}",
+                  "create_behavior": "delete_if_exists"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Create Branch in Finding repo",
+          "States": {
+            "Create Branch in Finding repo": {
+              "Type": "Task",
+              "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_BRANCH_CRUD}}",
+                "Payload": {
+                  "operation": "create",
+                  "repo_url": "{% $input.scanResultsRepo %}",
+                  "base_branch": "{% $input.mainBranch %}",
+                  "branch_name": "{% $llm_output.branchName %}",
+                  "secret_name": "{% $input.secretName %}",
+                  "create_behavior": "delete_if_exists"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Create Issue for LLM Comments (Code Repo)",
+          "States": {
+            "Create Issue for LLM Comments (Code Repo)": {
+              "Type": "Task",
+              "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_ISSUES_CRUD}}",
+                "Payload": {
+                  "operation": "create",
+                  "repo_url": "{% $input.codeRepo %}",
+                  "title": "{% $llm_output.issueTitle %}",
+                  "body": "{% $llm_output.issueBody %}",
+                  "labels": "{% $llm_output.issueLabels %}",
+                  "branch": "{% $llm_output.branchName %}",
+                  "secret_name": "{% $input.secretName %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+      ]
+    },
+    "Init Complete": {
+      "Type": "Pass",
+      "Next": "Is False Positive?",
+      "Assign": {
+        "init": false
+      }
+    },
+    "Is False Positive?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Create PR (Issues Resolved)",
+          "Condition": "{% ($llm_output.parsed_sections.false_positive) = (\"TRUE\") %}"
+        }
+      ],
+      "Default": "Merge and Push Code"
+    },
+    "Delete Branches": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_BRANCH_CRUD}}:$LATEST",
+        "Payload": [
+          {
+            "operation": "delete",
+            "repo_url": "{% $input.codeRepo %}",
+            "branch_name": "{% $llm_output.branchName %}",
+            "secret_name": "{% $input.secretName %}"
+          },
+          {
+            "operation": "delete",
+            "repo_url": "{% $input.scanResultsRepo %}",
+            "branch_name": "{% $llm_output.branchName %}",
+            "secret_name": "{% $input.secretName %}"
+          }
+        ]
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Fail"
+    },
+    "Merge and Push Code": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_CODE_MERGE_AND_PUSH}}",
+        "Payload": {
+          "repo_url": "{% $input.codeRepo %}",
+          "branch_name": "{% $llm_output.branchName %}",
+          "file_path": "{% $fortify_finding.sourceFileRelative %}",
+          "content": "{% $llm_output.codeBody %}",
+          "commit_message": "{% $llm_output.commitMessage %}",
+          "secret_name": "gitea/api/token"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Run Fortify Scan on Instance & Push Results to Git",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Comment": "All",
+          "Next": "Delete Branches"
+        }
+      ]
+    },
+    "Run Fortify Scan on Instance & Push Results to Git": {
+      "Type": "Task",
+      "Arguments": {
+        "DocumentName": "{% $input.scanDocumentName %}",
+        "InstanceIds": [
+          "{% $input.fortifyScanInstanceID %}"
+        ],
+        "Parameters": {
+          "BranchName": [
+            "{% $llm_output.branchName %}"
+          ]
+        }
+      },
+      "Resource": "arn:aws-us-gov:states:::aws-sdk:ssm:sendCommand",
+      "Next": "Give time for Invocation",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Comment": "All",
+          "Next": "Delete Branches"
+        }
+      ]
+    },
+    "Give time for Invocation": {
+      "Type": "Wait",
+      "Seconds": 1,
+      "Next": "Check if Scan is Complete",
+      "Output": {
+        "CommandId": "{% $states.input.Command.CommandId %}",
+        "InstanceId": "{% $states.input.Command.InstanceIds[0] %}"
+      }
+    },
+    "Check if Scan is Complete": {
+      "Type": "Task",
+      "Arguments": {
+        "CommandId": "{% $states.input.CommandId %}",
+        "InstanceId": "{% $states.input.InstanceId %}"
+      },
+      "Resource": "arn:aws-us-gov:states:::aws-sdk:ssm:getCommandInvocation",
+      "Next": "Scan Result Paths"
+    },
+    "Scan Result Paths": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Wait",
+          "Condition": "{% (($states.input.StatusDetails) = (\"InProgress\") or ($states.input.StatusDetails) = (\"Pending\")) %}"
+        },
+        {
+          "Next": "Git: Grab New Scan Results",
+          "Condition": "{% ($states.input.StatusDetails) = (\"Success\") %}"
+        },
+        {
+          "Next": "Fix Finding with Claud3.5 Bedrock",
+          "Condition": "{% ($states.input.StatusDetails) = (\"Failed\") %}",
+          "Output": {
+            "payload": {
+              "compile_error": "{% $states.input.StandardErrorContent %}",
+              "attempt_count": "{% $attempt_count %}",
+              "previous_chat": "{% $llm_output %}",
+              "fortify_result": "{% $fortify_finding %}",
+              "file_content": "{% $file_content %}"
+            }
+          }
+        }
+      ],
+      "Default": "Fail"
+    },
+    "Git: Grab New Scan Results": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_FILE_CRUD}}:$LATEST",
+        "Payload": {
+          "repo_url": "{% $input.scanResultsRepo %}",
+          "file_path": "fortify-findings.fvdl",
+          "branch": "{% $llm_output.branchName %}",
+          "secret_name": "{% $input.secretName %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Dynamo Table Scan of Original Findings",
+      "Output": "{% $states.result.Payload %}"
+    },
+    "Dynamo Table Scan of Original Findings": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": {
+        "git_file": "{% $states.input %}",
+        "dynamo_scan_results": "{% $states.result.Payload.items %}",
+        "target_finding": "{% $fortify_finding %}"
+      },
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{DYNAMODB_TABLE_SCAN}}:$LATEST",
+        "Payload": {
+          "tableName": "{% $input.tableName %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Compare Findings"
+    },
+    "Compare Findings": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{VERIFY_FINDINGS_RESOLVED}}",
+        "Payload": "{% $states.input %}"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Results"
+    },
+    "Results": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Create PR (Issues Resolved)",
+          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) = (0) and ($states.input.comparison_results.summary.resolved_count) > (0) %}",
+          "Comment": "Finding Resolved"
+        },
+        {
+          "Next": "Fail",
+          "Condition": "{% ($states.input.statusCode) != (200) %}",
+          "Comment": "Scan Fail"
+        },
+        {
+          "Next": "Finding Not Resolved",
+          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) = (0) and ($states.input.comparison_results.summary.resolved_count) = (0) and $attempt_count < $input.retry_max %}",
+          "Comment": "Finding Not Resolved and max retries not reached."
+        },
+        {
+          "Next": "New Findings Created",
+          "Condition": "{% ($states.input.statusCode) = (200) and ($states.input.comparison_results.summary.new_count) > (0) and $attempt_count < $input.retry_max %}",
+          "Comment": "New Findings Found and max retries not reached"
+        },
+        {
+          "Next": "Failed to Fix (Retry Max Hit)",
+          "Condition": "{% $attempt_count >= $input.retry_max %}",
+          "Comment": "Retry Max Reached"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "New Findings Created": {
+      "Type": "Pass",
+      "Next": "Fix Finding with Claud3.5 Bedrock",
+      "Output": {
+        "payload": {
+          "finding_not_resolved": "true",
+          "attempt_count": "{% $attempt_count %}",
+          "previous_chat": "{% $llm_output %}",
+          "fortify_result": "{% $fortify_finding %}",
+          "file_content": "{% $file_content %}"
+        }
+      },
+      "Assign": {
+        "attempt_count": "{% $attempt_count + 1 %}"
+      }
+    },
+    "Finding Not Resolved": {
+      "Type": "Pass",
+      "Next": "Fix Finding with Claud3.5 Bedrock",
+      "Output": {
+        "payload": {
+          "finding_not_resolved": "true",
+          "attempt_count": "{% $attempt_count %}",
+          "previous_chat": "{% $llm_output %}",
+          "fortify_result": "{% $fortify_finding %}",
+          "file_content": "{% $file_content %}"
+        }
+      },
+      "Assign": {
+        "attempt_count": "{% $attempt_count + 1 %}"
+      }
+    },
+    "Create PR (Issues Resolved)": {
+      "Type": "Task",
+      "Resource": "arn:aws-us-gov:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "arn:aws-us-gov:lambda:{{REGION}}:{{ACCOUNT_ID}}:function:{{GIT_PR_CRUD}}",
+        "Payload": {
+          "operation": "create",
+          "repo_url": "{% $input.codeRepo %}",
+          "source_branch": "{% $llm_output.branchName %}",
+          "target_branch": "{% $input.mainBranch %}",
+          "title": "{% $llm_output.prTitle %}",
+          "description": "{% $llm_output.prDescription %}",
+          "labels": [
+            "AI Fix"
+          ],
+          "assignees": [
+            "jakedlee"
+          ],
+          "secret_name": "{% $input.secretName %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "End": true
+    },
+    "Fail": {
+      "Type": "Fail"
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "Check if Scan is Complete"
+    },
+    "Failed to Fix (Retry Max Hit)": {
+      "Type": "Fail"
+    }
+  },
+  "QueryLanguage": "JSONata"
+}

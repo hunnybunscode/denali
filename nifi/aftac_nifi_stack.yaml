@@ -1,0 +1,1838 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Creates a NiFi cluster
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Configuration
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - ResourceSuffix
+
+      - Label:
+          default: Root CA Configuration
+        Parameters:
+          - RootKeySecretArn
+          - RootCertificateSecretArn
+          - RootCAKmsKeyArn
+
+      - Label:
+          default: NiFi Configuration
+        Parameters:
+          - NifiAdminUser
+          - NifiInstanceType
+          - NiFiInstanceVolumeType
+          - NiFiInstanceVolumeSize
+          - NiFiInstanceVolumeIops
+          - NiFiInstanceVolumeThroughput
+          - NifiClusterSize
+          - NiFiBinaryS3Uri
+          - DodCertBundleS3Uri
+          - ZkClusterInfoParameter
+
+      - Label:
+          default: Networking Configuration
+        Parameters:
+          - VpcId
+          - VpcCidr
+          - SubnetIds
+          - S3PrefixListId
+
+      - Label:
+          default: Image Builder Configuration
+        Parameters:
+          - SemVer
+          - ParentImage
+          - ProxyServerAddress
+          - NoProxyList
+          - BypassGpgCheck
+          - OutboundCidrIp
+
+      - Label:
+          default: Email Address for Notifications
+        Parameters:
+          - EmailAddress
+
+    ParameterLabels:
+      IamPrefix:
+        default: IAM Resource Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
+      ResourceSuffix:
+        default: Resource Suffix
+      RootKeySecretArn:
+        default: Root Key Secret ARN
+      RootCertificateSecretArn:
+        default: Root Certificate Secret ARN
+      RootCAKmsKeyArn:
+        default: Root CA KMS Key ARN
+      NifiAdminUser:
+        default: NiFi Admin User
+      NifiInstanceType:
+        default: NiFi Instance Type
+      NiFiInstanceVolumeType:
+        default: NiFi Instance Volume Type
+      NiFiInstanceVolumeSize:
+        default: NiFi Instance Volume Size
+      NiFiInstanceVolumeIops:
+        default: NiFi Instance Volume IOPS
+      NiFiInstanceVolumeThroughput:
+        default: NiFi Instance Volume Throughput (for "gp3" volumes only)
+      NifiClusterSize:
+        default: NiFi Cluster Size
+      NiFiBinaryS3Uri:
+        default: NiFi Binary S3 URI
+      DodCertBundleS3Uri:
+        default: DoD Cert Bundle S3 URI
+      ZkClusterInfoParameter:
+        default: ZooKeeper Cluster Information Parameter
+      VpcId:
+        default: VPC ID
+      VpcCidr:
+        default: VPC CIDR
+      SubnetIds:
+        default: Subnet IDs
+      S3PrefixListId:
+        default: S3 Prefix List ID
+      SemVer:
+        default: Semantic Version
+      ParentImage:
+        default: Parent Image
+      ProxyServerAddress:
+        default: Proxy Server Address
+      NoProxyList:
+        default: No Proxy List
+      BypassGpgCheck:
+        default: Bypass GPG Check
+      OutboundCidrIp:
+        default: Outbound CIDR
+      EmailAddress:
+        default: Email Address
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z][a-z0-9-]{0,19}$
+    ConstraintDescription: >
+      Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  RootKeySecretArn:
+    Type: String
+    Description: ARN of the secret that stores root CA key
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
+
+  RootCertificateSecretArn:
+    Type: String
+    Description: ARN of the secret that stores root CA certificate
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):secretsmanager:[a-z0-9-]+:\d{12}:secret:\S+$
+
+  RootCAKmsKeyArn:
+    Type: String
+    Description: ARN of the KMS key that protects the root CA
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9-]+:\d{12}:key/\S+$
+
+  NifiAdminUser:
+    Type: String
+    Description: Common Name of the CAC certificate of NiFi Admin User (e.g. DOE.JOHN.M.0123456789)
+    AllowedPattern: ^[A-Z]+(\.[A-Z]+)*\.\d{10}$
+    ConstraintDescription: Must be a valid Common Name such as DOE.JOHN.M.0123456789
+
+  NifiInstanceType:
+    Type: String
+    Description: Instance type for NiFi nodes
+    Default: m5.xlarge
+    AllowedPattern: ^[a-z0-9-]+\.[a-z0-9.-]+$
+    ConstraintDescription: Must be a valid instance type
+
+  NiFiInstanceVolumeType:
+    Type: String
+    Description: EBS volume type for NiFi nodes
+    Default: gp3
+    AllowedValues: [gp3, io1, io2]
+    ConstraintDescription: Must select a value from the list
+
+  NiFiInstanceVolumeSize:
+    Type: Number
+    Description: EBS volume size for NiFi nodes (in GiBs)
+    Default: 100
+    MinValue: 1
+    MaxValue: 65536
+
+  NiFiInstanceVolumeIops:
+    Type: Number
+    Description: EBS volume IOPS for NiFi nodes
+    Default: 3000
+    MinValue: 100
+    MaxValue: 256000
+
+  NiFiInstanceVolumeThroughput:
+    Type: Number
+    Description: EBS volume throughput for NiFi nodes (gp3 only; ignored otherwise)
+    Default: 125
+    MinValue: 125
+    MaxValue: 1000
+
+  NifiClusterSize:
+    Type: Number
+    Description: Choose an odd number equal to or greater than 3.
+    Default: 3
+    MinValue: 3
+
+  NiFiBinaryS3Uri:
+    Type: String
+    Description: >
+      S3 URI for NiFi binary (should start out with "s3://").
+      You can download the binary from https://dlcdn.apache.org/nifi/2.4.0/nifi-2.4.0-bin.zip, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
+
+  DodCertBundleS3Uri:
+    Type: String
+    Description: >
+      S3 URI for DoD Cert bundle (should start out with "s3://")
+      You can download the cert bundle from https://dl.dod.cyber.mil/wp-content/uploads/pki-pke/zip/unclass-certificates_pkcs7_DoD.zip, upload it to an S3 bucket, then get the URI of the file.
+    AllowedPattern: ^s3://(?!.*/$)\S+$
+    ConstraintDescription: Must be a valid S3 URI (not URL)
+
+  ZkClusterInfoParameter:
+    Type: String
+    Description: Name of SSM Parameter that contains ZooKeeper cluster information
+    AllowedPattern: ^\S+$
+    ConstraintDescription: Must have a value
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC in which NiFi nodes will be created. Note that the same VPC will be used by the image pipeline.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a VPC
+
+  VpcCidr:
+    Type: String
+    Description: The CIDR of the VPC chosen above
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Select subnets (from the VPC chosen above) in which NiFi nodes will be created. Note that the first subnet will be used by the image pipeline.
+    AllowedPattern: \S+
+    ConstraintDescription: Must select a subnet
+
+  S3PrefixListId:
+    Type: String
+    Description: S3 Prefix List ID (e.g. pl-7a3a1b0f)
+    AllowedPattern: ^pl-([a-f0-9]{8}|[a-f0-9]{17})$
+    ConstraintDescription: Must be a valid S3 Prefix List ID
+
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the NiFi Image Recipe and other associated resources.
+      Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+    AllowedPattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+    ConstraintDescription: Must be a valid semantic version (e.g., 1.0.0)
+
+  ParentImage:
+    Type: AWS::EC2::Image::Id
+    Description: Parent (or base) image for the image recipe, in either an Image ARN or an AMI ID format.
+
+  ProxyServerAddress:
+    Type: String
+    Description: Address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  NoProxyList:
+    Type: String
+    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
+    Default: 169.254.169.254,s3.us-gov-west-1.amazonaws.com,secretsmanager.us-gov-west-1.amazonaws.com,ssm.us-gov-west-1.amazonaws.com,ssmmessages.us-gov-west-1.amazonaws.com,ec2messages.us-gov-west-1.amazonaws.com
+
+  BypassGpgCheck:
+    Type: String
+    Description: Select "true" to bypass GPG check for SSM Agent installation file; otherwise, select "false"
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    ConstraintDescription: Must be either "true" or "false"
+
+  OutboundCidrIp:
+    Type: String
+    Description: Outbound CIDR block for ImageBuilder instances
+    Default: 0.0.0.0/0
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block
+
+  EmailAddress:
+    Type: String
+    AllowedPattern: ^$|^[^\s@]+@[^\s@]+\.[^\s@]+$
+    Description: (Optional) Email address at which to receive notifications for failure events
+
+Conditions:
+  IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
+  IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
+  IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
+  IsLowSide: !Not [Condition: IsHighSide]
+  IsGp3: !Equals [!Ref NiFiInstanceVolumeType, "gp3"]
+  IsEmailAddressPopulated: !Not [!Equals [!Ref EmailAddress, ""]]
+
+Resources:
+  KeystorePassword:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub nifi-keystore-password-${ResourceSuffix}
+      GenerateSecretString:
+        IncludeSpace: false
+        ExcludePunctuation: true
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SensitiveKeyPassword:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: !Sub nifi-sensitive-key-password-${ResourceSuffix}
+      GenerateSecretString:
+        IncludeSpace: false
+        ExcludePunctuation: true
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  ### ImageBuilder resources ###
+
+  NifiImageBuilderPipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Sub nifi-image-pipeline-${ResourceSuffix}
+      Status: ENABLED
+      EnhancedImageMetadataEnabled: true
+      ImageRecipeArn: !Ref NifiImageRecipe
+      DistributionConfigurationArn: !Ref NifiImageBuilderDistroConfig
+      ImageScanningConfiguration:
+        ImageScanningEnabled: false # Enable it if Amazon Inspector is activated
+      ImageTestsConfiguration:
+        ImageTestsEnabled: true
+      InfrastructureConfigurationArn: !Ref NifiInfraConfig
+      # This Role is for the workflow
+      # ExecutionRole: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+      # Workflows:
+      #   - WorkflowArn: !GetAtt BuildWorkflow.Arn
+
+  NifiImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub nifi-image-recipe-${ResourceSuffix}
+      Version: !Ref SemVer
+      ParentImage: !Ref ParentImage
+      WorkingDirectory: "/tmp"
+      Components:
+        - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/update-linux/x.x.x
+        - !If
+          - IsLowSide
+          - ComponentArn: !Sub arn:${AWS::Partition}:imagebuilder:${AWS::Region}:aws:component/aws-cli-version-2-linux/x.x.x
+          - !Ref AWS::NoValue
+        - ComponentArn: !Ref NifiBuildComponent
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+          UninstallAfterBuild: false
+        # If overriding the user data, add commands to install SSM, unless it is pre-installed on the base image.
+        UserDataOverride:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+
+            cat >/etc/environment <<EOF
+            HTTP_PROXY=${ProxyServerAddress}:3128
+            HTTPS_PROXY=${ProxyServerAddress}:3128
+            NO_PROXY=${NoProxyList}
+            http_proxy=${ProxyServerAddress}:3128
+            https_proxy=${ProxyServerAddress}:3128
+            no_proxy=${NoProxyList}
+
+            AWS_DEFAULT_REGION=${AWS::Region}
+            AWS_REGION=${AWS::Region}
+            EOF
+
+            source /etc/environment
+
+            mkdir -p /etc/systemd/system/amazon-ssm-agent.service.d
+            cat > /etc/systemd/system/amazon-ssm-agent.service.d/proxy.conf <<EOF
+            [Service]
+            EnvironmentFile=/etc/environment
+            EOF
+
+            cat >> /etc/yum.conf <<EOF
+            proxy=$https_proxy
+            EOF
+
+            # Install SSM Agent
+            BYPASS_GPG=$([ ${BypassGpgCheck} = "true" ] && echo "--nogpgcheck" || echo "")
+            ARCH=$(arch)
+            if [ "$ARCH" = "arm64" ]; then
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_arm64/amazon-ssm-agent.rpm $BYPASS_GPG
+            else # x86_64
+                yum install -y https://s3.${AWS::Region}.${AWS::URLSuffix}/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm $BYPASS_GPG
+            fi
+
+            # Restart SSM Agent
+            systemctl daemon-reload
+            systemctl restart amazon-ssm-agent
+
+  NifiBuildComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub nifi-build-component-${ResourceSuffix}
+      Version: !Ref SemVer
+      Platform: Linux
+      SupportedOsVersions:
+        - Red Hat Enterprise Linux 8
+        - Red Hat Enterprise Linux 9
+      KmsKeyId: !GetAtt KmsKey.Arn
+      Data: !Sub |
+        name: nifi-build
+        description: nifi-build
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: nifi-build
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      echo "Setting the script to exit on any error..."
+                      set -e
+
+                      working_dir=$(pwd)
+
+                      # Create a function to check if a package is installed
+                      is_installed() {
+                          rpm -q "$1" >/dev/null 2>&1
+                      }
+
+                      echo "Gathering yum packages to install..."
+                      # https://docs.redhat.com/en/documentation/red_hat_build_of_openjdk/11/html-single/installing_and_using_red_hat_build_of_openjdk_11_on_rhel/index
+                      packages="java-21-openjdk-devel unzip"
+                      packages_to_install=""
+                      for package in $packages; do
+                          if ! is_installed "$package"; then
+                              packages_to_install="$packages_to_install $package"
+                          else
+                              echo "$package is already installed"
+                          fi
+                      done
+
+                      if [ -n "$packages_to_install" ]; then
+                          echo "Installing packages: $packages_to_install"
+                          yum install -y $packages_to_install
+                      else
+                          echo "All required packages are already installed"
+                      fi
+
+                      user=root
+                      user_home_dir=$(getent passwd "$user" | cut -d: -f6)
+                      nifi_zipfile=nifi.zip
+
+                      echo "Downloading NiFi binary..."
+                      aws s3 cp ${NiFiBinaryS3Uri} "$nifi_zipfile"
+                      echo "Unzipping the downloaded zipfile to $user_home_dir directory..."
+                      unzip -q -o "$nifi_zipfile" -d "$user_home_dir"
+                      echo "Deleting the downloaded zipfile..."
+                      rm -f "$nifi_zipfile"
+
+                      dod_ca_bundle_zipfile=dod_certs.zip
+
+                      echo "Downloading DoD certs bundle file..."
+                      aws s3 cp ${DodCertBundleS3Uri} "$dod_ca_bundle_zipfile"
+                      echo "Unzipping the downloaded zipfile to $(pwd) directory..."
+                      unzip -q -o "$dod_ca_bundle_zipfile"
+                      echo "Deleting the downloaded zipfile..."
+                      rm -rf "$dod_ca_bundle_zipfile"
+
+                      dod_ca_pem_file="$(pwd)"/dod_ca.pem
+
+                      echo "Exporting CA certificates to a concatenated PEM file..."
+                      openssl pkcs7 -in Certificates_PKCS7_v5_14_DoD/Certificates_PKCS7_v5_14_DoD.der.p7b -inform der -print_certs -out "$dod_ca_pem_file"
+                      echo "Deleting Certificates_PKCS7_v5_14_DoD directory and all its contents..."
+                      rm -rf Certificates_PKCS7_v5_14_DoD
+
+                      cd "$user_home_dir"/nifi-*
+
+                      echo "Getting keystore password from SecretsManager..."
+                      keystore_password=$(aws secretsmanager get-secret-value --secret-id ${KeystorePassword} --query SecretString --output text)
+
+                      echo "Adding root CA and DoD CA to truststore"
+                      temp_cert=$(mktemp)
+                      aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$temp_cert"
+                      keytool -importcert -keystore conf/truststore.p12 -storetype PKCS12 \
+                          -file "$temp_cert" -alias root_ca -storepass "$keystore_password" -noprompt
+                      keytool -importcert -keystore conf/truststore.p12 -storetype PKCS12 \
+                          -file "$dod_ca_pem_file" -alias dod_ca -storepass "$keystore_password" -noprompt
+                      rm -rf "$temp_cert" "$dod_ca_pem_file"
+
+                      echo "Getting sensitive key password from SecretsManager..."
+                      sensitive_key=$(aws secretsmanager get-secret-value --secret-id ${SensitiveKeyPassword} --query SecretString --output text)
+
+                      echo "Replacing the values in nifi.properties file..."
+                      nifi_prop_file=conf/nifi.properties
+                      sed -i "s|nifi.security.keystorePasswd=.*|nifi.security.keystorePasswd="$keystore_password"|" "$nifi_prop_file"
+                      sed -i "s|nifi.security.truststorePasswd=.*|nifi.security.truststorePasswd="$keystore_password"|" "$nifi_prop_file"
+                      sed -i "s|nifi.sensitive.props.key=.*|nifi.sensitive.props.key="$sensitive_key"|" "$nifi_prop_file"
+
+                      cat >> /etc/environment <<EOF
+
+                      NIFI_HOME=$(pwd)
+                      JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+                      EOF
+
+                      # https://docs.aws.amazon.com/imagebuilder/latest/userguide/security-best-practices.html#post-build-cleanup
+                      touch "$working_dir"/perform_cleanup
+                      echo "SUCCESS!"
+
+  NifiImageBuilderDistroConfig:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub nifi-distro-config-${ResourceSuffix}
+      Distributions:
+        - Region: !Ref AWS::Region
+          LaunchTemplateConfigurations:
+            - AccountId: !Ref AWS::AccountId
+              LaunchTemplateId: !Ref NifiAutoScalingGroupLaunchTemplate
+              SetDefaultVersion: true # Set the specified Amazon EC2 launch template as the default launch template for the specified account.
+
+  NifiInfraConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub nifi-infra-config-${ResourceSuffix}
+      InstanceMetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      InstanceProfileName: !Ref NifiImageBuilderInstanceProfile
+      SubnetId: !Select [0, !Ref SubnetIds]
+      SecurityGroupIds:
+        - !Ref NifiImageBuilderSecurityGroup
+      TerminateInstanceOnFailure: true
+      InstanceTypes: [!Ref NifiInstanceType]
+      SnsTopicArn: !Ref NifiImageBuilderNotificationTopic
+
+  NifiImageBuilderInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-nifi-imagebuilder-instance-profile-${ResourceSuffix}
+      Roles: [!Ref NifiImageBuilderInstanceRole]
+
+  NifiImageBuilderInstanceRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-nifi-imagebuilder-instance-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: SecretsManager_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue # pragma: allowlist secret
+                Resource:
+                  - !Ref RootCertificateSecretArn
+                  - !Ref KeystorePassword
+                  - !Ref SensitiveKeyPassword
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource:
+                  - !GetAtt KmsKey.Arn
+                  - !Ref RootCAKmsKeyArn
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AllowGetObjectNifi
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath: !Select [1, !Split ["//", !Ref NiFiBinaryS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+              - Sid: AllowGetObjectDoDCABundle
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${ObjectPath}
+                  - ObjectPath:
+                      !Select [1, !Split ["//", !Ref DodCertBundleS3Uri]]
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: !Ref AWS::AccountId
+
+  NifiImageBuilderSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for NiFi ImageBuilder infrastructure
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow outbound traffic on 443
+        - CidrIp: !Ref OutboundCidrIp
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          Description: Allow outbound traffic on 3128
+
+  NifiImageBuilderNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: ImageBuilder Event Notification
+      KmsMasterKeyId: !GetAtt KmsKey.Arn
+
+  NifiImageBuilderNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref NifiImageBuilderNotificationTopic
+      Protocol: lambda
+      Endpoint: !GetAtt NifiImageBuilderUpdateImageIdFunction.Arn
+      FilterPolicyScope: MessageBody
+      FilterPolicy:
+        name: [!GetAtt NifiImageRecipe.Name]
+        sourcePipelineArn: [!Ref NifiImageBuilderPipeline]
+        state:
+          status: ["AVAILABLE"]
+        type: ["AMI"]
+        accountId: [!Ref "AWS::AccountId"]
+
+  NifiImageBuilderNotificationTopicInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref NifiImageBuilderUpdateImageIdFunction
+      SourceArn: !Ref NifiImageBuilderNotificationTopic
+
+  NifiImageBuilderUpdateImageIdFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub nifi-imagebuilder-update-image-id-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt NifiImageBuilderUpdateImageIdFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref NifiImageBuilderUpdateImageIdFunctionLogGroup
+      DeadLetterConfig:
+        TargetArn: !Ref NifiFunctionsDeadLetterNotification
+      MemorySize: 256
+      ReservedConcurrentExecutions: 1
+      Timeout: 60
+      Environment:
+        Variables:
+          PARAM_NAME: !Ref ParentImageParameter
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          PARAM_NAME = os.environ["PARAM_NAME"]
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SSM = boto3.client("ssm", config=config)
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+              message = json.loads(event["Records"][0]["Sns"]["Message"])
+              image_id = message["outputResources"]["amis"][0]["image"]
+              logger.info(f"Updating the value for {PARAM_NAME} parameter")
+              SSM.put_parameter(Name=PARAM_NAME, Value=image_id, Overwrite=True)
+              logger.info(f"Param value updated to {image_id}")
+
+  NifiImageBuilderUpdateImageIdFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-nifi-img-builder-update-image-id-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CloudWatchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt NifiImageBuilderUpdateImageIdFunctionLogGroup.Arn
+        - PolicyName: SSMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParentImageParameter}
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref NifiFunctionsDeadLetterNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  NifiImageBuilderUpdateImageIdFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub nifi-imagebuilder-update-image-id-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  NifiAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub nifi-asg-${ResourceSuffix}
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NifiAutoScalingGroupLaunchTemplate
+        Version: !GetAtt NifiAutoScalingGroupLaunchTemplate.DefaultVersionNumber
+      MinSize: !Ref NifiClusterSize
+      MaxSize: !Ref NifiClusterSize
+      MetricsCollection:
+        - Granularity: 1Minute
+      VPCZoneIdentifier: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: false
+          Value: !Sub nifi-asg-${ResourceSuffix}
+
+  NifiAutoScalingGroupLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: !Sub nifi-launch-template-${ResourceSuffix}
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt NifiNodeInstanceProfile.Arn
+        ImageId: !GetAtt ParentImageParameter.Value
+        InstanceType: !Ref NifiInstanceType
+        BlockDeviceMappings:
+          - DeviceName: !GetAtt GetRootDeviceName.RootDeviceName
+            Ebs:
+              DeleteOnTermination: true
+              VolumeType: !Ref NiFiInstanceVolumeType
+              VolumeSize: !Ref NiFiInstanceVolumeSize
+              Iops: !Ref NiFiInstanceVolumeIops
+              Throughput: !If
+                - IsGp3
+                - !Ref NiFiInstanceVolumeThroughput
+                - !Ref AWS::NoValue
+              Encrypted: true
+              KmsKeyId: !Ref KmsKey
+        Monitoring:
+          Enabled: false
+        DisableApiStop: true
+        DisableApiTermination: true
+        MetadataOptions:
+          HttpPutResponseHopLimit: 1
+          HttpTokens: required
+        SecurityGroupIds:
+          - !GetAtt NifiNodeSecurityGroup.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub nifi-node-${ResourceSuffix}
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub nifi-node-${ResourceSuffix}
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub nifi-node-${ResourceSuffix}
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+
+            echo "Setting the script to exit on any error..."
+            set -e
+
+            temp_dir=$(mktemp -d)
+
+            cleanup() {
+                echo "Deleting temp directory..."
+                find "$temp_dir" -type f -exec shred -u {} \; 2>/dev/null || true
+                rm -rf "$temp_dir"
+            }
+
+            trap cleanup EXIT
+
+            echo "Creating a private key..."
+            key_file="$temp_dir"/nifi.key
+            openssl genrsa -out "$key_file" 4096
+
+            echo "Creating a CSR..."
+            csr_file="$temp_dir"/nifi.csr
+            openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$HOSTNAME/OU=nifi/OU=DoD/O=U.S. Government/C=US"
+
+            echo "Getting the IP address from HOSTNAME..."
+            ip_address=$(echo $HOSTNAME | sed 's/ip-\([0-9]*\)-\([0-9]*\)-\([0-9]*\)-\([0-9]*\).*/\1.\2.\3.\4/')
+
+            echo "Creating an extension file with SAN (Subject Alternative Name)..."
+            extension_file="$temp_dir"/extensions.cnf
+            cat > "$extension_file" << EOF
+            subjectAltName = IP:$ip_address,DNS:$HOSTNAME,DNS:localhost
+            EOF
+
+            echo "Getting root CA key from SecretsManager..."
+            ca_key="$temp_dir"/ca.key
+            aws secretsmanager get-secret-value --secret-id ${RootKeySecretArn} --query SecretString --output text > "$ca_key"
+
+            echo "Getting root CA cert from SecretsManager..."
+            ca_cert="$temp_dir"/ca.pem
+            aws secretsmanager get-secret-value --secret-id ${RootCertificateSecretArn} --query SecretString --output text > "$ca_cert"
+
+            echo "Creating a cert by signing the CSR with root CA..."
+            cert_file="$temp_dir"/nifi.pem
+            openssl x509 -req -in "$csr_file" -out "$cert_file" -CA "$ca_cert" -CAkey "$ca_key" -CAcreateserial -days 1095 -sha256 -extfile "$extension_file"
+
+            echo "Getting keystore password from SecretsManager..."
+            keystore_password=$(aws secretsmanager get-secret-value --secret-id ${KeystorePassword} --query SecretString --output text)
+
+            source /etc/environment
+
+            echo "Creating keystore and adding the node key and cert with alias of nifi"
+            keystore_file="$NIFI_HOME"/conf/keystore.p12
+            nifi_user=$(stat -c "%U" "$NIFI_HOME")
+            openssl pkcs12 -export -out "$keystore_file" -inkey "$key_file" -in "$cert_file" -passout pass:$keystore_password -name nifi -keypbe AES-256-CBC -certpbe AES-256-CBC
+            chown "$nifi_user":"$nifi_user" "$keystore_file"
+
+            nifi_prop_file="$NIFI_HOME"/conf/nifi.properties
+            sed -i "s|nifi.web.https.host=.*|nifi.web.https.host=$HOSTNAME|" $nifi_prop_file
+            sed -i "s|nifi.security.user.authorizer=.*|nifi.security.user.authorizer=managed-authorizer|" $nifi_prop_file
+            sed -i "s|nifi.security.user.login.identity.provider=.*|nifi.security.user.login.identity.provider=|" $nifi_prop_file
+            sed -i '/# Group Mapping Properties/i\
+            nifi.security.identity.mapping.pattern.dn.1=^CN=(.*?), OU=(.*?), OU=(.*?), OU=(.*?), O=(.*?), C=(.*?)$\
+            nifi.security.identity.mapping.value.dn.1=$1\
+            nifi.security.identity.mapping.transform.dn.1=NONE\
+            \
+            nifi.security.identity.mapping.pattern.dn.2=^CN=(.*?), OU=(.*?), OU=(.*?), O=(.*?), C=(.*?)$\
+            nifi.security.identity.mapping.value.dn.2=$1\
+            nifi.security.identity.mapping.transform.dn.2=NONE\
+            \
+            nifi.security.identity.mapping.pattern.dn.3=^C=(.*?), O=(.*?), OU=(.*?), OU=(.*?), CN=(.*?)$\
+            nifi.security.identity.mapping.value.dn.3=$5\
+            nifi.security.identity.mapping.transform.dn.3=NONE' $nifi_prop_file
+
+            # For cluster only
+            sed -i "s|nifi.state.management.embedded.zookeeper.start=.*|nifi.state.management.embedded.zookeeper.start=false|" $nifi_prop_file
+            sed -i "s|nifi.cluster.protocol.is.secure=.*|nifi.cluster.protocol.is.secure=true|" $nifi_prop_file
+            sed -i "s|nifi.cluster.is.node=.*|nifi.cluster.is.node=true|" $nifi_prop_file
+            sed -i "s|nifi.cluster.node.address=.*|nifi.cluster.node.address=$HOSTNAME|" $nifi_prop_file
+            sed -i "s|nifi.cluster.node.protocol.port=.*|nifi.cluster.node.protocol.port=9090|" $nifi_prop_file # port number chosen arbitrarily
+            sed -i "s|nifi.cluster.flow.election.max.wait.time=.*|nifi.cluster.flow.election.max.wait.time=120 secs|" $nifi_prop_file
+            sed -i "s|nifi.zookeeper.root.node=.*|nifi.zookeeper.root.node=/${ResourceSuffix}|" $nifi_prop_file
+            sed -i "s|nifi.zookeeper.client.secure=.*|nifi.zookeeper.client.secure=false|" $nifi_prop_file
+
+            state_management_file="$NIFI_HOME"/conf/state-management.xml
+            sed -i 's|<property name="Root Node">.*</property>|<property name="Root Node">/${ResourceSuffix}</property>|' $state_management_file
+
+            touch /opt/userdata-complete && chmod 644 /opt/userdata-complete
+            echo "UserData has finished executing"
+
+  ParentImageParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /nifi/parent-image-${ResourceSuffix}
+      Type: String
+      Value: !Ref ParentImage
+
+  GetRootDeviceName:
+    Type: Custom::GetRootDeviceName
+    Properties:
+      ServiceToken: !GetAtt GetRootDeviceNameFunction.Arn
+      ServiceTimeout: 60
+      ImageId: !Ref ParentImage
+
+  GetRootDeviceNameFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub get-nifi-root-device-name-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt GetRootDeviceNameFunctionRole.Arn
+      Timeout: 60
+      LoggingConfig:
+        LogGroup: !Ref GetRootDeviceNameFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          EC2 = boto3.client("ec2", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Get-Root-Device-Name-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  image_id = event["ResourceProperties"]["ImageId"]
+                  paginator = EC2.get_paginator("describe_images")
+                  images = [
+                      image
+                      for page in paginator.paginate(ImageIds=[image_id])
+                      for image in page["Images"]
+                  ]
+                  if not images:
+                      raise Exception(f"Could not retrieve any images with {image_id}")
+
+                  # There should be only one image
+                  params |= dict(responseData={"RootDeviceName": images[0]["RootDeviceName"]})
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+  GetRootDeviceNameFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-GetNifiRootDeviceName-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt GetRootDeviceNameFunctionLogGroup.Arn
+        - PolicyName: AllowDescribeImages
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeImages
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    ec2:Region: !Ref AWS::Region
+
+  GetRootDeviceNameFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/get-nifi-root-device-name-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplate:
+    Type: Custom::SetDefaultLaunchTemplate
+    Properties:
+      ServiceToken: !GetAtt SetDefaultLaunchTemplateLambdaFunction.Arn
+      ServiceTimeout: 120
+      AutoScalingGroupname: !Ref NifiAutoScalingGroup
+      LaunchTemplateId: !Ref NifiAutoScalingGroupLaunchTemplate
+
+  SetDefaultLaunchTemplateLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub set-nifi-default-launch-template-${ResourceSuffix}
+      Description: Do Not Modify or Delete.
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Role: !GetAtt SetDefaultLaunchTemplateFunctionRole.Arn
+      Timeout: 120
+      LoggingConfig:
+        LogGroup: !Ref SetDefaultLaunchTemplateFunctionLogGroup
+      ReservedConcurrentExecutions: 1
+      Code:
+        ZipFile: !Sub |
+          import json
+          import logging
+          import os
+
+          import boto3  # type: ignore
+          import cfnresponse  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          region = os.environ["AWS_REGION"]
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          AUTO_SCALING = boto3.client("autoscaling", region_name=region, config=config)
+
+          CUSTOM_RESOURCE_PHYSICAL_ID = "Set-Default-LaunchTemplate-${ResourceSuffix}"
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              try:
+                  params = dict(
+                      event=event,
+                      context=context,
+                      physicalResourceId=CUSTOM_RESOURCE_PHYSICAL_ID,
+                      responseStatus=cfnresponse.SUCCESS,
+                      responseData={},
+                      reason=None
+                  )
+
+                  if event["RequestType"] == "Delete":
+                      cfnresponse.send(**params)
+                      return
+
+                  resource_properties = event["ResourceProperties"]
+                  asg_name = resource_properties["AutoScalingGroupname"]
+                  launch_template_id = resource_properties["LaunchTemplateId"]
+                  update_auto_scaling_group(asg_name, launch_template_id)
+                  cfnresponse.send(**params)
+
+              except Exception as e:
+                  logger.exception(e)
+                  params |= dict(responseStatus=cfnresponse.FAILED, reason=str(e))
+                  cfnresponse.send(**params)
+
+
+          def update_auto_scaling_group(asg_name: str, launch_template_id: str):
+              AUTO_SCALING.update_auto_scaling_group(
+                  AutoScalingGroupName=asg_name,
+                  LaunchTemplate={
+                      "LaunchTemplateId": launch_template_id,
+                      "Version": "$Default"
+                  },
+              )
+
+  SetDefaultLaunchTemplateFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub /aws/lambda/set-nifi-default-launch-template-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  SetDefaultLaunchTemplateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-SetNifiDefaultLaunchTemplate-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Do Not Modify or Delete.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowLogging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt SetDefaultLaunchTemplateFunctionLogGroup.Arn
+        - PolicyName: AllowAutoScalingGroupUpdate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: autoscaling:UpdateAutoScalingGroup
+                Resource: !Sub arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${NifiAutoScalingGroup}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt NifiNodeRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ec2.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                  - ec2:CreateTags
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:*:image/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${NifiAutoScalingGroupLaunchTemplate}
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${NifiNodeSecurityGroup}
+
+  NifiNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for NiFi instances
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: !Ref VpcCidr
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to VPC CIDR
+        - DestinationPrefixListId: !Ref S3PrefixListId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow TCP traffic out to S3 Gateway Endpoint
+
+  NifiNodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NifiNodeSecurityGroup
+      Description: Allows all inbound traffic within VPC
+      IpProtocol: "-1"
+      # SourceSecurityGroupId: !Ref NifiNodeSecurityGroup
+      CidrIp: !Ref VpcCidr
+
+  NifiNodeSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref NifiNodeSecurityGroup
+      Description: Allows all outbound traffic within VPC
+      IpProtocol: "-1"
+      # DestinationSecurityGroupId: !Ref NifiNodeSecurityGroup
+      CidrIp: !Ref VpcCidr
+
+  NifiNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${IamPrefix}-Nifi-Node-Instance-Profile-${ResourceSuffix}
+      Roles: [!Ref NifiNodeRole]
+
+  NifiNodeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28 # Resource found with an explicit name, this disallows updates that require replacement of this resource
+            reason: An explicit name is required
+    Properties:
+      RoleName: !Sub ${IamPrefix}-Nifi-Node-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      Description: Role to be assumed by NiFi instances
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SecretsManager_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue # pragma: allowlist secret
+                Resource:
+                  - !Ref RootCertificateSecretArn
+                  - !Ref RootKeySecretArn
+                  - !Ref KeystorePassword
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource:
+                  - !GetAtt KmsKey.Arn
+                  - !Ref RootCAKmsKeyArn
+
+  NifiClusterInfoParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /nifi/cluster-${ResourceSuffix}
+      Description: !Sub NiFi nodes in ${NifiAutoScalingGroup}
+      Type: String
+      Value: "{}"
+
+  NifiInstanceEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub nifi-instance-events-rule-${ResourceSuffix}
+      Description: !Sub Captures events when NiFi instances in ${NifiAutoScalingGroup} launch or terminate
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance Launch Successful
+          - EC2 Instance Terminate Successful
+        detail:
+          AutoScalingGroupName:
+            - !Ref NifiAutoScalingGroup
+      Targets:
+        - Arn: !GetAtt NifiInstanceEventsProcessorFunction.Arn
+          Id: !Ref NifiInstanceEventsProcessorFunction
+
+  LambdaPermissionForNifiInstanceEventsRule:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NifiInstanceEventsProcessorFunction
+      Principal: events.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !GetAtt NifiInstanceEventsRule.Arn
+
+  NifiInstanceEventsProcessorFunctionConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref NifiInstanceEventsProcessorFunction
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+
+  NifiFunctionsDeadLetterNotification:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: NiFi Failure Notification
+      KmsMasterKeyId: !Ref KmsKey
+      Subscription: !If
+        - IsEmailAddressPopulated
+        - - Endpoint: !Ref EmailAddress
+            Protocol: email
+        - !Ref AWS::NoValue
+
+  NifiInstanceEventsProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub nifi-instance-events-processor-${ResourceSuffix}
+      Description: Do Not Modify or Delete!
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt NifiInstanceEventsProcessorFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref NifiInstanceEventsProcessorFunctionLogGroup
+      DeadLetterConfig:
+        TargetArn: !Ref NifiFunctionsDeadLetterNotification
+      MemorySize: 512
+      # ReservedConcurrentExecutions set to 1 to allow function execution only one at a time, to avoid race condition
+      # If necessary, use DDB to implement a better locking mechanism, with timestamp for lock expiration
+      ReservedConcurrentExecutions: 1
+      Timeout: 900
+      Environment:
+        Variables:
+          ASG_NAME: !Ref NifiAutoScalingGroup
+          NIFI_CLUSTER_SIZE: !Ref NifiClusterSize
+          ZK_CLUSTER_PARAM: !Ref ZkClusterInfoParameter
+          NIFI_CLUSTER_PARAM: !Ref NifiClusterInfoParameter
+          INITIAL_ADMIN_IDENTITY: !Ref NifiAdminUser
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import os
+          from time import sleep
+
+          import boto3  # type: ignore
+          from botocore.config import Config  # type: ignore
+
+          ZK_CLUSTER_PARAM = os.environ["ZK_CLUSTER_PARAM"]
+          NIFI_CLUSTER_PARAM = os.environ["NIFI_CLUSTER_PARAM"]
+          ASG_NAME = os.environ["ASG_NAME"]
+          NIFI_CLUSTER_SIZE = os.environ["NIFI_CLUSTER_SIZE"]
+          INITIAL_ADMIN_IDENTITY = os.environ["INITIAL_ADMIN_IDENTITY"]
+
+          # Two possible event types
+          LAUNCH_EVENT = "EC2 Instance Launch Successful"
+          TERMINATION_EVENT = "EC2 Instance Terminate Successful"
+
+          config = Config(retries={"max_attempts": 5, "mode": "standard"})
+          SSM = boto3.client("ssm", config=config)
+          EC2 = boto3.client("ec2", config=config)
+          ASG = boto3.client("autoscaling", config=config)
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event, default=str)}")
+
+              event_instance_id = event["detail"]["EC2InstanceId"]
+              instance_added = event["detail-type"] == LAUNCH_EVENT
+
+              zk_cluster: dict[str, dict] = json.loads(get_param_value(ZK_CLUSTER_PARAM))
+              nifi_cluster: dict[str, dict] = json.loads(get_param_value(NIFI_CLUSTER_PARAM))
+
+              instances_in_svc = get_instances_in_svc(event_instance_id, instance_added)
+              instance_dns_mapping = get_instance_dns_mapping(instances_in_svc)
+
+              remove_instances_not_in_service(nifi_cluster, instances_in_svc)
+              add_instances_in_service(nifi_cluster, instances_in_svc, instance_dns_mapping)
+
+              nifi_cluster = dict(sorted(nifi_cluster.items(), key=lambda n: n[1]["myid"]))
+              update_param_value(NIFI_CLUSTER_PARAM, json.dumps(nifi_cluster))
+              if nifi_cluster:
+                  wait_for_ssm_managed(nifi_cluster)
+                  send_command_to_cluster(zk_cluster, nifi_cluster)
+
+              logger.info("Completed!")
+
+
+          def get_instances_in_svc(instance_id: str, instance_added: bool) -> list[str]:
+              """Returns instance IDs in a list"""
+              # https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-lifecycle.html
+
+              logger.info(f"Getting instance IDs of all instances in service")
+
+              if instance_added:
+                  wait_for_in_service(instance_id)
+
+              paginator = ASG.get_paginator("describe_auto_scaling_groups")
+              instances_in_service = [
+                  instance["InstanceId"]
+                  for page in paginator.paginate(AutoScalingGroupNames=[ASG_NAME])
+                  for asg in page["AutoScalingGroups"]
+                  for instance in asg["Instances"]
+                  if instance["LifecycleState"] == "InService"
+              ]
+
+              # If it was a termination event and the instance is still showing as in-service
+              if not instance_added and instance_id in instances_in_service:
+                  instances_in_service.remove(instance_id)
+
+              logger.info(f"Instances in service: {instances_in_service}")
+              return instances_in_service
+
+
+          def wait_for_in_service(instance_id: str) -> None:
+              """
+              Waits for `instance_id` to be in service for up to ~5 minutes,
+              checking for its state every 15 seconds
+              """
+              max_retries = 20
+              paginator = ASG.get_paginator("describe_auto_scaling_instances")
+              for i in range(max_retries):
+                  logger.info(f"Attempt {i + 1} of {max_retries}: Checking if {instance_id} is in service")
+                  in_service = any(instance["LifecycleState"] == "InService"
+                                  for page in paginator.paginate(InstanceIds=[instance_id])
+                                  for instance in page["AutoScalingInstances"])
+                  if in_service:
+                      logger.info(f"{instance_id} is in service")
+                      return
+                  if i < max_retries - 1:
+                      logger.info(f"{instance_id} not in service yet; trying again in 15 seconds")
+                      sleep(15)
+
+              raise InstanceNotInServiceError(f"{instance_id} not in service after {max_retries} attempts")
+
+
+          def get_instance_dns_mapping(instance_ids: list[str]) -> dict[str, str]:
+              """
+              Returns a dict with Instance ID as key and Private DNS Name as value for each instance
+              """
+              if not instance_ids:
+                  return {}
+
+              paginator = EC2.get_paginator("describe_instances")
+              return {
+                  instance["InstanceId"]: instance["PrivateDnsName"]
+                  for page in paginator.paginate(InstanceIds=instance_ids)
+                  for reservation in page["Reservations"]
+                  for instance in reservation["Instances"]
+              }
+
+
+          def remove_instances_not_in_service(nifi_cluster: dict[str, dict], instances_in_svc: list[str]):
+              for instance_id in list(nifi_cluster):
+                  if instance_id not in instances_in_svc:
+                      del nifi_cluster[instance_id]
+
+
+          def add_instances_in_service(nifi_cluster: dict[str, dict], instances_in_svc: list[str], mapping: dict[str, str]):
+              # Get existing myid values
+              existing_myids = {node["myid"] for node in nifi_cluster.values()}
+
+              next_myid = 1
+              # Add instances that are in service
+              for instance_id in instances_in_svc:
+                  if instance_id not in nifi_cluster:
+                      # Find the lowest available myid
+                      while next_myid in existing_myids:
+                          if next_myid > 100: # The limit of 100 was chosen arbitrarily, to prevent infinite loop
+                              raise ValueError(f"{next_myid} went beyond the maximum allowed")
+                          next_myid += 1
+
+                      existing_myids.add(next_myid)
+                      nifi_cluster[instance_id] = {"myid": next_myid, "dns": mapping[instance_id]}
+                      next_myid += 1
+
+
+          def get_param_value(param_name: str, with_decryption=False) -> str:
+              logger.info(f"Getting the value for {param_name} parameter")
+              value = SSM.get_parameter(Name=param_name, WithDecryption=with_decryption)[
+                  "Parameter"
+              ]["Value"]
+              logger.info(f"Param value: {value}")
+              return value
+
+
+          def update_param_value(param_name: str, param_value: str) -> None:
+              logger.info(f"Updating the value for {param_name} parameter")
+              SSM.put_parameter(Name=param_name, Value=param_value, Overwrite=True)
+              logger.info(f"Param value updated to {param_value}")
+
+
+          def wait_for_ssm_managed(nifi_cluster: dict[str, dict]) -> None:
+              max_retries = 20
+              instance_ids = list(nifi_cluster)
+              paginator = SSM.get_paginator("describe_instance_information")
+              for i in range(max_retries):
+                  logger.info(f"Attempt {i + 1} of {max_retries}: Checking if {instance_ids} are managed nodes")
+                  managed_instance_ids = [
+                      instance["InstanceId"]
+                      for page in paginator.paginate(Filters=[{"Key": "InstanceIds", "Values": instance_ids}])
+                      for instance in page["InstanceInformationList"]
+                  ]
+                  non_managed_nodes = list(set(instance_ids) - set(managed_instance_ids))
+                  if not non_managed_nodes:
+                      logger.info(f"{instance_ids} are all managed nodes")
+                      return
+                  if i < max_retries - 1:
+                      logger.info(f"{non_managed_nodes} are not managed nodes yet; trying again in 15 seconds")
+                      sleep(15)
+
+              raise InstanceNotManagedError(f"{non_managed_nodes} did not become managed nodes after {max_retries} attempts")
+
+
+          def send_command_to_cluster(zk_cluster: dict[str, dict], nifi_cluster: dict[str, dict]) -> None:
+              instance_command_ids = {instance_id: "" for instance_id in nifi_cluster}
+              max_retries = 5
+              for i in range(max_retries):
+                  remaining_instances = list(instance_command_ids)
+                  if not remaining_instances:
+                      return
+
+                  for instance_id in remaining_instances:
+                      commands = construct_commands(zk_cluster, nifi_cluster)
+                      instance_command_ids[instance_id] = send_command(instance_id, commands)
+
+                  logger.info("Waiting 10 seconds before checking the command execution status") # execution itself takes 1-2 seconds on average
+                  sleep(10)
+
+                  for instance_id, command_id in list(instance_command_ids.items()):
+                      logger.info(f"Attempt {i + 1} of {max_retries}: Checking if command ({command_id}) was successful on {instance_id}")
+                      command_status = get_command_status(instance_id, command_id)
+                      if command_status == "Success":
+                          logger.info(f"Command was successful on {instance_id}")
+                          del instance_command_ids[instance_id]
+                      elif command_status in ("Pending", "InProgress", "Delayed"):
+                          if i < max_retries - 1:
+                              logger.info(f"Command status on {instance_id}: {command_status}; cancelling and trying again in 15 seconds")
+                          else:
+                              logger.info(f"Command status on {instance_id}: {command_status}; cancelling")
+                          cancel_command(instance_id, command_id)
+                      else: # 'Cancelled'|'TimedOut'|'Failed'|'Cancelling'
+                          raise CommandUnsuccessful(f"Command status on {instance_id}: {command_status}")
+
+              raise CommandUnsuccessful(f"Command status was not Success on {instance_command_ids.keys()} after {max_retries} attempts")
+
+
+          def construct_commands(zk_cluster: dict, nifi_cluster: dict) -> list[str]:
+              zk_dns_list = [v["dns"] for v in zk_cluster.values()]
+              zk_connect_string = ",".join([f"{dns}:2181" for dns in zk_dns_list])
+
+              nifi_dns_list = [v["dns"] for v in nifi_cluster.values()]
+
+              init_user_1 = f'<property name="Initial User Identity 1">{INITIAL_ADMIN_IDENTITY}</property>'
+              user_identities = f'        {init_user_1}\\\n' + "\\\n".join(
+                  f'        <property name="Initial User Identity {index + 2}">{dns}</property>'for index, dns in enumerate(nifi_dns_list))
+
+              init_admin_user = f'<property name="Initial Admin Identity">{INITIAL_ADMIN_IDENTITY}</property>'
+              node_identities = f'        {init_admin_user}\\\n' + "\\\n".join(
+                  f'        <property name="Node Identity {index + 1}">{dns}</property>' for index, dns in enumerate(nifi_dns_list))
+
+              commands = f"""
+          set -ex
+          for i in {{1..30}}; do
+              echo "Attempt "$i" of 30 to check if UserData has been run to completion"
+              if [ -f "/opt/userdata-complete" ]; then
+                  echo "UserData has been run to completion"
+                  break
+              else
+                  if [ $i = 30 ]; then
+                      echo "Could not verify UserData has been run to completion"
+                      exit 1
+                  fi
+                  echo "UserData may still be running; retrying in 10 seconds"
+                  sleep 10
+              fi
+          done
+
+          source /etc/environment
+
+          nifi_prop_file="$NIFI_HOME"/conf/nifi.properties
+          sed -i "s|nifi.zookeeper.connect.string=.*|nifi.zookeeper.connect.string={zk_connect_string}|" $nifi_prop_file
+
+          state_management_file="$NIFI_HOME"/conf/state-management.xml
+          sed -i 's|<property name="Connect String">.*</property>|<property name="Connect String">{zk_connect_string}</property>|' $state_management_file
+
+          authorizers_file="$NIFI_HOME"/conf/authorizers.xml
+          # Delete existing lines
+          sed -i '\|property name="Initial User Identity [0-9]\+|d' $authorizers_file
+          sed -i '\|property name="Initial Admin Identity|d' $authorizers_file
+          sed -i '\|property name="Node Identity [0-9]\+|d' $authorizers_file
+          # Replace them with updated info
+          sed -i '\|</userGroupProvider>|i\\
+          {user_identities}' $authorizers_file
+          sed -i '\|</accessPolicyProvider>|i\\
+          {node_identities}' $authorizers_file
+
+          if [ {len(nifi_cluster)} = {NIFI_CLUSTER_SIZE} ]; then
+              nohup "$NIFI_HOME"/bin/nifi.sh start > /dev/null 2>&1 &
+              echo "NiFi startup initiated in background"
+          fi
+          """
+              return [line for line in commands.split("\n")]
+
+
+          def send_command(instance_id: str, commands: list[str]) -> str:
+              """
+              Sends `commands` to the specified instance and returns the CommandId
+              """
+              logger.info(f"Sending commands to {instance_id}")
+              return SSM.send_command(
+                  InstanceIds=[instance_id],
+                  DocumentName="AWS-RunShellScript",
+                  Parameters={
+                      "commands": commands
+                  },
+              )["Command"]["CommandId"]
+
+
+          def get_command_status(instance_id: str, command_id: str) -> str:
+              """
+              Returns command status if available, otherwise "Unknown"
+              """
+              response = SSM.get_command_invocation(
+                  InstanceId=instance_id,
+                  CommandId=command_id,
+              )
+              status = response["Status"]
+              if response["ResponseCode"] == -1:
+                  logger.info("ResponseCode was -1")
+                  status = "Pending"
+              return status
+
+
+          def cancel_command(instance_id: str, command_id: str) -> None:
+              SSM.cancel_command(InstanceIds=[instance_id], CommandId=command_id)
+
+
+          class InstanceNotInServiceError(Exception):
+              pass
+
+
+          class InstanceNotManagedError(Exception):
+              pass
+
+
+          class CommandUnsuccessful(Exception):
+              pass
+
+  NifiInstanceEventsProcessorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-nifi-instances-events-processor-role-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: CloudWatchPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt NifiInstanceEventsProcessorFunctionLogGroup.Arn
+        - PolicyName: SSMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NifiClusterInfoParameter}
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ZkClusterInfoParameter}
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeInstanceInformation
+                  - ssm:GetCommandInvocation
+                  - ssm:CancelCommand
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+        - PolicyName: EC2Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    ec2:Region: !Ref AWS::Region
+        - PolicyName: AutoScalingGroupPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:DescribeAutoScalingInstances
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+                    aws:RequestedRegion: !Ref AWS::Region
+        - PolicyName: DeadLetterConfig
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref NifiFunctionsDeadLetterNotification
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt KmsKey.Arn
+
+  NifiInstanceEventsProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub nifi-instance-events-processor-${ResourceSuffix}
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt KmsKey.Arn
+
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: KMS key for root CA stack
+      Enabled: true
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: Allow administration of the key via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            NotAction:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+          - Sid: Allow use of the key only for AWS via IAM policies
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Ref AWS::AccountId
+          - Sid: Allow logs service principal to use the key
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Sid: Allow imagebuilder service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/imagebuilder.amazonaws.com/AWSServiceRoleForImageBuilder
+            Action:
+              - kms:GenerateDataKey*
+              - kms:Decrypt
+            Resource: "*"
+          - Sid: Allow autoscaling service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action: kms:CreateGrant
+            Resource: "*"
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: true
+
+Outputs:
+  KeystorePasswordSecretArn:
+    Description: ARN of the secret containing the password for keystore and truststore
+    Value: !Ref KeystorePassword
+
+  SensitiveKeyPasswordSecretArn:
+    Description: ARN of the secret containing the sensitive key
+    Value: !Ref SensitiveKeyPassword

@@ -1,125 +1,133 @@
 import logging
-import random
 import subprocess  # nosec B404
+from urllib.parse import urlencode
 
+from config import instance_info
 from config import resource_suffix
-from config import simulate_av_scan
 from config import ssm_params
-from utils import add_tags
-from utils import copy_object
 from utils import create_tags_for_av_scan
 from utils import delete_av_scan_message
 from utils import delete_object
+from utils import get_origin_tags
+from utils import get_scan_status
+from utils import get_ttl
+from utils import get_user_tags_from_bucket
+from utils import head_object
 from utils import publish_sns_message
+from utils import upload_file
 
 logger = logging.getLogger()
 
 
-def scan(bucket: str, key: str, file_path: str, receipt_handle: str):
+def scan(s3_event: dict, file_path: str, tags: dict, receipt_handle: str):
+    # RETURN CODES from man page
+    # 0 : No virus found.
+    # 1 : Virus(es) found.
+    # 2 : An error occurred.
     try:
+        key = s3_event["s3"]["object"]["key"]
         exit_status = _run_av_scan(key, file_path)
-
-        # File does not exist
-        if exit_status == 512:
-            _process_non_existent_file(key, receipt_handle)
-            return
-
-        # File is clean
-        if exit_status == 0:
-            _process_clean_file(bucket, key, exit_status, receipt_handle)
-            return
-
-        # File is infected
-        _process_infected_file(bucket, key, exit_status, receipt_handle)
-
-    except Exception as e:
-        logger.error(f"Exception occurred scanning file: {e}")
+        _process_file(s3_event, file_path, tags, exit_status, receipt_handle)
+    except Exception:
+        logger.exception("Exception occurred scanning file")
 
 
 def _run_av_scan(key: str, file_path: str):
     """
     Returns the exit status after running clamdscan on file_path
     """
-    if simulate_av_scan:
-        logger.info(f"Simulating anti-virus scanning for {key}")
-        exit_status = random.choice(([0] * 18) + [1, 512])  # nosec B311
-    else:
-        logger.info(f"Scanning {key}")
-        exit_status = subprocess.run(
-            ["clamdscan", file_path],
-        ).returncode  # nosec B603, B607
+    logger.info(f"Scanning {key}")
 
-    logger.info(f"ClamAV Scan Exit Code: {exit_status}")
-    return exit_status
+    scan_result = subprocess.run(
+        ["clamdscan", "--fdpass", "-v", "--stdout", file_path],
+        capture_output=True,
+        text=True,
+    )  # nosec B603, B607
 
-
-def _process_non_existent_file(key: str, receipt_handle: str):
-    logger.warning(f"File {key} NOT FOUND. Unable to scan")
-    delete_av_scan_message(receipt_handle)
+    logger.info(f"ClamAV Scan Exit Code: {scan_result.returncode}")
+    logger.info(f"ClamAV Scan Output: {scan_result.stdout}")
+    if scan_result.stderr:
+        logger.warning(f"ClamAV Scan Error: {scan_result.stderr}")
+    return scan_result.returncode
 
 
-def _process_clean_file(bucket: str, key: str, exit_status: int, receipt_handle: str):
-    file_status = "CLEAN"
-    logger.info(f"{key} is {file_status}")
-
-    tags = create_tags_for_av_scan(file_status, exit_status)
-    add_tags(bucket, key, tags)
-
-    data_transfer_bucket = ssm_params[
-        f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"
-    ]
-    logger.info(
-        f"Copying {key} file to Data Transfer bucket: {data_transfer_bucket}",
-    )
-    copy_object(bucket, data_transfer_bucket, key)
-
-    lts_bucket = ssm_params[f"/pipeline/LongTermStorageBucketName-{resource_suffix}"]
-    logger.info(
-        f"Copying {key} file to Long-term Storage bucket: {lts_bucket}",
-    )
-    copy_object(bucket, lts_bucket, key)
-
-    # Delete it from the ingestion bucket
-    delete_object(bucket, key)
-
-    delete_av_scan_message(receipt_handle)
-
-
-def _process_infected_file(
-    bucket: str,
-    key: str,
+def _process_file(
+    s3_event: dict,
+    file_path: str,
+    tags: dict,
     exit_status: int,
     receipt_handle: str,
 ):
-    file_status = "INFECTED"
-    logger.warning(f"{key} is {file_status}")
+    bucket = s3_event["s3"]["bucket"]["name"]
+    key = s3_event["s3"]["object"]["key"]
+    etag = s3_event["s3"]["object"]["eTag"]
 
-    tags = create_tags_for_av_scan(file_status, exit_status)
-    add_tags(bucket, key, tags)
+    scan_status = get_scan_status(exit_status)
+    logger.info(f"{key} is {scan_status}")
 
+    user_tags = get_user_tags_from_bucket(bucket, get_ttl())
+    origin_tags = get_origin_tags(s3_event)
+    av_tags = create_tags_for_av_scan(exit_status)
+    url_encoded_tags = urlencode(user_tags | origin_tags | av_tags | tags)
+
+    # Destination buckets based on exit status
+    data_transfer_bucket = ssm_params[
+        f"/pipeline/DataTransferIngestBucketName-{resource_suffix}"
+    ]
     quarantine_bucket = ssm_params[f"/pipeline/QuarantineBucketName-{resource_suffix}"]
-    logger.info(
-        f"Copying {key} file to Quarantine bucket: {quarantine_bucket}",
-    )
-    copy_object(bucket, quarantine_bucket, key)
+    invalid_files_bucket = ssm_params[
+        f"/pipeline/InvalidFilesBucketName-{resource_suffix}"
+    ]
+    dfdl_input_bucket = ssm_params[f"/pipeline/DfdlInputBucketName-{resource_suffix}"]
 
-    # Delete it from the ingestion bucket
-    delete_object(bucket, key)
+    if exit_status == 0:
+        destination_bucket = user_tags.get("DestinationBucket")
+        dfdl_bound = user_tags.get("DfdlBound")
+        if destination_bucket:
+            logger.info(f"Uploading {key} file to {destination_bucket}")
+            upload_file(destination_bucket, key, file_path, url_encoded_tags)
+        elif dfdl_bound == "Yes":
+            logger.info(f"Uploading {key} file to {dfdl_input_bucket}")
+            upload_file(dfdl_input_bucket, key, file_path, url_encoded_tags)
+        else:
+            logger.info(f"Uploading {key} file to Data Transfer bucket")
+            upload_file(data_transfer_bucket, key, file_path, url_encoded_tags)
+    elif exit_status == 1:
+        logger.info(f"Uploading {key} file to Quarantine bucket")
+        upload_file(quarantine_bucket, key, file_path, url_encoded_tags)
+    else:
+        logger.info(f"Uploading {key} file to Invalid Files bucket")
+        upload_file(invalid_files_bucket, key, file_path, url_encoded_tags)
+
+    # Delete the object only if it is the same object
+    if head_object(bucket, key, etag):
+        delete_object(bucket, key)  # Delete it from the ingestion bucket
 
     delete_av_scan_message(receipt_handle)
 
-    _send_file_quarantined_sns_msg(
-        quarantine_bucket,
-        key,
-        file_status,
-        exit_status,
-    )
+    # Send notifications
+    if exit_status == 0:
+        pass
+    elif exit_status == 1:
+        _send_file_quarantined_msg(
+            quarantine_bucket,
+            key,
+            scan_status,
+            exit_status,
+        )
+    else:
+        _send_file_rejected_msg(
+            invalid_files_bucket,
+            key,
+            scan_status,
+            exit_status,
+        )
 
 
-def _send_file_quarantined_sns_msg(
+def _send_file_quarantined_msg(
     bucket: str,
     key: str,
-    file_status: str,
+    scan_status: str,
     exit_status: int,
 ):
     logger.info(
@@ -131,11 +139,38 @@ def _send_file_quarantined_sns_msg(
         message = (
             "A file has been quarantined based on the results of a ClamAV scan:\n\n"
             f"File Name: {key}\n"
-            f"File Status: {file_status}\n"
             f"File Location: {bucket}/{key}\n"
-            f"ClamAV Exit Code: {exit_status}"
+            f"Scan Status: {scan_status}\n"
+            f"ClamAV Exit Code: {exit_status}\n"
+            f"Instance ID: {instance_info['instance_id']}"
         )
         publish_sns_message(topic_arn, message, subject)
-        # logger.info(f"SNS message successfully published")
     except Exception as e:
-        logger.error(f"Could not publish an SNS message: {e}")
+        # Not critical; allow it to fail
+        logger.warning(f"Could not publish an SNS message: {e}")
+
+
+def _send_file_rejected_msg(
+    bucket: str,
+    key: str,
+    scan_status: str,
+    exit_status: int,
+):
+    logger.info(
+        f"Sending an SNS message regarding the rejected file: {key}",
+    )
+    try:
+        topic_arn = ssm_params[f"/pipeline/InvalidFilesTopicArn-{resource_suffix}"]
+        subject = "AV Scanning Error"
+        message = (
+            "A file has been rejected due to a ClamAV scan error:\n\n"
+            f"File Name: {key}\n"
+            f"File Location: {bucket}/{key}\n"
+            f"Scan Status: {scan_status}\n"
+            f"ClamAV Exit Code: {exit_status}\n"
+            f"Instance ID: {instance_info['instance_id']}"
+        )
+        publish_sns_message(topic_arn, message, subject)
+    except Exception as e:
+        # Not critical; allow it to fail
+        logger.warning(f"Could not publish an SNS message: {e}")

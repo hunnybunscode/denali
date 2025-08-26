@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cross-account IAM policies for Fortify scan access'
+
+Parameters:
+  TrustedAccountIds:
+    Type: CommaDelimitedList
+    Description: 'List of trusted AWS account IDs'
+  
+  SSMDocumentArn:
+    Type: String
+    Description: 'ARN of the SSM document to allow access to'
+
+Resources:
+  CrossAccountAccessPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: 'FortifyScan-CrossAccountAccess'
+      Description: 'Policy for cross-account Fortify scan access'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ssm:SendCommand'
+              - 'ssm:GetCommandInvocation'
+              - 'ssm:ListCommandInvocations'
+            Resource: !Ref SSMDocumentArn
+          - Effect: Allow
+            Action:
+              - 'ssm:DescribeInstanceInformation'
+              - 'ec2:DescribeInstances'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'aws:RequestedRegion': !Ref 'AWS::Region'
+
+Outputs:
+  CrossAccountPolicyArn:
+    Description: 'ARN of the cross-account access policy'
+    Value: !Ref CrossAccountAccessPolicy

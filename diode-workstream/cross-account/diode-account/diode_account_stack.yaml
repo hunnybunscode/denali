@@ -14,12 +14,14 @@ Metadata:
           - DataTransferBucketName
           - DataTransferSqsQueueArn
           - TranferResultSqsQueueArn
+          - PipelineKmsKeyArn
 
       - Label:
           default: Data Transfer Lambda Code
         Parameters:
           - DataTransferLambdaStorageBucket
           - DataTransferLambdaCodeKey
+          - DataTransferLambdaCodeKeyVersion
 
       - Label:
           default: Diode Simulator
@@ -40,10 +42,14 @@ Metadata:
         default: Data Transfer SQS Queue ARN
       TranferResultSqsQueueArn:
         default: Data Transfer Result SQS Queue ARN
+      PipelineKmsKeyArn:
+        default: Pipeline KMS Key ARN
       DataTransferLambdaStorageBucket:
         default: Data Transfer Lambda Storage Bucket
       DataTransferLambdaCodeKey:
         default: Data Transfer Lambda Code Key
+      DataTransferLambdaCodeKeyVersion:
+        default: Data Transfer Lambda Code Key Version
       UseDiodeSimulator:
         default: Use Diode Simulator
       DiodeSimulatorEndpoint:
@@ -60,7 +66,7 @@ Parameters:
   PermissionsBoundaryPolicyArn:
     Type: String
     Description: ARN of the policy that is used to set the permissions boundary for IAM resources
-    AllowedPattern: ^arn:(aws|aws-us-gov):iam::(\d{12}|aws):policy/.*
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
     ConstraintDescription: Must be a valid IAM policy ARN
 
   ResourceSuffix:
@@ -80,14 +86,20 @@ Parameters:
   DataTransferSqsQueueArn:
     Type: String
     Description: ARN of the Data Transfer SQS queue in the Validation Account
-    AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
     ConstraintDescription: Must be a valid ARN of the Data Transfer SQS queue in the Validation Account
 
   TranferResultSqsQueueArn:
     Type: String
     Description: ARN of the Data Transfer Result SQS queue in the Validation Account
-    AllowedPattern: ^arn:(aws|aws-us-gov):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):sqs:[a-z0-9-]+:\d{12}:[\w-]{1,80}$
     ConstraintDescription: Must be a valid ARN of the Data Transfer Result SQS queue in the Validation Account
+
+  PipelineKmsKeyArn:
+    Type: String
+    Description: ARN of the KMS key used for the data transfer pipeline
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):kms:[a-z0-9-]+:\d{12}:key/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
+    ConstraintDescription: Must be a valid ARN of the KMS key used for the data transfer pipeline
 
   DataTransferLambdaStorageBucket:
     Type: String
@@ -99,6 +111,12 @@ Parameters:
     Type: String
     Description: S3 Key of the Lambda code for data transfer
     Default: data_transfer.zip
+
+  DataTransferLambdaCodeKeyVersion:
+    Type: String
+    Description: Object version of S3 key of the Lambda code for data transfer
+    AllowedPattern: ^[a-zA-Z0-9_.]{1,128}$
+    ConstraintDescription: Must be a valid object version of the Lambda code for data transfer
 
   UseDiodeSimulator:
     Type: String
@@ -151,7 +169,22 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:GetObjectTagging
-                Resource: !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}
+                  - !Sub arn:${AWS::Partition}:s3:::${DataTransferBucketName}/*
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref PipelineKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub s3.${AWS::Region}.amazonaws.com
+              - Effect: Allow
+                Action: kms:GenerateDataKey
+                Resource: !Ref PipelineKmsKeyArn
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub sqs.${AWS::Region}.amazonaws.com
               - Effect: Allow
                 Action:
                   - diode:CreateTransfer
@@ -165,6 +198,7 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
                 Resource:
                   - !Ref DataTransferSqsQueueArn
                   - !GetAtt TransferStatusQueue.Arn
@@ -195,12 +229,19 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
+          TRANSFER_BUCKET_OWNER:
+            !Select [4, !Split [":", !Ref TranferResultSqsQueueArn]]
           TRANSFER_RESULT_QUEUE_URL: !Sub
             - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
             - AccountId:
                 !Select [4, !Split [":", !Ref TranferResultSqsQueueArn]]
               QueueName:
                 !Select [5, !Split [":", !Ref TranferResultSqsQueueArn]]
+          DATA_TRANSFER_QUEUE_URL: !Sub
+            - https://sqs.${AWS::Region}.${AWS::URLSuffix}/${AccountId}/${QueueName}
+            - AccountId: !Select [4, !Split [":", !Ref DataTransferSqsQueueArn]]
+              QueueName: !Select [5, !Split [":", !Ref DataTransferSqsQueueArn]]
+          TRANSFER_STATUS_QUEUE_URL: !Ref TransferStatusQueue
           USE_DIODE_SIMULATOR: !Ref UseDiodeSimulator
           DIODE_SIMULATOR_ENDPOINT: !Ref DiodeSimulatorEndpoint
       # VpcConfig:
@@ -210,6 +251,7 @@ Resources:
       Code:
         S3Bucket: !Ref DataTransferLambdaStorageBucket
         S3Key: !Ref DataTransferLambdaCodeKey
+        S3ObjectVersion: !Ref DataTransferLambdaCodeKeyVersion
 
   DataTransferLambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
@@ -217,12 +259,12 @@ Resources:
       BatchSize: 1
       Enabled: true
       EventSourceArn: !Ref DataTransferSqsQueueArn
-      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+      FunctionName: !Ref DataTransferLambdaFunction
 
   DataTransferLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt DataTransferLambdaFunction.Arn
+      FunctionName: !Ref DataTransferLambdaFunction
       Action: lambda:InvokeFunction
       Principal: sqs.amazonaws.com
       SourceArn: !Ref DataTransferSqsQueueArn
@@ -262,6 +304,9 @@ Resources:
       MessageRetentionPeriod: 345600 # Default value (4 days)
       ReceiveMessageWaitTimeSeconds: 20
       # KmsMasterKeyId: alias/aws/sqs
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TransferStatusDlq.Arn
+        maxReceiveCount: 5
 
   TransferStatusQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -280,8 +325,19 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !GetAtt DiodeEventBridgeEventsRule.Arn
 
+  TransferStatusDlq:
+    Type: AWS::SQS::Queue
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      MessageRetentionPeriod: 1209600 # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      KmsMasterKeyId: alias/aws/sqs
+
   TransferStatusEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
+      BatchSize: 1
+      Enabled: true
       EventSourceArn: !GetAtt TransferStatusQueue.Arn
       FunctionName: !Ref DataTransferLambdaFunction
