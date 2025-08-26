@@ -12,7 +12,7 @@ It is possible to disable mTLS requirements if you don't want to support direct 
 
 ## Architecture Diagram
 
-![Keycloak Architecture](documents/Keycloak-Architecture.jpg)
+![Keycloak Architecture](documents/Keycloak-Architecture%20-%20General.png)
 
 ## Services
 
