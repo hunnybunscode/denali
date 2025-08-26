@@ -2,7 +2,6 @@ from aws_cdk import (
     Stack,
     aws_lambda as _lambda,
     aws_iam as iam,
-    aws_ec2 as ec2,
     Duration,
     BundlingOptions,
 )
@@ -14,15 +13,19 @@ class LambdaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, config: Config, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create Lambda execution role
+        # Create Lambda execution role with AFC2S prefix and permissions boundary
         lambda_role = iam.Role(
             self,
-            f"{config.namespace}-{config.version}-LambdaRole",
+            f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-LambdaRole",
+            role_name=f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-LambdaRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
-            ]
+                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+            ],
+            permissions_boundary=iam.ManagedPolicy.from_managed_policy_arn(
+                self, "LambdaPermissionsBoundary",
+                config.permissions.boundary_policy_arn
+            )
         )
 
         # Add permissions for Lambda functions
@@ -32,23 +35,11 @@ class LambdaStack(Stack):
                 "dynamodb:*",
                 "ssm:*",
                 "secretsmanager:GetSecretValue",
-                "bedrock:InvokeModel",
-                "bedrock:InvokeModelWithResponseStream"
+                "bedrock:InvokeModel"
             ],
             resources=["*"]
         ))
-        
-        # Add Step Functions permissions for nested executions
-        lambda_role.add_to_policy(iam.PolicyStatement(
-            effect=iam.Effect.ALLOW,
-            actions=[
-                "states:StartExecution",
-                "states:DescribeExecution",
-                "states:StopExecution"
-            ],
-            resources=["*"]
-        ))
-        
+
         # Create Lambda layer with requests package
         requests_layer = _lambda.LayerVersion(
             self,
@@ -67,16 +58,6 @@ class LambdaStack(Stack):
             description="Layer containing requests package"
         )
 
-        # Lookup VPC and networking resources once
-        vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=config.networking.vpc_id)
-        subnets = [
-            ec2.Subnet.from_subnet_id(self, f"Subnet{i}", subnet.subnet_id)
-            for i, subnet in enumerate(config.networking.subnets)
-        ]
-        security_group = ec2.SecurityGroup.from_security_group_id(
-            self, "SecurityGroup", config.networking.security_group_id
-        )
-        
         # Create Lambda functions with actual code
         lambda_configs = {
             config.lambda_functions.git_branch_crud: "stacks/step_functions_stack/lambdas/git_branch_crud",
@@ -101,8 +82,5 @@ class LambdaStack(Stack):
                 function_name=f"{config.namespace}-{config.version}-{func_name}",
                 role=lambda_role,
                 timeout=Duration.minutes(15),
-                layers=[requests_layer],
-                vpc=vpc,
-                vpc_subnets=ec2.SubnetSelection(subnets=subnets),
-                security_groups=[security_group]
+                layers=[requests_layer]
             )
