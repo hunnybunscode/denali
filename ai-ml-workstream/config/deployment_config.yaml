@@ -22,3 +22,7 @@ lambda_functions:
   verify_findings_resolved: "Verify_Findings_Resolved"
   git_pr_crud: "Git_PR_CRUD"
 
+bedrock:
+  model_id: "meta.llama3-70b-instruct-v1:0"
+
+
