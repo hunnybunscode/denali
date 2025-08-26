@@ -1,0 +1,31 @@
+[
+  {
+    "ParameterKey": "StackPrefix",
+    "ParameterValue": "DenaliPOC"
+  },
+  {
+    "ParameterKey": "DocumentName", 
+    "ParameterValue": "FortifyScan-LibNDCmath"
+  },
+  {
+    "ParameterKey": "RepoUrl",
+    "ParameterValue": "https://your-repo-here.git"
+  },
+  {
+    "ParameterKey": "FindingsRepoUrl",
+    "ParameterValue": "https://your-repo-here.git"
+  },
+  {
+    "ParameterKey": "DestinationDir",
+    "ParameterValue": "/home/ec2-user/vobs/src/common/libsrc/libNDCmath"
+  },
+  {
+    "ParameterKey": "FortifyScriptPath",
+    "ParameterValue": "/home/ec2-user/run_fortify_scan_libNDCmath.sh"
+  },
+  {
+    "ParameterKey": "TrustedAccountIds",
+    "ParameterValue": "1234567890,1234567890"
+
+  }
+]

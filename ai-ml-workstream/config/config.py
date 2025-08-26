@@ -27,12 +27,17 @@ class LambdaFunctions:
     git_pr_crud: str
 
 @dataclass
+class Bedrock:
+    model_id: str
+
+@dataclass
 class Config:
     namespace: str
     region: str
     version: str
     networking: Networking
     lambda_functions: LambdaFunctions
+    bedrock: Bedrock
 
 def get_configs(config_file: str) -> Config:
     with open(config_file, 'r') as f:
@@ -56,11 +61,15 @@ def get_configs(config_file: str) -> Config:
         verify_findings_resolved=config['lambda_functions']['verify_findings_resolved'],
         git_pr_crud=config['lambda_functions']['git_pr_crud']
     )
+    bedrock = Bedrock(
+        model_id=config.get('bedrock', {}).get('model_id', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
+    )
     
     return Config(
         namespace=config['namespace'],
         version=config['version'],
         region=config['region'],
         networking=networking,
-        lambda_functions=lambda_functions
+        lambda_functions=lambda_functions,
+        bedrock=bedrock
     )
