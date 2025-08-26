@@ -59,7 +59,7 @@ class LambdaStack(Stack):
                     image=_lambda.Runtime.PYTHON_3_9.bundling_image,
                     command=[
                         "bash", "-c",
-                        "pip install requests -t /asset-output/python && cp -r /asset-input/* /asset-output/"
+                        "pip install requests defusedxml==0.7.1 -t /asset-output/python && cp -r /asset-input/* /asset-output/"
                     ]
                 )
             ),
