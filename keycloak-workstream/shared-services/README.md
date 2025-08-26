@@ -260,8 +260,14 @@ To see the full possible configuration, `/lib/interfaces.d.ts`
 
 ## Troubleshooting
 
+### Using encrypted AMI
+> Error: Instance failed to launch - Cause one or more of the attached Amazon EBS volumes are encrypted with an inaccessible AWs KMS key 
+When using encrypted Amazon Machine Images (AMI), make sure that access Key Management Service (KMS) are granted to the Auto Scaling Group service (ASG).  
+Refer to [Required AWS KMS key policy for use with encrypted volumes](https://docs.aws.amazon.com/autoscaling/ec2/userguide/key-policy-requirements-EBS-encryption.html).
+
+
 ### Sample command to test ALB routing
-> For domain routing is not ready or configured
+For domain routing is not ready or configured
 
 ```bash
 curl -vkL https://k8s-keycloakwebui-98c2b921dc-1216040023.us-gov-west-1.elb.amazonaws.com/admin --header 'Host: sso.denali.jktruong.people.aws.dev'
