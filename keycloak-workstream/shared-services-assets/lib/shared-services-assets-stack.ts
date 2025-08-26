@@ -62,7 +62,7 @@ export class SharedServicesAssetsStack extends Stack {
     const assetBucket = new s3.Bucket(this, "assets-bucket", {
       bucketName: `${this.account}-${this.region}-local-assets`,
       removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
+      autoDeleteObjects: (process.env["ENABLE_CLEANUP"] ?? "false").toLowerCase() === "true",
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       lifecycleRules: [
         {

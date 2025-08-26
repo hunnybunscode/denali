@@ -1,4 +1,4 @@
-import json, subprocess, os, logging, boto3, base64
+import json, subprocess, os, logging, boto3, base64, tempfile
 
 from typing import TYPE_CHECKING
 
@@ -17,9 +17,11 @@ logging.basicConfig(level=logging.INFO, force=True)
 # Retrieve the logger instance
 logger = logging.getLogger()
 
+temp_directory = tempfile.TemporaryDirectory()
+
 os.environ["PATH"] = "/opt/awscli:/opt/kubectl:/opt/helm:" + os.environ["PATH"]
-os.environ["KUBECONFIG"] = kubeconfig = "/tmp/kubeconfig"
-os.environ["HELM_CONFIG_HOME"] = helm_config_home = "/tmp/helm/.config"
+os.environ["KUBECONFIG"] = kubeconfig = f"{temp_directory}/kubeconfig"
+os.environ["HELM_CONFIG_HOME"] = helm_config_home = f"{temp_directory}/helm/.config"
 
 
 def get_ecr_client(region: str) -> ECRClient:
@@ -53,7 +55,7 @@ def lambda_handler(event, context):
     destination_repository = payload.get("DESTINATION_REPOSITORY") or ""
     destination_repository_uri = os.path.dirname(destination_repository)
 
-    local_destination_path = os.path.abspath(os.path.join("/tmp", source_key))
+    local_destination_path = os.path.abspath(os.path.join(temp_directory, source_key))
     local_destination_directory = os.path.dirname(local_destination_path)
 
     if not os.path.exists(os.path.dirname(helm_config_home)):

@@ -58,6 +58,7 @@ export class StigEksImageBuilderStack extends Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: (process.env["ENABLE_CLEANUP"] ?? "false").toLowerCase() === "true",
       enforceSSL: true,
       versioned: false,
       lifecycleRules: [

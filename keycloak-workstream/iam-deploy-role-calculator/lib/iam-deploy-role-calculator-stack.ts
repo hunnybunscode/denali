@@ -203,7 +203,7 @@ export class IamDeployRoleCalculatorStack extends Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
       removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
+      autoDeleteObjects: (process.env["ENABLE_CLEANUP"] ?? "false").toLowerCase() === "true",
       bucketName: `${this.account}-${this.region}-iam-analyzer-trail`,
       lifecycleRules: [
         {
