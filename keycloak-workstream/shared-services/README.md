@@ -142,6 +142,7 @@ To see the full possible configuration, `/lib/interfaces.d.ts`
    ./gradlew clean build
    cd -
    ```
+   > **NOTE**: To disable mtls support, you must remove all references to `/k8s/base/keycloak/plugins/spi/keycloak-spi-awsalb-mtls.jar` and remove annotation `alb.ingress.kubernetes.io/mutual-authentication: '[{"port": 443, "mode": "passthrough"}]'`
 
 2. Deploy the operators
    ```bash
