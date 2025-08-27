@@ -8,3 +8,26 @@ __pycache__
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+cdk.context.json
+
+# Configuration files with sensitive data
+config/deployment_config.yaml
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
