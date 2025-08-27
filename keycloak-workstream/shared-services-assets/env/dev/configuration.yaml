@@ -21,11 +21,9 @@ docker:
     - repository: registry.access.redhat.com/ubi9/openjdk-21
       tag: latest
     - repository: quay.io/keycloak/keycloak-operator
-      tag: 26.2.5
-    - repository: public.ecr.aws/bitnami/keycloak
-      tag: 26.2.5-debian-12-r3
+      tag: 26.3.3
     - repository: quay.io/keycloak/keycloak
-      tag: 26.2.5
+      tag: 26.3.3
     - repository: public.ecr.aws/docker/library/postgres
       tag: 16
     - repository: public.ecr.aws/lts/squid

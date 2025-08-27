@@ -102,15 +102,15 @@ docker:
     - repository: registry.access.redhat.com/ubi9/openjdk-21
       tag: latest
     - repository: quay.io/keycloak/keycloak-operator
-      tag: 26.3.2
+      tag: 26.3.3
     - repository: quay.io/keycloak/keycloak
-      tag: 26.3.2
+      tag: 26.3.3
     - repository: public.ecr.aws/docker/library/postgres
       tag: 16
     - repository: public.ecr.aws/lts/squid
       tag: latest
     - repository: registry1.dso.mil/ironbank/opensource/keycloak/keycloak-fips
-      tag: 26.3.2-fips
+      tag: 26.3.3-fips
 
 helm:
   charts:
