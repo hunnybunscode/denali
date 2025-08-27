@@ -22,7 +22,7 @@ Project Denali is a comprehensive AWS infrastructure and security platform desig
 
 **Components:**
 - **[Shared Services](./keycloak-workstream/shared-services/)** - EKS-based Keycloak with hardened security ([README](./keycloak-workstream/shared-services/README.md))
-- **[Shared Services Assets](./keycloak-workstream/shared-services/)** - Helper to move containers and helm charts for offline deployment ([README](./keycloak-workstream/shared-services-assets/README.md))
+- **[Shared Services Assets](./keycloak-workstream/shared-services-assets/)** - Helper to move containers and helm charts for offline deployment ([README](./keycloak-workstream/shared-services-assets/README.md))
 - **[STIG EKS Image Builder](./keycloak-workstream/stig-eks-imagebuilder/)** - STIG-compliant AMI creation ([README](./keycloak-workstream/stig-eks-imagebuilder/README.md))
 - **[Limited Privilege Role Emulator](./keycloak-workstream/limited-privilage-role-emulator/)** - IAM role testing framework ([README](./keycloak-workstream/limited-privilage-role-emulator/README.md))
 - **[IAM Deploy Role Calculator](./keycloak-workstream/iam-deploy-role-calculator/)** - Permission analysis tool ([README](./keycloak-workstream/iam-deploy-role-calculator/README.md))
