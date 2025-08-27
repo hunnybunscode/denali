@@ -1,0 +1,35 @@
+# Source: zookeeper/templates/networkpolicy.yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: zookeeper
+  namespace: zookeeper
+  labels:
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/version: 3.9.2
+    helm.sh/chart: zookeeper-13.4.6
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: zookeeper
+      app.kubernetes.io/name: zookeeper
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - {}
+  ingress:
+    # Allow inbound connections to ZooKeeper
+    - ports:
+        - port: 2181
+    # Allow internal communications between nodes
+    - ports:
+        - port: 2888
+        - port: 3888
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: zookeeper
+              app.kubernetes.io/name: zookeeper

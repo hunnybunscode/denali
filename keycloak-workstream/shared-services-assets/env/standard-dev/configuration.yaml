@@ -1,0 +1,180 @@
+environment:
+  name: standard-dev
+  region: us-west-1
+  account: "908027385618"
+  iam:
+    prefix: AFC2S
+    # permissionBoundaryArn: arn:aws:iam::908027385618:policy/ProjAdminPolicy
+  proxy:
+    httpProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+    httpsProxy: http://SquidE-squid-yklwtdf6nwWK-4e68d1a228b1a39d.elb.us-west-1.amazonaws.com:3128
+    noProxy:
+      - localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/16,192.168.0.0/16,172.20.0.0/16
+      # List of all AWS Endpoints for target region
+
+      - .access-analyzer.us-west-1.amazonaws.com
+      - .account.us-west-1.amazonaws.com
+      - .api.ecr.us-west-1.amazonaws.com
+      - .api.sagemaker.us-west-1.amazonaws.com
+      - .appstream2.us-west-1.amazonaws.com
+      - .athena.us-west-1.amazonaws.com
+      - .autoscaling.us-west-1.amazonaws.com
+      - .backup.us-west-1.amazonaws.com
+      - .cloudformation.us-west-1.amazonaws.com
+      - .cloudfront.us-west-1.amazonaws.com
+      - .cloudhsm.us-west-1.amazonaws.com
+      - .cloudtrail.us-west-1.amazonaws.com
+      - .cloudwatch.us-west-1.amazonaws.com
+      - .codebuild.us-west-1.amazonaws.com
+      - .codecommit.us-west-1.amazonaws.com
+      - .codedeploy.us-west-1.amazonaws.com
+      - .codepipeline.us-west-1.amazonaws.com
+      - .cognito-identity.us-west-1.amazonaws.com
+      - .cognito-idp.us-west-1.amazonaws.com
+      - .config.us-west-1.amazonaws.com
+      - .datasync.us-west-1.amazonaws.com
+      - .dms.us-west-1.amazonaws.com
+      - .dynamodb.us-west-1.amazonaws.com
+      - .ebs.us-west-1.amazonaws.com
+      - .ec2.us-west-1.amazonaws.com
+      - .ecr.us-west-1.amazonaws.com
+      - .ecs.us-west-1.amazonaws.com
+      - .eks.us-west-1.amazonaws.com
+      - .elasticache.us-west-1.amazonaws.com
+      - .elasticbeanstalk.us-west-1.amazonaws.com
+      - .elasticfilesystem.us-west-1.amazonaws.com
+      - .elasticloadbalancing.us-west-1.amazonaws.com
+      - .elasticmapreduce.us-west-1.amazonaws.com
+      - .es.us-west-1.amazonaws.com
+      - .events.us-west-1.amazonaws.com
+      - .execute-api.us-west-1.amazonaws.com
+      - .firehose.us-west-1.amazonaws.com
+      - .fms.us-west-1.amazonaws.com
+      - .fsx.us-west-1.amazonaws.com
+      - .glacier.us-west-1.amazonaws.com
+      - .guardduty.us-west-1.amazonaws.com
+      - .iam.us-west-1.amazonaws.com
+      - .inspector.us-west-1.amazonaws.com
+      - .iot.us-west-1.amazonaws.com
+      - .kinesis.us-west-1.amazonaws.com
+      - .kms.us-west-1.amazonaws.com
+      - .lambda.us-west-1.amazonaws.com
+      - .logs.us-west-1.amazonaws.com
+      - .monitoring.us-west-1.amazonaws.com
+      - .organizations.us-west-1.amazonaws.com
+      - .rds.us-west-1.amazonaws.com
+      - .redshift.us-west-1.amazonaws.com
+      - .route53.us-west-1.amazonaws.com
+      - .s3.us-west-1.amazonaws.com
+      - .secretsmanager.us-west-1.amazonaws.com
+      - .securityhub.us-west-1.amazonaws.com
+      - .servicecatalog.us-west-1.amazonaws.com
+      - .ses.us-west-1.amazonaws.com
+      - .sns.us-west-1.amazonaws.com
+      - .sqs.us-west-1.amazonaws.com
+      - .ssm.us-west-1.amazonaws.com
+      - .states.us-west-1.amazonaws.com
+      - .storagegateway.us-west-1.amazonaws.com
+      - .sts.us-west-1.amazonaws.com
+      - .support.us-west-1.amazonaws.com
+      - .swf.us-west-1.amazonaws.com
+      - .tagging.us-west-1.amazonaws.com
+      - .transfer.us-west-1.amazonaws.com
+      - .waf.us-west-1.amazonaws.com
+      - .workspaces.us-west-1.amazonaws.com
+
+      # EKS Cluster Endpoint
+      - .us-west-1.eks.amazonaws.com
+
+vpc:
+  id: vpc-0ea1fbb49ae45a7d2
+  isolated: false
+  subnets:
+    - id: subnet-0e1ddd26680e52a10
+    - id: subnet-0e8350b80dd689d3e
+
+docker:
+  images:
+    - repository: public.ecr.aws/aws-cli/aws-cli
+      tag: latest
+    - repository: registry.access.redhat.com/ubi9-minimal
+      tag: latest
+    - repository: registry.access.redhat.com/ubi9/openjdk-21
+      tag: latest
+    - repository: quay.io/keycloak/keycloak-operator
+      tag: 26.3.3
+    - repository: quay.io/keycloak/keycloak
+      tag: 26.3.3
+    - repository: public.ecr.aws/docker/library/postgres
+      tag: 16
+    - repository: public.ecr.aws/lts/squid
+      tag: latest
+    - repository: registry1.dso.mil/ironbank/opensource/keycloak/keycloak-fips
+      tag: 26.3.3-fips
+
+helm:
+  charts:
+    - chartName: cert-manager
+      repositoryUrl: https://charts.jetstack.io
+      version: v1.17.2
+      images:
+        - repository: quay.io/jetstack/cert-manager-cainjector
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-controller
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-webhook
+          tag: v1.17.2
+        - repository: quay.io/jetstack/cert-manager-startupapicheck
+          tag: v1.17.2
+    - chartName: external-dns
+      repositoryUrl: https://kubernetes-sigs.github.io/external-dns
+      version: 1.16.1
+      images:
+        - repository: registry.k8s.io/external-dns/external-dns
+          tag: v0.16.1
+    - chartName: aws-efs-csi-driver
+      repositoryUrl: https://kubernetes-sigs.github.io/aws-efs-csi-driver
+      version: 3.1.8
+      images:
+        - repository: public.ecr.aws/efs-csi-driver/amazon/aws-efs-csi-driver
+          tag: v2.1.7
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe
+          tag: v2.14.0-eks-1-32-6
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar
+          tag: v2.13.0-eks-1-32-6
+        - repository: public.ecr.aws/eks-distro/kubernetes-csi/external-provisioner
+          tag: v5.2.0-eks-1-32-6
+    - chartName: aws-load-balancer-controller
+      repositoryUrl: https://aws.github.io/eks-charts
+      version: 1.12.0
+      images:
+        - repository: public.ecr.aws/eks/aws-load-balancer-controller
+          tag: v2.12.0
+    - chartName: cluster-autoscaler
+      repositoryUrl: https://kubernetes.github.io/autoscaler
+      version: 9.34.0
+      images:
+        - repository: public.ecr.aws/bitnami/cluster-autoscaler
+          tag: 1.28.2
+    - chartName: metrics-server
+      repositoryUrl: https://kubernetes-sigs.github.io/metrics-server
+      version: 3.12.2
+      images:
+        - repository: public.ecr.aws/bitnami/metrics-server
+          tag: 0.7.2
+        - repository: registry.k8s.io/autoscaling/addon-resizer
+          tag: 1.8.21
+    - chartName: secrets-store-csi-driver
+      repositoryUrl: https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+      version: 1.4.6
+      images:
+        - repository: public.ecr.aws/aws-secrets-manager/secrets-store-csi-driver-provider-aws
+          tag: 1.0.r2-80-g8244505-2025.02.10.18.44
+        - repository: registry.k8s.io/csi-secrets-store/driver
+          tag: v1.4.6
+        - repository: registry.k8s.io/csi-secrets-store/driver-crds
+          tag: v1.4.6
+        - repository: registry.k8s.io/sig-storage/csi-node-driver-registrar
+          tag: v2.11.1
+        - repository: registry.k8s.io/sig-storage/livenessprobe
+          tag: v2.13.1

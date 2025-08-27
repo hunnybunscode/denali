@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cluster-b.yaml
+  - cluster-b.registry-client.yaml
+  # - cluster-b.group.admin.yaml
+
+  - cluster-b.user.jktruong.yaml
+
+patches:
+  - target:
+      kind: NifiUserGroup
+      name: cluster-b.managed-admins
+      namespace: nifi
+    patch: |-
+      - op: add
+        path: /spec/usersRef
+        value: |-
+          - name: cluster-b.user.jktruong
+            namespace: nifi

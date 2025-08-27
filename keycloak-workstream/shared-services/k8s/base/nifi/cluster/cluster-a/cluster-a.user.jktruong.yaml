@@ -1,0 +1,11 @@
+apiVersion: nifi.konpyutaika.com/v1
+kind: NifiUser
+metadata:
+  name: cluster-a.user.jktruong
+  namespace: nifi
+spec:
+  clusterRef:
+    name: cluster-a
+    namespace: nifi
+  createCert: false
+  identity: jktruong@amazon.com

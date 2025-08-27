@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  namespace: keycloak
+
+resources:
+  - certificate
+  - rds
+  - realm
+
+  - service-keycloak-instance.yaml
+  - ingress-keycloak-app-x509.yaml
+  - ingress-keycloak-app.yaml
+  - keycloak-instance.yaml
+
+configMapGenerator:
+  - name: keycloak-conf
+    namespace: keycloak
+    options:
+      disableNameSuffixHash: true
+    files:
+      - quarkus.properties
+  - name: keycloak-provider-plugins
+    namespace: keycloak
+    options:
+      disableNameSuffixHash: true
+    files:
+      - plugins/spi/keycloak-spi-awsalb-mtls.jar
+  - name: keycloak-init-scripts
+    namespace: keycloak
+    options:
+      disableNameSuffixHash: true
+    files:
+      - config/script/create_fips.sh
+      - config/script/convert_fips_jks.sh
+      - config/script/create_keystore_container.sh

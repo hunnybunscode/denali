@@ -1,0 +1,1 @@
+../../../stig-eks-imagebuilder/lib/script/proxy-userdata.sh

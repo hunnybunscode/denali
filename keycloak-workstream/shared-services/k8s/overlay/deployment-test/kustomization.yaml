@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/certificate
+  - ../../base/keycloak-operator
+  #- ../../base/keycloak
+  - ../../base/keycloak/rds
+  #- ../../base/squid
+  - ../../base/nifikop
+patches:
+  #- path: keycloak-operator-patch.yaml
+  - path: keycloak-db-subnets-patch.yaml

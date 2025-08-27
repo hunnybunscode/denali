@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nifi-registry
+  namespace: nifi
+spec:
+  serviceName: default
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifi-registry
+  template:
+    metadata:
+      labels:
+        app: nifi-registry
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: false
+      containers:
+        - name: registry
+          image: apache/nifi-registry:2.3.0
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 500m
+            limits:
+              memory: 2Gi
+              cpu: 2
+          ports:
+            - containerPort: 18080
+              name: registry-ui
+          volumeMounts:
+            - name: flow-storage
+              mountPath: /opt/nifi-registry/nifi-registry-current/flow_storage
+      volumes:
+        - name: flow-storage
+          persistentVolumeClaim:
+            claimName: pvc-registry

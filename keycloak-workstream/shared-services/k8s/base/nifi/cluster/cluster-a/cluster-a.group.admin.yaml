@@ -1,0 +1,103 @@
+apiVersion: nifi.konpyutaika.com/v1
+kind: NifiUserGroup
+metadata:
+  name: cluster-a.nifi-managed-admins
+  namespace: nifi
+  labels:
+    app: nifi
+    nifi_issuer: cluster-a-issuer
+spec:
+  clusterRef:
+    name: cluster-a
+    namespace: nifi
+  usersRef:
+    - name: cluster-a.user.jktruong
+      namespace: nifi
+  accessPolicies:
+    - action: read
+      resource: /flow
+      type: global
+    - action: write
+      resource: /flow
+      type: global
+    - action: read
+      resource: /controller
+      type: global
+    - action: write
+      resource: /controller
+      type: global
+    - action: read
+      resource: /parameter-contexts
+      type: global
+    - action: write
+      resource: /parameter-contexts
+      type: global
+    - action: read
+      resource: /provenance
+      type: global
+    - action: write
+      resource: /provenance
+      type: global
+    - action: read
+      resource: /restricted-components
+      type: global
+    - action: write
+      resource: /restricted-components
+      type: global
+    - action: read
+      resource: /policies
+      type: global
+    - action: write
+      resource: /policies
+      type: global
+    - action: read
+      resource: /tenants
+      type: global
+    - action: write
+      resource: /tenants
+      type: global
+    - action: read
+      resource: /site-to-site
+      type: global
+    - action: read
+      resource: /system
+      type: global
+    - action: write
+      resource: /site-to-site
+      type: global
+    - action: read
+      resource: /proxy
+      type: global
+    - action: write
+      resource: /proxy
+      type: global
+    - action: read
+      resource: /counters
+      type: global
+    - action: write
+      resource: /counters
+      type: global
+    - action: read
+      componentType: process-groups
+      resource: /
+      type: component
+    - action: write
+      componentType: process-groups
+      resource: /
+      type: component
+    - action: write
+      componentType: process-groups
+      resource: /operation
+      type: component
+    - action: read
+      componentType: process-groups
+      resource: /provenance-data
+      type: component
+    - action: read
+      componentType: process-groups
+      resource: /data
+      type: component
+    - action: write
+      componentType: process-groups
+      resource: /data
+      type: component

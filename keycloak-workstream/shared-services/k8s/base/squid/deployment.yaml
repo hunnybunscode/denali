@@ -1,0 +1,42 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: squid-deployment
+  namespace: squid
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid
+  template:
+    metadata:
+      labels:
+        app: squid
+    spec:
+      containers:
+        - name: squid
+          image: ubuntu/squid:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          ports:
+            - containerPort: 3128
+              name: squid
+              protocol: TCP
+          volumeMounts:
+            - name: squid-config-volume
+              mountPath: /etc/squid/squid.conf
+              subPath: squid.conf
+            - name: squid-data
+              mountPath: /var/spool/squid
+      volumes:
+        - name: squid-config-volume
+          configMap:
+            name: squid-config
+        - name: squid-data
+          persistentVolumeClaim:
+            claimName: squid-cache-pvc

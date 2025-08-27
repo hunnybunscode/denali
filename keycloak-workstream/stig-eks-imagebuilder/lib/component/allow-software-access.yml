@@ -1,0 +1,41 @@
+name: Allow Software Access
+description: Create necessary trust access for installed software components
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: ConfigurePolicyAWSCli
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              AWS_CLI_DIST_PATH=$(dirname $(readlink -f $(which aws)))              
+
+              if [ -d "$AWS_CLI_DIST_PATH" ] && command -v fapolicyd-cli > /dev/null; then
+                # Trust aws cli
+                sudo fapolicyd-cli --file add /usr/local/aws-cli/v2/current/dist/aws
+                echo "Trusting shared libraries in $AWS_CLI_DIST_PATH..."
+                # Trust all .so files
+                find "$AWS_CLI_DIST_PATH" -type f -name '*.so*' -print -exec sudo fapolicyd-cli --file add {} \;
+
+                # Trust other critical file types
+                find "$AWS_CLI_DIST_PATH" -type f -name '*.pyc' -print -exec sudo fapolicyd-cli --file add {} \;
+
+                echo "Updating fapolicyd after adding libraries..."
+                sudo fapolicyd-cli --update
+                echo "Restarting fapolicyd after adding files..."
+                sudo systemctl restart fapolicyd
+                # Allow some time for the service to restart if needed
+                sleep 2
+              else
+                echo "Warning: AWS CLI dist path or fapolicyd-cli not found. Skipping library trust update."
+              fi
+
+  - name: validate
+    steps:
+      - name: Validate-Software-Permission
+        action: ExecuteBash
+        inputs:
+          commands:
+            - aws --version

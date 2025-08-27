@@ -1,0 +1,6 @@
+*.cdk.out
+cdk.out
+.env
+cdk.context.json
+.DS_Store
+.aws

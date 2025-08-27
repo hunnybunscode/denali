@@ -1,0 +1,170 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: keycloak-instance
+  namespace: keycloak
+spec:
+  instances: 3
+  db:
+    vendor: postgres
+    database: keycloak
+    # host: keycloak-aurora-postgres.keycloak.svc.cluster.local
+    usernameSecret:
+      name: keycloak-db-secret
+      key: username
+    passwordSecret:
+      name: keycloak-db-secret
+      key: password
+  http:
+    tlsSecret: tls-certificate-keycloak
+  hostname:
+    strict: false
+  ingress:
+    enabled: false
+  features:
+    enabled:
+      - fips
+    disabled:
+      - kerberos
+  additionalOptions:
+    - name: health-enabled
+      value: "true"
+    - name: metrics-enabled
+      value: "true"
+    - name: log-level
+      value: debug
+    - name: https-client-auth
+      value: request
+    - name: fips-mode
+      value: non-strict
+    - name: spi-x509cert-lookup-provider
+      value: awsalb
+    # - name: spi-x509cert-lookup-awsalb-certificate-chain-length
+    #   value: '10'
+    # - name: spi-x509cert-lookup-awsalb-trust-proxy-verification
+    #   value: 'false'
+    - name: spi-x509cert-lookup-awsalb-ssl-client-cert
+      value: X-Amzn-Mtls-Clientcert
+  unsupported:
+    podTemplate:
+      metadata:
+        labels:
+          keycloak: keycloak-instance
+      spec:
+        initContainers:
+          - name: fips-initialize
+            image: registry.access.redhat.com/ubi9-minimal:latest
+            securityContext:
+              privileged: false
+              runAsUser: 0
+              runAsGroup: 0
+            command:
+              - /bin/bash
+              - "-c"
+            args:
+              - |
+                set -e
+                echo "Initializing FIPS"
+                ls -all /opt/scripts
+                cat /opt/scripts/create_fips.sh
+                cd /opt/keycloak/providers
+                bash /opt/scripts/create_fips.sh
+                echo "Initializing FIPS done"
+            volumeMounts:
+              - name: keycloak-provider-fips-plugins
+                mountPath: /opt/keycloak/providers
+              - name: keycloak-init-scripts
+                mountPath: /opt/scripts
+          - name: pki-initialize
+            image: registry.access.redhat.com/ubi9/openjdk-21:latest
+            securityContext:
+              privileged: false
+              runAsUser: 0
+              runAsGroup: 0
+            command:
+              - /bin/bash
+              - "-c"
+            args:
+              - |
+                set -e
+                echo "Initializing PKI"
+                ls -all /opt/scripts
+                cat /opt/scripts/create_keystore_container.sh
+                bash /opt/scripts/create_keystore_container.sh
+                update-ca-trust extract
+                trust list --filter ca-anchors | grep DOD -i -A 2 -B 3
+                cp -ra /etc/pki/* /etc/pki-custom
+                echo "Initializing PKI done"
+            volumeMounts:
+              - name: pki-custom-data
+                mountPath: /etc/pki-custom
+              - name: keycloak-init-scripts
+                mountPath: /opt/scripts
+              # - name: dod-ca-bundle
+              #   mountPath: /home/default/tmp/unclass-certificates_pkcs7_DoD.zip
+              #   subPath: unclass-certificates_pkcs7_DoD.zip
+          - name: bcfks-initialize
+            image: registry.access.redhat.com/ubi9/openjdk-21:latest
+            securityContext:
+              privileged: false
+              runAsUser: 0
+              runAsGroup: 0
+            command:
+              - /bin/bash
+              - "-c"
+            args:
+              - |
+                set -e
+                echo "Initializing BouncyCastle FIPS keystore"
+                ls -all /opt/scripts
+                cat /opt/scripts/convert_fips_jks.sh
+                bash /opt/scripts/convert_fips_jks.sh
+                echo "Initializing BouncyCastle FIPS keystore done"
+            volumeMounts:
+              - name: keycloak-init-scripts
+                mountPath: /opt/scripts
+              - name: pki-custom-data
+                mountPath: /etc/pki
+        containers:
+          - volumeMounts:
+              - name: keycloak-conf
+                mountPath: /opt/keycloak/conf/quarkus.properties
+                subPath: quarkus.properties
+              - name: keycloak-provider-fips-plugins
+                mountPath: /opt/keycloak/providers
+              - name: keycloak-provider-plugins
+                mountPath: /opt/keycloak/providers/keycloak-spi-awsalb-mtls.jar
+                subPath: keycloak-spi-awsalb-mtls.jar
+              - name: secrets-store
+                mountPath: /mnt/secrets-store
+                readOnly: true
+              - name: pki-custom-data
+                mountPath: /opt/keycloak/conf/truststores
+                subPath: ca-trust/source/anchors
+            envFrom:
+              - configMapRef:
+                  name: keycloak-db
+        serviceAccountName: keycloak-secrets-sa
+        volumes:
+          - name: secrets-store
+            csi:
+              driver: secrets-store.csi.k8s.io
+              readOnly: true
+              volumeAttributes:
+                secretProviderClass: keycloak-aws-secrets
+          - name: keycloak-conf
+            configMap:
+              name: keycloak-conf
+          - name: keycloak-init-scripts
+            configMap:
+              name: keycloak-init-scripts
+          - name: pki-custom-data
+            emptyDir: {}
+          - name: keycloak-provider-plugins
+            configMap:
+              name: keycloak-provider-plugins
+          - name: keycloak-provider-fips-plugins
+            emptyDir: {}
+          # - name: dod-ca-bundle
+          #   configMap:
+          #     name: dod-ca-bundle

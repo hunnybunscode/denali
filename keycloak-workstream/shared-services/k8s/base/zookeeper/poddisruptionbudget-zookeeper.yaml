@@ -1,0 +1,20 @@
+# Source: zookeeper/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zookeeper
+  namespace: zookeeper
+  labels:
+    app.kubernetes.io/instance: zookeeper
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/version: 3.9.2
+    helm.sh/chart: zookeeper-13.4.6
+    app.kubernetes.io/component: zookeeper
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: zookeeper
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/component: zookeeper

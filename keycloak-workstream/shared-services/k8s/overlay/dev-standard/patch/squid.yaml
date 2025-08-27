@@ -1,0 +1,11 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: squid-deployment
+  namespace: squid
+spec:
+  template:
+    spec:
+      containers:
+        - name: squid
+          image: 908027385618.dkr.ecr.us-west-1.amazonaws.com/squid:latest

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/certificate
+  - ../../base/keycloak-operator
+  - ../../base/keycloak
+  - ../../base/squid
+  - ../../base/nifikop
+patchesStrategicMerge:
+  - keycloak-operator-patch.yaml
+  - keycloak-instance-patch.yaml
+  - alb-graceful-failure-patch.yaml

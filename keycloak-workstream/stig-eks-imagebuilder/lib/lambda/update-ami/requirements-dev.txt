@@ -1,0 +1,2 @@
+boto3-stubs[ssm,ec2]>=1.28
+boto3

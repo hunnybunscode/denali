@@ -1,0 +1,46 @@
+environment:
+  name: delete
+  region: us-gov-west-1
+  account: "249263810748"
+
+hostedZones: &hostedZones
+  - zoneName: denali.jktruong.people.aws.dev
+    private: true
+    vpc:
+      id: &vpcId vpc-029c12710bf709971
+
+.vpc: &vpc
+  id: vpc-029c12710bf709971
+
+.workerNodeAmi: &ami
+  name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high *
+
+.controlNodeGroupSubnets: &controlNodeGroupSubnets
+  - id: subnet-0f97d9b9aa4cfc5ab
+  - id: subnet-046b90574aa46d47f
+
+.workerNodeGroupSubnets: &workerNodeGroupSubnets
+  - id: subnet-0f97d9b9aa4cfc5ab
+  - id: subnet-046b90574aa46d47f
+
+.workerNodeRootstorage: &storage
+  rootDeviceName: /dev/xvda
+  sizeInGB: 50
+  type: gp3
+
+clusters:
+  - name: SharedServices
+    version: "1.32"
+    vpc:
+      id: *vpcId
+      subnets: *controlNodeGroupSubnets
+    hostedZones: *hostedZones
+    nodeGroups:
+      - name: compute-xlarge
+        instanceType: m5a.xlarge
+        ami: *ami
+        storage: *storage
+        subnets: *workerNodeGroupSubnets
+        minSize: 2
+        desiredCapacity: 2
+        maxSize: 2

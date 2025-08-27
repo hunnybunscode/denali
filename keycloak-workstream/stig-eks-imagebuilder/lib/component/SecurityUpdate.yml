@@ -1,0 +1,42 @@
+name: Security Update
+description: Update security
+schemaVersion: 1.0
+
+# Refer to https://docs.aws.amazon.com/linux/al2023/ug/deterministic-upgrades-usage.html
+# for more information on the security update process.
+
+phases:
+  - name: build
+    steps:
+      # - name: InstallUpdates
+      #   action: UpdateOS
+
+      - name: UpdateSecurity
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              echo "Updating security ..."
+              # Get the current version
+              current_version=$(cat /etc/system-release)
+              echo "Current version: $current_version"
+
+              # Check if running AL2023
+              if [ -f /etc/os-release ]; then
+                  cat /etc/os-release
+                  source /etc/os-release
+
+                  if [[ $ID == "amzn" && $VERSION_ID == "2023" ]]; then
+                      echo "Running Amazon Linux 2023"
+                      
+                      # Update to a specific version (replace with your target version)        
+                      sudo dnf --releasever=latest upgrade --assumeyes --security
+                  else
+                      echo "Running Generalized RHEL Update"
+                      sudo yum update --assumeyes --security
+                      exit 0
+                  fi
+              else
+                  echo "Cannot determine OS version"
+                  exit 1
+              fi

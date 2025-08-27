@@ -1,0 +1,46 @@
+externalURL: "https://registry.denali.jktruong.people.aws.dev"
+
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 443
+      protocol: TCP
+
+expose:
+  type: ingress
+  tls:
+    enabled: true
+  ingress:
+    className: "alb"
+    hosts:
+      core: registry.denali.jktruong.people.aws.dev
+    controller: aws
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/group.name: harbor
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+
+notary:
+  enabled: false
+
+postgresql:
+  auth:
+    postgresPassword: "SPRING2025"
+
+redis:
+  auth:
+    enabled: false
+
+persistence:
+  persistentVolumeClaim:
+    registry:
+      size: 200Gi

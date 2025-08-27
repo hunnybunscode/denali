@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:UntagOpenIDConnectProvider",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider",
+        "iam:CreateOpenIDConnectProvider",
+        "imagebuilder:*",
+        "inspector2:BatchGetAccountStatus",
+        "waf-regional:AssociateWebACL",
+        "waf-regional:DisassociateWebACL",
+        "waf-regional:GetWebACL",
+        "waf-regional:GetWebACLForResource"
+      ],
+      "Resource": "*",
+      "Effect": "Allow",
+      "Sid": "ProjAdminGenAccess"
+    },
+    {
+      "Condition": {
+        "StringNotEquals": {
+          "aws:ResourceTag/DAFCwManaged": "DAFCwManaged"
+        }
+      },
+      "Action": ["sts:*"],
+      "Resource": ["arn:{{partition}}:iam::{{account}}:role/cdk-hnb659fds*"],
+      "Effect": "Allow"
+    }
+  ]
+}

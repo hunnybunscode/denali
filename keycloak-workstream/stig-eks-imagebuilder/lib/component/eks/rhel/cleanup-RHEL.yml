@@ -1,0 +1,17 @@
+name: Post Clean up for RHEL
+description: Clean up after a successful build of RHEL. Only run this at the very end. DO NOT RUN IN MIDDLE
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: CleanUpRHEL
+        action: ExecuteBash
+        onFailure: Abort
+        maxAttempts: 1
+        inputs:
+          commands:
+            - |
+              # Clean up yum caches to reduce the image size
+              sudo yum clean all
+              sudo rm -rf /var/cache/yum
