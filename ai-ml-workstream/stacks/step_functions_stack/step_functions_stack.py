@@ -19,18 +19,23 @@ class StepFunctionsStack(Stack):
 
         with open('stacks/step_functions_stack/step_functions/json_definitions/remediation_step_function.json', 'r') as f:
             remediation_definition = json.load(f)
-            
+
         # Replace hardcoded ARNs with dynamic values
         remediation_definition = self._replace_dynamic_values(remediation_definition, config)
-            
+
         # Create the remediation step function from JSON definition
-        # Create IAM role for the state machine
+        # Create IAM role for the state machine with AFC2S prefix and permissions boundary
         state_machine_role = iam.Role(
-            self, 
-            f"{config.namespace}-{config.version}-StepFunctionRole",
-            assumed_by=iam.ServicePrincipal("states.amazonaws.com")
+            self,
+            f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-StepFunctionRole",
+            role_name=f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-StepFunctionRole",
+            assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
+            permissions_boundary=iam.ManagedPolicy.from_managed_policy_arn(
+                self, "StepFunctionPermissionsBoundary",
+                config.permissions.boundary_policy_arn
+            )
         )
-        
+
         # Add specific permissions to the role
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -40,7 +45,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add permissions for Step Functions
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -51,7 +56,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add permissions for CloudWatch Logs
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -67,7 +72,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add permissions for EventBridge
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -78,7 +83,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add permissions for SSM
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -88,7 +93,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add permissions for DynamoDB
         state_machine_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -102,7 +107,7 @@ class StepFunctionsStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         remediation_sf = sfn.CfnStateMachine(
             self,
             f"{config.namespace}-{config.version}-RemediationStepFunction",
@@ -110,14 +115,14 @@ class StepFunctionsStack(Stack):
             role_arn=state_machine_role.role_arn,
             state_machine_name=f"{config.namespace}-{config.version}-RemediationStepFunction",
         )
-        
+
         # Load the test step function definition
         with open('stacks/step_functions_stack/step_functions/json_definitions/test_step_function.json', 'r') as f:
             test_definition = json.load(f)
-            
+
         # Replace hardcoded ARNs with dynamic values
         test_definition = self._replace_dynamic_values(test_definition, config)
-            
+
         # Create the test step function from JSON definition
         test_sf = sfn.CfnStateMachine(
             self,
@@ -126,7 +131,7 @@ class StepFunctionsStack(Stack):
             role_arn=state_machine_role.role_arn,
             state_machine_name=f"{config.namespace}-{config.version}-TestStepFunction",
         )
-        
+
         # Export the remediation state machine ARN for cross-stack reference
         CfnOutput(
             self,
@@ -138,7 +143,7 @@ class StepFunctionsStack(Stack):
     def _replace_dynamic_values(self, definition, config):
         """Replace template variables with config values"""
         definition_str = json.dumps(definition)
-        
+
         # Replace template variables with namespaced function names
         namespace_prefix = f"{config.namespace}-{config.version}-"
         replacements = {
@@ -156,8 +161,8 @@ class StepFunctionsStack(Stack):
             '{{GIT_PR_CRUD}}': f"{namespace_prefix}{config.lambda_functions.git_pr_crud}",
             '{{REMEDIATION_STATE_MACHINE}}': f"{namespace_prefix}RemediationStepFunction"
         }
-        
+
         for placeholder, value in replacements.items():
             definition_str = definition_str.replace(placeholder, value)
-            
+
         return json.loads(definition_str)

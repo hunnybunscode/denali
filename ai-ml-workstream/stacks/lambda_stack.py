@@ -14,15 +14,20 @@ class LambdaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, config: Config, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create Lambda execution role
+        # Create Lambda execution role with AFC2S prefix and permissions boundary
         lambda_role = iam.Role(
             self,
-            f"{config.namespace}-{config.version}-LambdaRole",
+            f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-LambdaRole",
+            role_name=f"{config.permissions.role_prefix}-{config.namespace}-{config.version}-LambdaRole",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaVPCAccessExecutionRole")
-            ]
+            ],
+            permissions_boundary=iam.ManagedPolicy.from_managed_policy_arn(
+                self, "LambdaPermissionsBoundary",
+                config.permissions.boundary_policy_arn
+            )
         )
 
         # Add permissions for Lambda functions
@@ -37,7 +42,7 @@ class LambdaStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Add Step Functions permissions for nested executions
         lambda_role.add_to_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
@@ -48,7 +53,7 @@ class LambdaStack(Stack):
             ],
             resources=["*"]
         ))
-        
+
         # Create Lambda layer with requests package
         requests_layer = _lambda.LayerVersion(
             self,
@@ -76,7 +81,7 @@ class LambdaStack(Stack):
         security_group = ec2.SecurityGroup.from_security_group_id(
             self, "SecurityGroup", config.networking.security_group_id
         )
-        
+
         # Create Lambda functions with actual code
         lambda_configs = {
             config.lambda_functions.git_branch_crud: "stacks/step_functions_stack/lambdas/git_branch_crud",

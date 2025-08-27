@@ -1,14 +1,17 @@
-namespace: "your-name"  # replace with your identifier
+namespace: "your-namespace" # replace with your identifier
 version: "v1"
-region: "us-gov-west-1" 
+region: "us-gov-west-1"
+permissions:
+  boundary_policy_arn: "arn:aws-us-gov:iam::YOUR-ACCOUNT-ID:policy/YourPolicyName"
+  role_prefix: "AFC2S"
 networking:
-  vpc_id: "vpc-04722c09eccda8315"  # replace with your VPC ID if needed
-  subnets:  # replace with your subnet IDs if needed
-    - subnet_id: "subnet-07b599999e083926a" 
-      availability_zone: "us-gov-west-1a" 
-    - subnet_id: "subnet-037ee1b96ac684f7d"
+  vpc_id: "vpc-YOUR-VPC-ID"
+  subnets:
+    - subnet_id: "subnet-YOUR-SUBNET-ID-1"
+      availability_zone: "us-gov-west-1a"
+    - subnet_id: "subnet-YOUR-SUBNET-ID-2"
       availability_zone: "us-gov-west-1b"
-  security_group_id: "sg-04db58b3fca80f069" # replace with your security group ID if needed
+  security_group_id: "sg-YOUR-SECURITY-GROUP-ID"
 
 lambda_functions:
   git_branch_crud: "Git_Branch_CRUD"
@@ -22,7 +25,7 @@ lambda_functions:
   verify_findings_resolved: "Verify_Findings_Resolved"
   git_pr_crud: "Git_PR_CRUD"
 
+remediation_state_machine: "DenaliPOC-Remediation-Test"
+
 bedrock:
   model_id: "meta.llama3-70b-instruct-v1:0"
-
-

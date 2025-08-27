@@ -15,11 +15,24 @@ env = cdk.Environment(
     region=os.environ.get('CDK_DEFAULT_REGION', cfg.region)
 )
 
+# Custom synthesizer for AFC2S bootstrap with permission boundaries
+synthesizer = cdk.DefaultStackSynthesizer(
+    qualifier='v1',
+    cloud_formation_execution_role='arn:${AWS::Partition}:iam::${AWS::AccountId}:role/AFC2S-cdk-v1-cfn-exec-role-${AWS::AccountId}-${AWS::Region}',
+    deploy_role_arn='arn:${AWS::Partition}:iam::${AWS::AccountId}:role/AFC2S-cdk-v1-deploy-role-${AWS::AccountId}-${AWS::Region}',
+    file_asset_publishing_role_arn='arn:${AWS::Partition}:iam::${AWS::AccountId}:role/AFC2S-cdk-v1-file-pub-role-${AWS::AccountId}-${AWS::Region}',
+    image_asset_publishing_role_arn='arn:${AWS::Partition}:iam::${AWS::AccountId}:role/AFC2S-cdk-v1-image-pub-role-${AWS::AccountId}-${AWS::Region}',
+    lookup_role_arn='arn:${AWS::Partition}:iam::${AWS::AccountId}:role/AFC2S-cdk-v1-lookup-role-${AWS::AccountId}-${AWS::Region}',
+    file_assets_bucket_name='afc2s-cdk-v1-assets-${AWS::AccountId}-${AWS::Region}',
+    image_assets_repository_name='afc2s-cdk-v1-container-assets-${AWS::AccountId}-${AWS::Region}'
+)
+
 lambda_stack = LambdaStack(
     app,
     f"{cfg.namespace}-{cfg.version}-LambdaStack",
     env=env,
     config=cfg,
+    synthesizer=synthesizer,
 )
 
 step_functions_stack = StepFunctionsStack(
@@ -27,6 +40,7 @@ step_functions_stack = StepFunctionsStack(
     f"{cfg.namespace}-{cfg.version}-StepFunctionsStack",
     env=env,
     config=cfg,
+    synthesizer=synthesizer,
 )
 
 step_functions_stack.add_dependency(lambda_stack)

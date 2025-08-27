@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "aaIamPrefix",
+    "ParameterValue": "AFC2S"
+  },
+  {
+    "ParameterKey": "aaPermissionBoundaryArn",
+    "ParameterValue": "arn:aws-us-gov:iam::YOUR-ACCOUNT-ID:policy/ProjAdminPolicy"
+  },
+  {
+    "ParameterKey": "Qualifier",
+    "ParameterValue": "v1"
+  }
+]
