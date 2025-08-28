@@ -1,0 +1,62 @@
+{
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "cSpell.words": ["Keycloak", "truststore"],
+  "java.compile.nullAnalysis.mode": "automatic",
+  "psi-header.license-reference": {
+    "uri": "./LICENSE",
+    "uriIsLocalFile": true
+  },
+  "psi-header.config": {
+    "company": "Amazon.com and Affiliates",
+    "license": "Custom",
+    "forceToTop": true,
+    "blankLinesAfter": 1
+  },
+  "psi-header.variables": [
+    ["projectCreationYear", "2025"],
+    ["customerSignedDate", "08/05/2024"]
+  ],
+  "psi-header.license-text": [
+    "Copyright © <<projectCreationYear>> <<company>>: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated, <<customerSignedDate>>."
+  ],
+  "psi-header.templates": [
+    {
+      "language": "*",
+      "template": [
+        "<<licensetext>>",
+        "-----",
+        "File: <<filerelativepath>>",
+        "Created Date: <<filecreated('dddd MMMM Do YYYY')>>",
+        "-----"
+      ]
+    }
+  ],
+  "psi-header.lang-config": [
+    {
+      "language": "yaml",
+      "template": [
+        "<<licensetext>>",
+        "-----",
+        "File: <<filerelativepath>>",
+        "Created Date: <<filecreated('dddd MMMM Do YYYY')>>",
+        "-----"
+      ],
+      "begin": "#  ",
+      "prefix": "# ",
+      "end": "#  "
+    },
+    {
+      "language": "markdown",
+      "template": [
+        "<<licensetext>>",
+        "-----",
+        "File: <<filerelativepath>>",
+        "Created Date: <<filecreated('dddd MMMM Do YYYY')>>",
+        "-----"
+      ],
+      "begin": "[//]: #  ",
+      "prefix": "[//]: # ",
+      "end": "[//]: #  "
+    }
+  ]
+}
