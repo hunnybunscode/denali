@@ -2,7 +2,7 @@
 Copyright © Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties.
 -->
 
-# Denali AI-ML Code Modernization Workstream: Automated Security Remediation
+# Denali GenAI Code Modernization Workstream: Automated Security Remediation
 
 An intelligent, automated security vulnerability remediation system that leverages AWS Step Functions, Lambda, and Amazon Bedrock to analyze, fix, and validate security issues in your codebase.
 
@@ -51,7 +51,7 @@ The automated remediation process follows these steps:
 - AWS Account with appropriate permissions
 - Python 3.9+ and Node.js 20+
 - Docker installed and running
-- Access to Amazon Bedrock models (Claude 3.7 Sonnet)
+- Access to Amazon Bedrock models (Claude 3.5 Sonnet)
 - Git repositories for source code and scan results
 
 ### 1. Clone and Setup
@@ -69,6 +69,14 @@ npm install -g aws-cdk
 ```
 
 ### 2. Configure Your Environment
+Copy the example configuration and customize it for your environment:
+```bash
+# Copy the example configuration file
+cp config/example_deployment_config.yaml config/deployment_config.yaml
+
+# Edit with your specific values
+nano config/deployment_config.yaml  # or use your preferred editor
+
 Edit `config/deployment_config.yaml`:
 ```yaml
 namespace: "your-name"  # Replace with your identifier
@@ -231,17 +239,17 @@ To trigger the main remediation workflow, use this sample JSON payload:
 
 ```json
 {
-  "repository_url": "https://your-git-server.com/api/v1/repos/owner/repository",
-  "branch_name": "main",
-  "scan_type": "fortify",
-  "severity_threshold": 4,
-  "auto_merge": false,
-  "notification_email": "security-team@yourorg.com",
-  "metadata": {
-    "project_name": "sample-project",
-    "scan_id": "scan-2024-001",
-    "requester": "security-team"
-  }
+  "mainBranch": "main",
+  "scanResultsRepo": "https://your-git-server.com/api/v1/repos/owner/repository-scan-results.git",
+  "codeRepo": "https://your-git-server.com/api/v1/repos/owner/repository-source.git",
+  "scanDocumentName": "FortifyScan-SSM-Doc",
+  "projectName": "libNDCmath",
+  "tableName": "libNDCmath-ScanResults",
+  "fortifyScanInstanceID": "i-xxxxxxx",
+  "secretName": "git/api/token",
+  "basePath": "/home/ec2-user/vobs/src/common/libsrc/libNDCmath",
+  "minSeverity": "4",
+  "retry_max": 2
 }
 ```
 
