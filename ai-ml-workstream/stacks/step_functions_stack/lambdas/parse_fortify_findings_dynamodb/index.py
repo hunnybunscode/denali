@@ -114,7 +114,7 @@ def download_files_from_gitea(repo_url, branch, secret_name=None):
                         # For XML files, check if it contains FVDL content
                         if item['name'].lower().endswith('.xml'):
                             try:
-                                with open(temp_file, 'r') as f:
+                                with open(temp_file, 'r', encoding="utf-8") as f:
                                     content = f.read(1000)  # Just read the beginning
                                     if '<FVDL' in content:
                                         downloaded_files.append(temp_file)
