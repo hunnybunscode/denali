@@ -117,7 +117,7 @@ class StepFunctionsStack(Stack):
         )
 
         # Load the test step function definition
-        with open('stacks/step_functions_stack/step_functions/json_definitions/test_step_function.json', 'r'), encoding="utf-8" as f:
+        with open('stacks/step_functions_stack/step_functions/json_definitions/test_step_function.json', 'r', encoding="utf-8") as f:
             test_definition = json.load(f)
 
         # Replace hardcoded ARNs with dynamic values
