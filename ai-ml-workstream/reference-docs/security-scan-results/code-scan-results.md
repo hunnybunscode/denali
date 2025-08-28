@@ -56,7 +56,7 @@ This document summarizes the findings from the security scans performed on the D
    - **Impact**: Failed requests might not be properly detected, leading to silent failures and unexpected behavior.
    - **Remediation**: Add proper error handling with `raise_for_status()` after each request.
 
-3. **Missing Encoding Parameter in File Operations**
+3. ~~**Missing Encoding Parameter in File Operations**~~ `FIEXED`
    - **Severity**: WARNING
    - **Tool**: Semgrep
    - **Location**: `ai-ml-workstream/config/config.py` and `ai-ml-workstream/stacks/step_functions_stack/lambdas/parse_fortify_findings_dynamodb/index.py`

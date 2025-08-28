@@ -17,7 +17,7 @@ class StepFunctionsStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, config: Config, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        with open('stacks/step_functions_stack/step_functions/json_definitions/remediation_step_function.json', 'r') as f:
+        with open('stacks/step_functions_stack/step_functions/json_definitions/remediation_step_function.json', 'r', encoding="utf-8") as f:
             remediation_definition = json.load(f)
 
         # Replace hardcoded ARNs with dynamic values
@@ -117,7 +117,7 @@ class StepFunctionsStack(Stack):
         )
 
         # Load the test step function definition
-        with open('stacks/step_functions_stack/step_functions/json_definitions/test_step_function.json', 'r') as f:
+        with open('stacks/step_functions_stack/step_functions/json_definitions/test_step_function.json', 'r'), encoding="utf-8" as f:
             test_definition = json.load(f)
 
         # Replace hardcoded ARNs with dynamic values

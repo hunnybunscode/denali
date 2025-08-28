@@ -57,7 +57,7 @@ The Deliverable Security Review identified several security concerns that should
 
 ### Medium Priority Issues:
 
-1. **Missing Encoding Parameter in File Operations**
+1. ~~**Missing Encoding Parameter in File Operations**~~ `FIXED`
    - Files are opened without specifying an encoding, which can lead to encoding issues.
    - This can cause corruption of files with special characters and cross-platform compatibility issues.
 
