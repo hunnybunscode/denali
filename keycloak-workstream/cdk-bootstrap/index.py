@@ -1,3 +1,11 @@
+"""
+Copyright © 2025 Amazon.com and Affiliates: This deliverable is considered Developed Content as defined in the AWS Service Terms and the SOW between the parties dated, 08/05/2024.
+-----
+File: /index.py
+Created Date: Wednesday August 27th 2025
+-----
+"""
+
 import os
 import subprocess
 import logging
