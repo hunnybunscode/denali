@@ -156,7 +156,24 @@ Main resources are deployed through an orchestration stack that manages four spe
 15. Click `Submit`.
 16. Wait for stack creation to complete for the main stack (status: `CREATE_COMPLETE`).
 
-#### 5. Deploy EC2 Image Builder pipeline
+#### 5. Deploy Daffodil workflow
+
+The solution allows you to integrate [Apache Daffodil](https://daffodil.apache.org/) workflow. The daffodil stack creates a serverless data processing pipeline that automatically validates and transforms files using user-provided DFDL (Data Format Description Language) schemas through two Java-based Lambda functions: a precompiler that optimizes Daffodil schemas for performance, and a parser that processes incoming files by validating them against these schemas and transforming them to structured formats, with the parser also serving as an un-parser to convert processed files back to their original formats when needed. When files are uploaded to the input bucket, the system automatically triggers the parser function which validates the data structure, transforms successful files to the output bucket (optionally archiving them), moves failed files to a dead-letter bucket for troubleshooting, and sends error notifications via SNS, creating a complete bidirectional data transformation workflow with comprehensive error handling and monitoring.
+
+Schema Management
+
+The daffodil stack creates an S3 schema bucket where you'll need to upload both your DFDL schemas and a `content-types.yaml` mapping file. Example schemas and content-type mappings can be found in `daffodil/test_resources/schemas`.
+
+Content types
+
+The daffodil parser uses the filename to determine which schema to use. It searches through each segment of the filename (separated by `.`) and returns the first segment that matches a key in the content-types mapping. For example, a file with the name `UNCLASS.USNDC.INTERVAL.da_interval_1709659229.txt` will look up the schema mapping for `INTERVAL` (assuming `INTERVAL` exists in the mapping but `UNCLASS` and `USNDC` do not).
+
+Caching
+
+The daffodil parser will cache reading in `content-types.yaml` file from the schema bucket and creating the content-types mapping every minute. This value can be overwritten with the parser lambda environment variable `CONTENT_TYPE_CACHE_TTL_MINUTES`. Also, the retrieval of the data parser (and
+compiling of the schema if the data parser hasn't been precompiled yet) from the schema bucket is cached every 15 minutes. This value can be overwritten with the parser lambda environment variable `DATA_PROCESSOR_CACHE_TTL_MINUTES`.
+
+#### 6. Deploy EC2 Image Builder pipeline
 
 The solution uses an EC2 Image Builder pipeline to automate AMI creation and maintenance. The pipeline builds AMIs with required software (Python, AWS CLI, CloudWatch Agent, and other tools) and integrates with Auto Scaling Groups for automated deployments. A Lambda function monitors for new base AMIs and triggers pipeline updates, while the system performs automatic ASG instance refresh when new images are built. Comprehensive notifications are provided via SNS.
 
@@ -246,7 +263,7 @@ Produce an image using the pipeline:
 6. Under `Output images`, wait for the latest version's `Image status` to become `Available`.
 7. (Optional) Monitor progress or troubleshoot failures by viewing the latest log stream.
 
-#### 6: Create ingestion buckets
+#### 7: Create ingestion buckets
 
 The solution uses ingestion buckets to receive files for processing. These buckets integrate with the validation pipeline through S3 event notifications and support multiple upload methods (SFTP, presigned URLs, bucket-to-bucket, and IAM user credential). Specific tags are required to ensure proper routing based on mapping IDs or destination buckets.
 
@@ -337,6 +354,10 @@ The solution requires a Diode data transfer infrastructure stack in the Diode ac
 13. Click `Next`.
 14. Click `Submit`.
 15. Wait for stack creation to complete (status: `CREATE_COMPLETE`).
+
+### Validation Account (High Side)
+
+For daffodil unparse deployment
 
 ## How to Operate
 
