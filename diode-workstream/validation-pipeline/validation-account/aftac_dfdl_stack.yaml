@@ -1,0 +1,738 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  How to set up cross-account permissions:
+  1) Input Bucket:
+    a) Add a bucket event notification for ObjectCreated events for objects with the suffix of .infoset.xml.
+    Select Lambda function as the destination and paste the Parser function ARN from Outputs.
+    b) Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
+      "s3:GetObject",
+      "s3:GetObjectTagging",
+      "s3:DeleteObject",
+      "s3:ListBucket"
+  2) Output Bucket:
+    Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
+      "s3:AbortMultipartUpload",
+      "s3:PutObject",
+      "s3:PutObjectTagging",
+      "s3:ListBucket"
+  3) If either bucket is using a customer-managed KMS key(s), the key policy should also allow the Parser function's
+  execution role to use the key.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - IamPrefix
+          - PermissionsBoundaryPolicyArn
+          - ResourceSuffix
+
+      - Label:
+          default: Lambda Code Storage Configuration
+        Parameters:
+          - LambdaCodeBucket
+          - ParserLambdaCodeKey
+          - ParserLambdaCodeKeyVersionId
+          - PrecompilerLambdaCodeKey
+          - PrecompilerLambdaCodeKeyVersionId
+
+      - Label:
+          default: Lambda Networking Configuration
+        Parameters:
+          - VpcId
+          - VpcSubnetIDs
+
+      - Label:
+          default: Daffodil Configuration
+        Parameters:
+          - InputBucket
+          - OutputBucket
+          - InputOutputBucketsAccountId
+          - ParserFilterSuffix
+          - ArchiveSuccessfulFiles
+          - MoveFailedFiles
+          - NotifyOnError
+          - ContentTypeFileKey
+          - ContentTypeCacheTtlMinutes
+          - DataProcessorCacheTtlMinutes
+          - EnableDetailedMetrics
+
+    ParameterLabels:
+      IamPrefix:
+        default: IAM Prefix
+      PermissionsBoundaryPolicyArn:
+        default: Permissions Boundary Policy ARN
+      ResourceSuffix:
+        default: Resource Suffix
+      LambdaCodeBucket:
+        default: Lambda Code Storage Bucket Name
+      ParserLambdaCodeKey:
+        default: Parser Lambda Key
+      ParserLambdaCodeKeyVersionId:
+        default: Parser Lambda Key Version ID
+      PrecompilerLambdaCodeKey:
+        default: Precompiler Lambda Key
+      PrecompilerLambdaCodeKeyVersionId:
+        default: Precompiler Lambda Key Version ID
+      VpcId:
+        default: VPC ID
+      VpcSubnetIDs:
+        default: Private Subnet IDs within the VPC
+      InputBucket:
+        default: Input Bucket
+      OutputBucket:
+        default: Output Bucket
+      InputOutputBucketsAccountId:
+        default: Account ID for Input and Output Buckets
+      ParserFilterSuffix:
+        default: Parser Filter S3 Key Suffix
+      ArchiveSuccessfulFiles:
+        default: Archive Successful Files
+      MoveFailedFiles:
+        default: Move Failed Files
+      NotifyOnError:
+        default: Notify On Error
+      ContentTypeFileKey:
+        default: Content Types File S3 Key
+      ContentTypeCacheTtlMinutes:
+        default: Content Types Cache TTL (Minutes)
+      DataProcessorCacheTtlMinutes:
+        default: Data Processors Cache TTL (Minutes)
+      EnableDetailedMetrics:
+        default: Enable Detailed Performance Metrics
+
+Parameters:
+  IamPrefix:
+    Type: String
+    Description: Required prefix for IAM resources
+    Default: AFC2S
+    AllowedValues: [AFC2S]
+    ConstraintDescription: Must be "AFC2S"
+
+  PermissionsBoundaryPolicyArn:
+    Type: String
+    Description: ARN of the policy that is used to set the permissions boundary for IAM resources
+    AllowedPattern: ^arn:(aws|aws-us-gov|aws-iso-b|aws-iso):iam::(\d{12}|aws):policy/.*
+    ConstraintDescription: Must be a valid IAM policy ARN
+
+  ResourceSuffix:
+    Type: String
+    Description: >-
+      Suffix added to the named AWS resources. It must start with a lowercase letter and contain
+      only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+    AllowedPattern: ^[a-z0-9-]{1,20}$
+    ConstraintDescription: Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
+
+  LambdaCodeBucket:
+    Type: String
+    Description: The name of the Amazon S3 bucket where Lambda codes are stored
+
+  ParserLambdaCodeKey:
+    Type: String
+    Description: The S3 key of the parser code in the code bucket (including prefixes)
+    Default: parser.jar
+
+  ParserLambdaCodeKeyVersionId:
+    Type: String
+    Description: The S3 key version ID of the parser code in the code bucket
+
+  PrecompilerLambdaCodeKey:
+    Type: String
+    Description: The S3 key of the precompiler code in the code bucket (including prefixes)
+    Default: precompiler.jar
+
+  PrecompilerLambdaCodeKeyVersionId:
+    Type: String
+    Description: The S3 key version ID of the precompiler code in the code bucket
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID of the VPC where Lambda functions will be placed in
+
+  VpcSubnetIDs:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The IDs of private subnets within the above VPC where Lambda functions will be placed in
+
+  InputBucket:
+    Type: String
+    Description: >
+      The name of the S3 bucket where files will be uploaded for DFDL processing.
+      On the low side, it would be the DFDL input bucket created by the pipeline.
+
+  OutputBucket:
+    Type: String
+    Description: >
+      The name of the S3 bucket where files will be uploaded after successful DFDL processing.
+      On the low side, it would be the data transfer bucket created by the pipeline.
+
+  InputOutputBucketsAccountId:
+    Type: String
+    Description: >
+      The ID of AWS account that owns the Input and Output Buckets for cross-account access.
+      Leave blank if they are in the same account as this stack.
+      If the buckets are in a different account, see the stack description on what to do in the buckets owning account.
+    AllowedPattern: ^$|^\d{12}$
+    ConstraintDescription: Must be either blank or a valid 12-digit AWS account ID
+
+  ParserFilterSuffix:
+    Type: String
+    Description: >
+      File suffix filter to apply to the Input Bucket event listener. If left blank, all files will be sent for DFDL processing.
+      On the low side, it should be blank; on the high side, it should be ".infoset.xml".
+      Note: Ignored for cross-account buckets (when InputOutputBucketsAccountId is specified).
+    Default: ""
+    AllowedValues: ["", ".infoset.xml"]
+
+  ArchiveSuccessfulFiles:
+    Type: String
+    Description: >
+      Whether to archive files uploaded to Input Bucket, after successful DFDL processing.
+      If "true", an archive bucket will be created to which files that are successfully processed will be moved;
+      if "false", they will be deleted from Input Bucket after successful processing.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  MoveFailedFiles:
+    Type: String
+    Description: >
+      Whether to move files that are uploaded to Input Bucket, after failed DFDL processing.
+      If "true", a dead-letter bucket will be created to which files that fail to be processed will be moved;
+      if "false", they will remain in Input Bucket.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  NotifyOnError:
+    Type: String
+    Description: >
+      Whether to notify when there are errors during DFDL processing.
+      If "true", an SNS topic will be created to which you can subscribe for error notification.
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+  ContentTypeFileKey:
+    Type: String
+    Description: Content Type file mapping s3 key, defaults to content-types.yaml
+    Default: content-types.yaml
+
+  ContentTypeCacheTtlMinutes:
+    Type: Number
+    Description: Content Type cache TTL in minutes
+    Default: 1
+
+  DataProcessorCacheTtlMinutes:
+    Type: Number
+    Description: Data Processor cache TTL in minutes
+    Default: 15
+
+  EnableDetailedMetrics:
+    Type: String
+    Description: Whether or not the more detailed custom CloudFormation metrics are enabled.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  cArchiveSuccessfulFiles: !Equals [!Ref ArchiveSuccessfulFiles, "true"]
+  cMoveFailedFiles: !Equals [!Ref MoveFailedFiles, "true"]
+  cNotifyOnError: !Equals [!Ref NotifyOnError, "true"]
+  cInputOutputBucketsInSameAccount:
+    !Equals [!Ref InputOutputBucketsAccountId, ""]
+
+Rules:
+  AccountIdBlankOrDifferent:
+    RuleCondition: !Not [!Equals [!Ref InputOutputBucketsAccountId, ""]]
+    Assertions:
+      - Assert: !Not
+          - !Equals [!Ref InputOutputBucketsAccountId, !Ref "AWS::AccountId"]
+        AssertDescription: Input Output Buckets Account ID must be either blank or different from the current account ID
+
+Resources:
+  schemabucketE4BFADA8:
+    Type: AWS::S3::Bucket
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3045 # Consider using AWS::S3::BucketPolicy instead of AccessControl
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      AccessControl: Private # Retained to prevent update failure    *** DELETE this for new stacks ***
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+            Status: Enabled
+
+  SchemaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref schemabucketE4BFADA8
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt schemabucketE4BFADA8.Arn
+              - !Sub ${schemabucketE4BFADA8.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  ArchiveBucket:
+    Type: AWS::S3::Bucket
+    Condition: cArchiveSuccessfulFiles
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # LoggingConfiguration:
+      #   DestinationBucketName: BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter90Days
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarker
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+          - Id: AbortIncompleteMultipartUpload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  ArchiveBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: cArchiveSuccessfulFiles
+    Properties:
+      Bucket: !Ref ArchiveBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt ArchiveBucket.Arn
+              - !Sub ${ArchiveBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DeadLetterBucket:
+    Type: AWS::S3::Bucket
+    Condition: cMoveFailedFiles
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # LoggingConfiguration:
+      #   DestinationBucketName: BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAfter90Days
+            Status: Enabled
+            ExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: ExpiredObjectDeleteMarker
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+          - Id: AbortIncompleteMultipartUpload
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  DeadLetterBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: cMoveFailedFiles
+    Properties:
+      Bucket: !Ref DeadLetterBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt DeadLetterBucket.Arn
+              - !Sub ${DeadLetterBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DfdlErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: cNotifyOnError
+    Properties:
+      DisplayName: DFDL Error
+      KmsMasterKeyId: alias/aws/sns
+
+  inputBucketNotifications891908E2:
+    Type: Custom::S3BucketNotifications
+    Condition: cInputOutputBucketsInSameAccount
+    DependsOn: InputBucketNotificationToParserFunction
+    Properties:
+      ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
+      BucketName: !Ref InputBucket
+      Managed: false
+      NotificationConfiguration:
+        LambdaFunctionConfigurations:
+          - Events:
+              - s3:ObjectCreated:*
+            Filter:
+              Key:
+                FilterRules:
+                  - Name: suffix
+                    Value: !Ref ParserFilterSuffix
+            LambdaFunctionArn: !GetAtt DfdlParser3923117A.Arn
+
+  InputBucketNotificationToParserFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt DfdlParser3923117A.Arn
+      SourceAccount: !If
+        - cInputOutputBucketsInSameAccount
+        - !Ref AWS::AccountId
+        - !Ref InputOutputBucketsAccountId
+      SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
+
+  schemabucketNotificationsADDEB1B1:
+    Type: Custom::S3BucketNotifications
+    DependsOn: SchemaBucketNotificationToPrecompilerFunction
+    Properties:
+      ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
+      BucketName: !Ref schemabucketE4BFADA8
+      Managed: true
+      NotificationConfiguration:
+        LambdaFunctionConfigurations:
+          - Events:
+              - s3:ObjectCreated:*
+            Filter:
+              Key:
+                FilterRules:
+                  - Name: suffix
+                    Value: .dfdl.xsd
+            LambdaFunctionArn: !GetAtt precompilerF219B339.Arn
+
+  SchemaBucketNotificationToPrecompilerFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt precompilerF219B339.Arn
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt schemabucketE4BFADA8.Arn
+
+  BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: AWS CloudFormation handler for "Custom::S3BucketNotifications" resources
+      Handler: index.handler
+      Role: !GetAtt BucketNotificationsHandlerRole.Arn
+      Runtime: python3.11
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import boto3  # type: ignore
+          import json
+          import logging
+          import urllib.request
+
+          s3 = boto3.client("s3")
+
+          EVENTBRIDGE_CONFIGURATION = 'EventBridgeConfiguration'
+          CONFIGURATION_TYPES = ["TopicConfigurations", "QueueConfigurations", "LambdaFunctionConfigurations"]
+
+          def handler(event: dict, context):
+            response_status = "SUCCESS"
+            error_message = ""
+            try:
+              props = event["ResourceProperties"]
+              notification_configuration = props["NotificationConfiguration"]
+              managed = props.get('Managed', 'true').lower() == 'true'
+              stack_id = event['StackId']
+              old = event.get("OldResourceProperties", {}).get("NotificationConfiguration", {})
+              if managed:
+                config = handle_managed(event["RequestType"], notification_configuration)
+              else:
+                config = handle_unmanaged(props["BucketName"], stack_id, event["RequestType"], notification_configuration, old)
+              s3.put_bucket_notification_configuration(Bucket=props["BucketName"], NotificationConfiguration=config)
+            except Exception as e:
+              logging.exception("Failed to put bucket notification configuration")
+              response_status = "FAILED"
+              error_message = f"Error: {str(e)}. "
+            finally:
+              submit_response(event, context, response_status, error_message)
+
+          def handle_managed(request_type, notification_configuration):
+            if request_type == 'Delete':
+              return {}
+            return notification_configuration
+
+          def handle_unmanaged(bucket, stack_id, request_type, notification_configuration, old):
+            def with_id(n):
+              n['Id'] = f"{stack_id}-{hash(json.dumps(n, sort_keys=True))}"
+              return n
+
+            external_notifications = {}
+            existing_notifications = s3.get_bucket_notification_configuration(Bucket=bucket)
+            for t in CONFIGURATION_TYPES:
+              if request_type == 'Update':
+                  ids = [with_id(n) for n in old.get(t, [])]
+                  old_incoming_ids = [n['Id'] for n in ids]
+                  external_notifications[t] = [n for n in existing_notifications.get(t, []) if not n['Id'] in old_incoming_ids]
+              elif request_type == 'Create':
+                  external_notifications[t] = [n for n in existing_notifications.get(t, [])]
+            if EVENTBRIDGE_CONFIGURATION in existing_notifications:
+              external_notifications[EVENTBRIDGE_CONFIGURATION] = existing_notifications[EVENTBRIDGE_CONFIGURATION]
+
+            if request_type == 'Delete':
+              return external_notifications
+
+            notifications = {}
+            for t in CONFIGURATION_TYPES:
+              external = external_notifications.get(t, [])
+              incoming = [with_id(n) for n in notification_configuration.get(t, [])]
+              notifications[t] = external + incoming
+
+            if EVENTBRIDGE_CONFIGURATION in notification_configuration:
+              notifications[EVENTBRIDGE_CONFIGURATION] = notification_configuration[EVENTBRIDGE_CONFIGURATION]
+            elif EVENTBRIDGE_CONFIGURATION in external_notifications:
+              notifications[EVENTBRIDGE_CONFIGURATION] = external_notifications[EVENTBRIDGE_CONFIGURATION]
+
+            return notifications
+
+          def submit_response(event: dict, context, response_status: str, error_message: str):
+            response_body = json.dumps(
+              {
+                "Status": response_status,
+                "Reason": f"{error_message}See the details in CloudWatch Log Stream: {context.log_stream_name}",
+                "PhysicalResourceId": event.get("PhysicalResourceId") or event["LogicalResourceId"],
+                "StackId": event["StackId"],
+                "RequestId": event["RequestId"],
+                "LogicalResourceId": event["LogicalResourceId"],
+                "NoEcho": False,
+              }
+            ).encode("utf-8")
+            headers = {"content-type": "", "content-length": str(len(response_body))}
+            try:
+              req = urllib.request.Request(url=event["ResponseURL"], headers=headers, data=response_body, method="PUT")
+              with urllib.request.urlopen(req) as response:
+                print(response.read().decode("utf-8"))
+              print("Status code: " + response.reason)
+            except Exception as e:
+                print("send(..) failed executing request.urlopen(..): " + str(e))
+
+  BucketNotificationsHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-BucketNotificationHandlerRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
+                Resource: "*"
+
+  precompilerF219B339:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt DaffodilExecutionRole.Arn
+      MemorySize: 1024
+      Runtime: java11
+      Timeout: 30
+      Handler: daffodil.precompile.App
+      LoggingConfig:
+        LogGroup: !Ref DfdlPrecompilerLogGroupEEE29A0D
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt DfdlLambdaSecurityGroup.GroupId
+        SubnetIds: !Ref VpcSubnetIDs
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref PrecompilerLambdaCodeKey
+        S3ObjectVersion: !Ref PrecompilerLambdaCodeKeyVersionId
+
+  DfdlPrecompilerLogGroupEEE29A0D:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 90
+
+  DfdlParser3923117A:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt DaffodilExecutionRole.Arn
+      MemorySize: 5120
+      Runtime: java11
+      Timeout: 30
+      Handler: daffodil.conversion.App
+      LoggingConfig:
+        LogGroup: !Ref DfdlParserLogGroupDCB20E49
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt DfdlLambdaSecurityGroup.GroupId
+        SubnetIds: !Ref VpcSubnetIDs
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: !Ref OutputBucket
+          ARCHIVE_BUCKET: !If [cArchiveSuccessfulFiles, !Ref ArchiveBucket, ""]
+          DEAD_LETTER_BUCKET: !If [cMoveFailedFiles, !Ref DeadLetterBucket, ""]
+          SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
+          CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
+          NAMESPACE: !Ref ResourceSuffix
+          ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
+          SNS_ERROR_TOPIC_ARN:
+            !If [cNotifyOnError, !Ref DfdlErrorNotificationTopic, ""]
+          CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
+          DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref ParserLambdaCodeKey
+        S3ObjectVersion: !Ref ParserLambdaCodeKeyVersionId
+
+  DfdlParserLogGroupDCB20E49:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      RetentionInDays: 90
+
+  DaffodilExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${IamPrefix}-DaffodilExecutionRole-${ResourceSuffix}
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicyArn
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: S3_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !If
+                      - cInputOutputBucketsInSameAccount
+                      - !Ref AWS::AccountId
+                      - - !Ref AWS::AccountId
+                        - !Ref InputOutputBucketsAccountId
+        - PolicyName: KMS_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                Resource: "*"
+        - !If
+          - cNotifyOnError
+          - PolicyName: SNS_Policy
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                - Effect: Allow
+                  Action: sns:Publish
+                  Resource: !Ref DfdlErrorNotificationTopic
+          - !Ref AWS::NoValue
+
+  DfdlLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Daffodil Lambda instances
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - Description: Allow HTTPS traffic out to everywhere
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+          CidrIp: 0.0.0.0/0 # TODO: Scope this down by using VPC Endpoints
+
+Outputs:
+  DaffodilParserRoleArn:
+    Value: !GetAtt DaffodilExecutionRole.Arn
+  SchemaBucket:
+    Value: !Ref schemabucketE4BFADA8
+  DfdlParserFunctionArn:
+    Value: !GetAtt DfdlParser3923117A.Arn
