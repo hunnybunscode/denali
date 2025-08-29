@@ -125,6 +125,50 @@ Deployment environments and AWS account configurations vary by organization and 
 5. Submit merge request with clear description
 6. Ensure all CI/CD checks pass
 
+## Create a portable git repository for disconnected environment
+Prerequisites
+* git client 
+
+### Create a bundle file containing all branches and history
+
+`main` branch only
+```bash
+git bundle create denali.main.bundle main
+```
+
+All branches
+```bash
+git bundle create denali.all.bundle --all
+```
+
+### Import into remote git registry
+> Prerequisite: Remote git repository project url 
+
+1. Create new empty repository
+   ```bash
+   git init project
+   cd project
+   ```
+
+3. Import the bundle and fetch all refs
+   > NOTE: Adjust the name or path of the bundle file if needed
+   ```bash
+   git init
+   git fetch --update-head-ok denali.main.bundle 'refs/*:refs/*'
+   git remote add origin <remote-repository-url>
+   ```
+
+4. Push to the remote git repository   
+   ```bash
+   git push --force --all origin
+   git push --force --tags origin
+   ```
+
+5. Checkout main branch
+   ```bash
+   git checkout main
+   ```
+
 ---
 
 **Project Denali** - Secure, Scalable, Compliant Cloud Infrastructure
