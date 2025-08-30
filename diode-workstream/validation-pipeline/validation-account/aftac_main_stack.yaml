@@ -174,7 +174,7 @@ Parameters:
 
   PrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
-    Description: Three (3) private subnet IDs within the VPC to use for the pipeline
+    Description: At least two (2) private subnet IDs within the VPC to use for the pipeline
 
   S3PrefixListId:
     Type: String
@@ -218,9 +218,9 @@ Parameters:
 
   EmailEndPoint:
     Type: String
-    Description: (Optional) Email address to receive SNS notifications for infected, invalid, and failed transfer files
+    Description: (Optional) Email address at which to receive SNS notifications for infected, invalid, and failed transfer files
     AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
-    ConstraintDescription: Must be a valid email end point
+    ConstraintDescription: Must be either blank or a valid email end point
 
   AvScanQueueThreshold:
     Type: Number
@@ -439,3 +439,8 @@ Outputs:
   PipelineKmsKeyArn:
     Description: Pipeline KMS Key ARN
     Value: !GetAtt PipelineStack.Outputs.PipelineKmsKeyArn
+
+  # For DFDL stack
+  DfdlInputBucketName:
+    Description: DFDL Input Bucket Name
+    Value: !GetAtt PipelineStack.Outputs.DfdlInputBucketName

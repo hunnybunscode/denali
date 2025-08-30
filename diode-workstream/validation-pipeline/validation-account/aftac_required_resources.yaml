@@ -31,17 +31,17 @@ Parameters:
 
   VpcCidr:
     Type: String
-    Description: Enter the VPC CIDR in the form of x.x.x.x/x (e.g. 10.162.208.0/20)
+    Description: VPC CIDR in the form of x.x.x.x/x (e.g. 10.162.208.0/20)
 
   PrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
-    Description: Select three (3) private subnet IDs
+    Description: At least two (2) private subnet IDs
     AllowedPattern: ^subnet-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must select valid subnet IDs
 
   PrivateRouteTableIds:
     Type: CommaDelimitedList
-    Description: Enter route table IDs associated with the subnets selected above, separated by commas (e.g. rtb-1111111111abcdefg, rtb-2222222222abcdefg)
+    Description: Route table IDs associated with the subnets selected above, separated by commas (e.g. rtb-1111111111abcdefg, rtb-2222222222abcdefg)
     AllowedPattern: ^rtb-([a-f0-9]{8}|[a-f0-9]{17})$
     ConstraintDescription: Must be valid route table IDs.
 

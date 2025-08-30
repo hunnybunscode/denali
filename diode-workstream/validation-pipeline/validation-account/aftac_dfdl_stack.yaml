@@ -2,20 +2,23 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Description: >
   How to set up cross-account permissions:
-  1) Input Bucket:
-    a) Add a bucket event notification for ObjectCreated events for objects with the suffix of .infoset.xml.
+  1) Input Bucket (in a different account):
+    a) Add a bucket event notification for ObjectCreated events for objects with the suffix of ".infoset.xml".
     Select Lambda function as the destination and paste the Parser function ARN from Outputs.
+
     b) Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
       "s3:GetObject",
       "s3:GetObjectTagging",
       "s3:DeleteObject",
       "s3:ListBucket"
-  2) Output Bucket:
+
+  2) Output Bucket (in a different account):
     Update the bucket policy to give the Parser function's execution role (from Outputs) the following permissions:
       "s3:AbortMultipartUpload",
       "s3:PutObject",
       "s3:PutObjectTagging",
       "s3:ListBucket"
+
   3) If either bucket is using a customer-managed KMS key(s), the key policy should also allow the Parser function's
   execution role to use the key.
 
@@ -50,10 +53,10 @@ Metadata:
           - InputBucket
           - OutputBucket
           - InputOutputBucketsAccountId
-          - ParserFilterSuffix
+          - S3KeyFilterSuffix
           - ArchiveSuccessfulFiles
           - MoveFailedFiles
-          - NotifyOnError
+          - ErrorNotificationEmail
           - ContentTypeFileKey
           - ContentTypeCacheTtlMinutes
           - DataProcessorCacheTtlMinutes
@@ -79,21 +82,21 @@ Metadata:
       VpcId:
         default: VPC ID
       VpcSubnetIDs:
-        default: Private Subnet IDs within the VPC
+        default: Private Subnet IDs
       InputBucket:
         default: Input Bucket
       OutputBucket:
         default: Output Bucket
       InputOutputBucketsAccountId:
         default: Account ID for Input and Output Buckets
-      ParserFilterSuffix:
-        default: Parser Filter S3 Key Suffix
+      S3KeyFilterSuffix:
+        default: S3 Key Filter Suffix
       ArchiveSuccessfulFiles:
         default: Archive Successful Files
       MoveFailedFiles:
         default: Move Failed Files
-      NotifyOnError:
-        default: Notify On Error
+      ErrorNotificationEmail:
+        default: Error Notification Email
       ContentTypeFileKey:
         default: Content Types File S3 Key
       ContentTypeCacheTtlMinutes:
@@ -127,25 +130,35 @@ Parameters:
 
   LambdaCodeBucket:
     Type: String
-    Description: The name of the Amazon S3 bucket where Lambda codes are stored
+    Description: Name of the Amazon S3 bucket where Lambda codes are stored
+    AllowedPattern: ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+    ConstraintDescription: Bucket name can include numbers, lowercase letters, and hyphens; and must start and end with a lowercase letter or number
 
   ParserLambdaCodeKey:
     Type: String
-    Description: The S3 key of the parser code in the code bucket (including prefixes)
-    Default: parser.jar
+    Description: S3 key of the parser code in the code bucket (including prefixes)
+    Default: validation-account/jar/parser.jar
+    AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_.-]+)*$
+    ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
   ParserLambdaCodeKeyVersionId:
     Type: String
-    Description: The S3 key version ID of the parser code in the code bucket
+    Description: S3 key version ID of the parser code in the code bucket
+    AllowedPattern: ^[a-zA-Z0-9_.]{1,128}$
+    ConstraintDescription: Must be a valid object version
 
   PrecompilerLambdaCodeKey:
     Type: String
-    Description: The S3 key of the precompiler code in the code bucket (including prefixes)
-    Default: precompiler.jar
+    Description: S3 key of the precompiler code in the code bucket (including prefixes)
+    Default: validation-account/jar/precompiler.jar
+    AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_.-]+)*$
+    ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
 
   PrecompilerLambdaCodeKeyVersionId:
     Type: String
-    Description: The S3 key version ID of the precompiler code in the code bucket
+    Description: S3 key version ID of the precompiler code in the code bucket
+    AllowedPattern: ^[a-zA-Z0-9_.]{1,128}$
+    ConstraintDescription: Must be a valid object version
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -153,30 +166,30 @@ Parameters:
 
   VpcSubnetIDs:
     Type: List<AWS::EC2::Subnet::Id>
-    Description: The IDs of private subnets within the above VPC where Lambda functions will be placed in
+    Description: IDs of two or more private subnets within the VPC where Lambda functions will be placed in
 
   InputBucket:
     Type: String
     Description: >
-      The name of the S3 bucket where files will be uploaded for DFDL processing.
-      On the low side, it would be the DFDL input bucket created by the pipeline.
+      Name of the S3 bucket where files will be uploaded for DFDL processing (parsing/unparsing).
+      On the low side, for example, it would be the DFDL input bucket created by the pipeline.
 
   OutputBucket:
     Type: String
     Description: >
-      The name of the S3 bucket where files will be uploaded after successful DFDL processing.
-      On the low side, it would be the data transfer bucket created by the pipeline.
+      Name of the S3 bucket where files will be uploaded after successful DFDL processing.
+      On the low side, for example, it would be the data transfer bucket created by the pipeline.
 
   InputOutputBucketsAccountId:
     Type: String
     Description: >
-      The ID of AWS account that owns the Input and Output Buckets for cross-account access.
+      ID of AWS account that owns the Input and Output Buckets for cross-account access.
       Leave blank if they are in the same account as this stack.
       If the buckets are in a different account, see the stack description on what to do in the buckets owning account.
     AllowedPattern: ^$|^\d{12}$
     ConstraintDescription: Must be either blank or a valid 12-digit AWS account ID
 
-  ParserFilterSuffix:
+  S3KeyFilterSuffix:
     Type: String
     Description: >
       File suffix filter to apply to the Input Bucket event listener. If left blank, all files will be sent for DFDL processing.
@@ -190,8 +203,8 @@ Parameters:
     Description: >
       Whether to archive files uploaded to Input Bucket, after successful DFDL processing.
       If "true", an archive bucket will be created to which files that are successfully processed will be moved;
-      if "false", they will be deleted from Input Bucket after successful processing.
-    Default: "true"
+      otherwise, they will be deleted from Input Bucket after successful processing.
+    Default: "false"
     AllowedValues: ["true", "false"]
 
   MoveFailedFiles:
@@ -199,22 +212,22 @@ Parameters:
     Description: >
       Whether to move files that are uploaded to Input Bucket, after failed DFDL processing.
       If "true", a dead-letter bucket will be created to which files that fail to be processed will be moved;
-      if "false", they will remain in Input Bucket.
+      otherwise, they will remain in Input Bucket.
     Default: "true"
     AllowedValues: ["true", "false"]
 
-  NotifyOnError:
+  ErrorNotificationEmail:
     Type: String
-    Description: >
-      Whether to notify when there are errors during DFDL processing.
-      If "true", an SNS topic will be created to which you can subscribe for error notification.
-    Default: "true"
-    AllowedValues: ["true", "false"]
+    Description: (Optional) Email address at which to receive notifications when there are errors during DFDL processing.
+    AllowedPattern: ^$|^[^@\s]+@[^@\s]+\.[^@\s]+$
+    ConstraintDescription: Must be either blank or a valid email end point
 
   ContentTypeFileKey:
     Type: String
-    Description: Content Type file mapping s3 key, defaults to content-types.yaml
+    Description: S3 key for Content Type file mapping
     Default: content-types.yaml
+    AllowedValues: [content-types.yaml] # Could be a custom value, but keeping it locked to this value for simplicity
+    ConstraintDescription: Must be "content-types.yaml"
 
   ContentTypeCacheTtlMinutes:
     Type: Number
@@ -233,10 +246,10 @@ Parameters:
     AllowedValues: ["true", "false"]
 
 Conditions:
-  cArchiveSuccessfulFiles: !Equals [!Ref ArchiveSuccessfulFiles, "true"]
-  cMoveFailedFiles: !Equals [!Ref MoveFailedFiles, "true"]
-  cNotifyOnError: !Equals [!Ref NotifyOnError, "true"]
-  cInputOutputBucketsInSameAccount:
+  ArchiveSuccessfulFiles: !Equals [!Ref ArchiveSuccessfulFiles, "true"]
+  MoveFailedFiles: !Equals [!Ref MoveFailedFiles, "true"]
+  NotifyOnError: !Not [!Equals [!Ref ErrorNotificationEmail, ""]]
+  InputOutputBucketsInSameAccount:
     !Equals [!Ref InputOutputBucketsAccountId, ""]
 
 Rules:
@@ -298,7 +311,7 @@ Resources:
 
   ArchiveBucket:
     Type: AWS::S3::Bucket
-    Condition: cArchiveSuccessfulFiles
+    Condition: ArchiveSuccessfulFiles
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -333,7 +346,7 @@ Resources:
 
   ArchiveBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Condition: cArchiveSuccessfulFiles
+    Condition: ArchiveSuccessfulFiles
     Properties:
       Bucket: !Ref ArchiveBucket
       PolicyDocument:
@@ -351,7 +364,7 @@ Resources:
 
   DeadLetterBucket:
     Type: AWS::S3::Bucket
-    Condition: cMoveFailedFiles
+    Condition: MoveFailedFiles
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
     Properties:
@@ -386,7 +399,7 @@ Resources:
 
   DeadLetterBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Condition: cMoveFailedFiles
+    Condition: MoveFailedFiles
     Properties:
       Bucket: !Ref DeadLetterBucket
       PolicyDocument:
@@ -404,14 +417,22 @@ Resources:
 
   DfdlErrorNotificationTopic:
     Type: AWS::SNS::Topic
-    Condition: cNotifyOnError
+    Condition: NotifyOnError
     Properties:
       DisplayName: DFDL Error
       KmsMasterKeyId: alias/aws/sns
 
+  DfdlErrorNotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: NotifyOnError
+    Properties:
+      TopicArn: !Ref DfdlErrorNotificationTopic
+      Protocol: email
+      Endpoint: !Ref ErrorNotificationEmail
+
   inputBucketNotifications891908E2:
     Type: Custom::S3BucketNotifications
-    Condition: cInputOutputBucketsInSameAccount
+    Condition: InputOutputBucketsInSameAccount
     DependsOn: InputBucketNotificationToParserFunction
     Properties:
       ServiceToken: !GetAtt BucketNotificationsHandler050a0587b7544547bf325f094a3db8347ECC3691.Arn
@@ -425,7 +446,7 @@ Resources:
               Key:
                 FilterRules:
                   - Name: suffix
-                    Value: !Ref ParserFilterSuffix
+                    Value: !Ref S3KeyFilterSuffix
             LambdaFunctionArn: !GetAtt DfdlParser3923117A.Arn
 
   InputBucketNotificationToParserFunction:
@@ -435,7 +456,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt DfdlParser3923117A.Arn
       SourceAccount: !If
-        - cInputOutputBucketsInSameAccount
+        - InputOutputBucketsInSameAccount
         - !Ref AWS::AccountId
         - !Ref InputOutputBucketsAccountId
       SourceArn: !Sub arn:${AWS::Partition}:s3:::${InputBucket}
@@ -638,14 +659,14 @@ Resources:
       Environment:
         Variables:
           OUTPUT_BUCKET: !Ref OutputBucket
-          ARCHIVE_BUCKET: !If [cArchiveSuccessfulFiles, !Ref ArchiveBucket, ""]
-          DEAD_LETTER_BUCKET: !If [cMoveFailedFiles, !Ref DeadLetterBucket, ""]
+          ARCHIVE_BUCKET: !If [ArchiveSuccessfulFiles, !Ref ArchiveBucket, ""]
+          DEAD_LETTER_BUCKET: !If [MoveFailedFiles, !Ref DeadLetterBucket, ""]
           SCHEMA_BUCKET: !Ref schemabucketE4BFADA8
           CONTENT_TYPES_FILE: !Ref ContentTypeFileKey
           NAMESPACE: !Ref ResourceSuffix
           ENABLE_DETAILED_METRICS: !Ref EnableDetailedMetrics
           SNS_ERROR_TOPIC_ARN:
-            !If [cNotifyOnError, !Ref DfdlErrorNotificationTopic, ""]
+            !If [NotifyOnError, !Ref DfdlErrorNotificationTopic, ""]
           CONTENT_TYPE_CACHE_TTL_MINUTES: !Ref ContentTypeCacheTtlMinutes
           DATA_PROCESSOR_CACHE_TTL_MINUTES: !Ref DataProcessorCacheTtlMinutes
       Code:
@@ -693,7 +714,7 @@ Resources:
                 Condition:
                   StringEquals:
                     aws:ResourceAccount: !If
-                      - cInputOutputBucketsInSameAccount
+                      - InputOutputBucketsInSameAccount
                       - !Ref AWS::AccountId
                       - - !Ref AWS::AccountId
                         - !Ref InputOutputBucketsAccountId
@@ -707,7 +728,7 @@ Resources:
                   - kms:GenerateDataKey*
                 Resource: "*"
         - !If
-          - cNotifyOnError
+          - NotifyOnError
           - PolicyName: SNS_Policy
             PolicyDocument:
               Version: 2012-10-17
@@ -727,7 +748,7 @@ Resources:
           FromPort: 443
           IpProtocol: tcp
           ToPort: 443
-          CidrIp: 0.0.0.0/0 # TODO: Scope this down by using VPC Endpoints
+          CidrIp: 0.0.0.0/0 # TODO: Should be able to scope this down to VPC CIDR by using VPC Endpoints (S3, SNS, Logs)
 
 Outputs:
   DaffodilParserRoleArn:
