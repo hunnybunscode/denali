@@ -2,12 +2,6 @@ Description: Creates a Root CA
 
 Metadata:
   AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: General Configuration
-        Parameters:
-          - ResourceSuffix
-
     ParameterLabels:
       ResourceSuffix:
         default: Resource Suffix
@@ -83,18 +77,18 @@ Resources:
       TargetKeyId: !Ref KmsKey
 
 Outputs:
-  RootCAKey:
-    Description: >
-      Locate the secret with the Secret ARN value, then run and store as plaintext the output of a command such as the following:
-      "openssl genrsa -out ca.key 2048 && cat ca.key".
+  RootCAKeySecretArn:
+    Description: ARN of the Secrets Manager secret that stores root CA private key
     Value: !Ref RootCertificateAuthorityKey
 
-  RootCACert:
-    Description: >
-      Locate the secret with the Secret ARN value, then run and store as plaintext the output of a command such as the following:
-      "openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=nifi/O=DoD/C=US && cat ca.pem && shred -u ca.key ca.pem"
+  RootCACertSecretArn:
+    Description: ARN of the Secrets Manager secret that stores root CA certificate
     Value: !Ref RootCertificateAuthorityCertificate
 
-  KmsKeyArn:
+  RootCAKmsKeyArn:
     Description: ARN of the KMS key that protects the root CA
     Value: !GetAtt KmsKey.Arn
+
+  OpenSslCommandsToGenerateRootCA:
+    Description: openssl commands to generate a root CA
+    Value: openssl genrsa -out ca.key 2048 && cat ca.key && openssl req -x509 -new -key ca.key -sha256 -days 3650 -out ca.pem -subj /CN=RootCA/OU=nifi/O=DoD/C=US && cat ca.pem && shred -u ca.key ca.pem

@@ -444,3 +444,7 @@ Outputs:
   DfdlInputBucketName:
     Description: DFDL Input Bucket Name
     Value: !GetAtt PipelineStack.Outputs.DfdlInputBucketName
+
+  PresignedUrlGeneratorInvokeUrl:
+    Description: URL of the Pre-Signed Generator API Endpoint
+    Value: !GetAtt IngestStack.Outputs.PresignedUrlGeneratorInvokeUrl
