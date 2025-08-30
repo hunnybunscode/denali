@@ -1,5 +1,7 @@
 # Daffodil Parsing
 
+(**UPDATE**: This no longer uses CDK to generate a CloudFormation template for deployment. Use the `aftac_dfdl_stack.yaml` template located inside `validation-account` directory.)
+
 This project was built using CDK infrastructure as code, but can output the required cloudformation
 templates
 
