@@ -6,21 +6,21 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: General Configuration
+          default: General
         Parameters:
           - IamPrefix
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
 
       - Label:
-          default: Root CA Configuration
+          default: Root CA
         Parameters:
           - RootKeySecretArn
           - RootCertificateSecretArn
           - RootCAKmsKeyArn
 
       - Label:
-          default: NiFi Configuration
+          default: NiFi
         Parameters:
           - NifiAdminUser
           - NifiInstanceType
@@ -34,15 +34,16 @@ Metadata:
           - ZkClusterInfoParameter
 
       - Label:
-          default: Networking Configuration
+          default: Networking
         Parameters:
           - VpcId
           - VpcCidr
           - SubnetIds
+          - AllowedSourceCidr
           - S3PrefixListId
 
       - Label:
-          default: Image Builder Configuration
+          default: Image Builder
         Parameters:
           - SemVer
           - ParentImage
@@ -58,7 +59,7 @@ Metadata:
 
     ParameterLabels:
       IamPrefix:
-        default: IAM Resource Prefix
+        default: IAM Prefix
       PermissionsBoundaryPolicyArn:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
@@ -80,7 +81,7 @@ Metadata:
       NiFiInstanceVolumeIops:
         default: NiFi Instance Volume IOPS
       NiFiInstanceVolumeThroughput:
-        default: NiFi Instance Volume Throughput (for "gp3" volumes only)
+        default: NiFi Instance Volume Throughput
       NifiClusterSize:
         default: NiFi Cluster Size
       NiFiBinaryS3Uri:
@@ -95,6 +96,8 @@ Metadata:
         default: VPC CIDR
       SubnetIds:
         default: Subnet IDs
+      AllowedSourceCidr:
+        default: Allowed Source CIDR
       S3PrefixListId:
         default: S3 Prefix List ID
       SemVer:
@@ -227,15 +230,23 @@ Parameters:
 
   VpcCidr:
     Type: String
-    Description: The CIDR of the VPC chosen above
+    Description: CIDR of the above VPC
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
   SubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
-    Description: Select subnets (from the VPC chosen above) in which NiFi nodes will be created. Note that the first subnet will be used by the image pipeline.
+    Description: >
+      Select at least two private (if using AWS Client VPN) or public (if NOT using AWS Client VPN) subnets from the above VPC.
+      Note that the first subnet will be used by the image pipeline.
     AllowedPattern: \S+
     ConstraintDescription: Must select a subnet
+
+  AllowedSourceCidr:
+    Type: String
+    Description: If NiFi nodes are placed in PUBLIC subnets, enter CIDR from which to allow access to them. Otherwise, leave it blank.
+    AllowedPattern: ^$|^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be either blank or a valid CIDR block
 
   S3PrefixListId:
     Type: String
@@ -293,7 +304,8 @@ Conditions:
   IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
   IsLowSide: !Not [Condition: IsHighSide]
   IsGp3: !Equals [!Ref NiFiInstanceVolumeType, "gp3"]
-  IsEmailAddressPopulated: !Not [!Equals [!Ref EmailAddress, ""]]
+  IsEmailAddressProvided: !Not [!Equals [!Ref EmailAddress, ""]]
+  IsAllowedSourceCidrProvided: !Not [!Equals [!Ref AllowedSourceCidr, ""]]
 
 Resources:
   KeystorePassword:
@@ -777,6 +789,12 @@ Resources:
             - Key: Name
               Value: !Sub nifi-launch-template-${ResourceSuffix}
       LaunchTemplateData:
+        NetworkInterfaces: !If
+          - IsAllowedSourceCidrProvided
+          - - AssociatePublicIpAddress: true # If an instance stops and restarts, a new public IP address is assigned
+              Groups: [!Ref NifiNodeSecurityGroup]
+              DeviceIndex: 0
+          - !Ref AWS::NoValue
         IamInstanceProfile:
           Arn: !GetAtt NifiNodeInstanceProfile.Arn
         ImageId: !GetAtt ParentImageParameter.Value
@@ -801,8 +819,10 @@ Resources:
         MetadataOptions:
           HttpPutResponseHopLimit: 1
           HttpTokens: required
-        SecurityGroupIds:
-          - !GetAtt NifiNodeSecurityGroup.GroupId
+        SecurityGroupIds: !If
+          - IsAllowedSourceCidrProvided
+          - !Ref AWS::NoValue
+          - [!Ref NifiNodeSecurityGroup]
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -841,13 +861,22 @@ Resources:
             csr_file="$temp_dir"/nifi.csr
             openssl req -new -key "$key_file" -out "$csr_file" -subj "/CN=$HOSTNAME/OU=nifi/OU=DoD/O=U.S. Government/C=US"
 
-            echo "Getting the IP address from HOSTNAME..."
-            ip_address=$(echo $HOSTNAME | sed 's/ip-\([0-9]*\)-\([0-9]*\)-\([0-9]*\)-\([0-9]*\).*/\1.\2.\3.\4/')
+            echo "Getting the private IP address from HOSTNAME..."
+            private_ip=$(echo $HOSTNAME | sed 's/ip-\([0-9]*\)-\([0-9]*\)-\([0-9]*\)-\([0-9]*\).*/\1.\2.\3.\4/')
+
+            echo "Getting the public IP address from IMDSv2..."
+            TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+            public_ip=$(curl --fail --silent -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "")
+            if [ -n "$public_ip" ]; then
+                subjectAltName=IP:$private_ip,IP:$public_ip,DNS:$HOSTNAME,DNS:localhost
+            else
+                subjectAltName=IP:$private_ip,DNS:$HOSTNAME,DNS:localhost
+            fi
 
             echo "Creating an extension file with SAN (Subject Alternative Name)..."
             extension_file="$temp_dir"/extensions.cnf
             cat > "$extension_file" << EOF
-            subjectAltName = IP:$ip_address,DNS:$HOSTNAME,DNS:localhost
+            subjectAltName = $subjectAltName
             EOF
 
             echo "Getting root CA key from SecretsManager..."
@@ -896,7 +925,7 @@ Resources:
             sed -i "s|nifi.cluster.is.node=.*|nifi.cluster.is.node=true|" $nifi_prop_file
             sed -i "s|nifi.cluster.node.address=.*|nifi.cluster.node.address=$HOSTNAME|" $nifi_prop_file
             sed -i "s|nifi.cluster.node.protocol.port=.*|nifi.cluster.node.protocol.port=9090|" $nifi_prop_file # port number chosen arbitrarily
-            sed -i "s|nifi.cluster.flow.election.max.wait.time=.*|nifi.cluster.flow.election.max.wait.time=120 secs|" $nifi_prop_file
+            sed -i "s|nifi.cluster.flow.election.max.wait.time=.*|nifi.cluster.flow.election.max.wait.time=60 secs|" $nifi_prop_file
             sed -i "s|nifi.zookeeper.root.node=.*|nifi.zookeeper.root.node=/${ResourceSuffix}|" $nifi_prop_file
             sed -i "s|nifi.zookeeper.client.secure=.*|nifi.zookeeper.client.secure=false|" $nifi_prop_file
 
@@ -1178,35 +1207,55 @@ Resources:
     Properties:
       GroupDescription: Security Group for NiFi instances
       VpcId: !Ref VpcId
-      SecurityGroupEgress:
-        - CidrIp: !Ref VpcCidr
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          Description: Allow TCP traffic out to VPC CIDR
-        - DestinationPrefixListId: !Ref S3PrefixListId
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          Description: Allow TCP traffic out to S3 Gateway Endpoint
 
-  NifiNodeSecurityGroupIngress:
+  NifiNodeSecurityGroupIngress1:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref NifiNodeSecurityGroup
-      Description: Allows all inbound traffic within VPC
+      Description: Allow all inbound traffic within VPC
       IpProtocol: "-1"
-      # SourceSecurityGroupId: !Ref NifiNodeSecurityGroup
       CidrIp: !Ref VpcCidr
+      # SourceSecurityGroupId: !Ref NifiNodeSecurityGroup
 
-  NifiNodeSecurityGroupEgress:
+  NifiNodeSecurityGroupIngress2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsAllowedSourceCidrProvided
+    Properties:
+      GroupId: !Ref NifiNodeSecurityGroup
+      Description: Allow inbound traffic on port 8443 from outside VPC
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      CidrIp: !Ref AllowedSourceCidr
+
+  NifiNodeSecurityGroupEgress1:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
       GroupId: !Ref NifiNodeSecurityGroup
       Description: Allows all outbound traffic within VPC
       IpProtocol: "-1"
-      # DestinationSecurityGroupId: !Ref NifiNodeSecurityGroup
       CidrIp: !Ref VpcCidr
+      # DestinationSecurityGroupId: !Ref NifiNodeSecurityGroup
+
+  NifiNodeSecurityGroupEgress2:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref NifiNodeSecurityGroup
+      Description: Allow outbound traffic on port 443 within VPC
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref VpcCidr
+
+  NifiNodeSecurityGroupEgress3:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref NifiNodeSecurityGroup
+      Description: Allow outbound traffic on port 443 to S3 Gateway Endpoint
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationPrefixListId: !Ref S3PrefixListId
 
   NifiNodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -1306,7 +1355,7 @@ Resources:
       DisplayName: NiFi Failure Notification
       KmsMasterKeyId: !Ref KmsKey
       Subscription: !If
-        - IsEmailAddressPopulated
+        - IsEmailAddressProvided
         - - Endpoint: !Ref EmailAddress
             Protocol: email
         - !Ref AWS::NoValue

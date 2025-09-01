@@ -2,27 +2,26 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: General Configuration
+          default: General
         Parameters:
           - IamPrefix
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
 
       - Label:
-          default: Root CA Configuration
+          default: Root CA
         Parameters:
           - RootKeySecretArn
           - RootCertificateSecretArn
 
       - Label:
-          default: Client VPN Endpoint Configuration
+          default: Client VPN Endpoint
         Parameters:
           - ServerCertificateArn
-          - ClientCidrBlock
           - VpcId
           - VpcCidr
-          - PrivateSubnet1
-          - PrivateSubnet2
+          - PrivateSubnetIds
+          - ClientCidrBlock
           - SessionTimeoutHours
           - DnsServerAddresses
           - BannerText
@@ -34,7 +33,7 @@ Metadata:
 
     ParameterLabels:
       IamPrefix:
-        default: IAM Resource Prefix
+        default: IAM Prefix
       PermissionsBoundaryPolicyArn:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
@@ -45,16 +44,14 @@ Metadata:
         default: Root Certificate Secret ARN
       ServerCertificateArn:
         default: Server Certificate ARN
-      ClientCidrBlock:
-        default: Client CIDR Block
       VpcId:
         default: VPC ID
       VpcCidr:
         default: VPC CIDR
-      PrivateSubnet1:
-        default: Private Subnet 1
-      PrivateSubnet2:
-        default: Private Subnet 2
+      PrivateSubnetIds:
+        default: Private Subnet IDs
+      ClientCidrBlock:
+        default: Client CIDR Block
       SessionTimeoutHours:
         default: Session Timeout Hours
       DnsServerAddresses:
@@ -99,41 +96,36 @@ Parameters:
   ServerCertificateArn:
     Type: String
     Description: >
-      Leave this blank when creating the stack.
-      After the stack has been created, run the commands in the Output section to retrieve the value that should be pasted here.
-      Update the stack with that value, the ARN of the server certificate in AWS Certificate Manager (ACM) for the Client VPN endpoint.
+      Leave blank during the initial stack creation. After creation, update with ARN of server certificate generated using commands
+      from stack Outputs. The certificate is stored in AWS Certificate Manager (ACM) for the Client VPN endpoint.
     AllowedPattern: ^$|^arn:[a-z-]+:acm:[a-z0-9-]+:\d{12}:certificate/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
     ConstraintDescription: Must be either blank or a valid ARN in AWS Certificate Manager
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ID of the VPC to associate with the Client VPN endpoint
+
+  VpcCidr:
+    Type: String
+    Description: CIDR block of the VPC
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: IDs of two (2) private subnets in the VPC across different AZs
 
   ClientCidrBlock:
     Type: String
     Description: >
-      (***IMPORTANT***: This value CANNOT be updated after the initial stack creation)
-      The IPv4 address range in CIDR notation, from which to assign client IP addresses.
-      The address range cannot overlap with the local CIDR of the VPC in which the associated subnet is located, or the routes that you add manually.
-      The address range must have a size of at least /22 and not be greater than /12; if unsure, specify /16 or larger.
+      IPv4 address range in CIDR notation, from which to assign client IP addresses.
+      (** IMPORTANT **) It CANNOT be updated after the initial stack creation.
+      It MUST NOT OVERLAP with the local CIDR of the VPC or the routes that you add manually.
+      It must have a size of at least /22 and not be greater than /12; if unsure, specify /16 or larger.
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/(1[2-9]|2[0-2]))$
     ConstraintDescription: Client CIDR range must have a size of at least /22 and must not be greater than /12
 
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: The ID of the VPC to associate with the Client VPN endpoint
-
-  VpcCidr:
-    Type: String
-    Description: The CIDR block of the VPC
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet::Id
-    Description: The ID of a private subnet in the VPC selected above.
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet::Id
-    Description: The ID of a private subnet in the VPC selected above, in a **DIFFERENT** AZ than Private Subnet 1.
-
   SessionTimeoutHours:
     Type: Number
-    Description: The maximum VPN session duration time in hours
+    Description: Maximum VPN session duration time in hours
     Default: 12
     AllowedValues: [8, 10, 12, 24]
 
@@ -324,7 +316,7 @@ Resources:
     Condition: CreateVpnEndpoint
     Properties:
       ClientVpnEndpointId: !Ref ClientVpnEndpoint
-      SubnetId: !Ref PrivateSubnet1
+      SubnetId: !Select [0, !Ref PrivateSubnetIds]
 
   # A second network association in a different AZ for redundancy
   ClientVpnEndpointTargetNetworkAssociation2:
@@ -332,7 +324,7 @@ Resources:
     Condition: CreateVpnEndpoint
     Properties:
       ClientVpnEndpointId: !Ref ClientVpnEndpoint
-      SubnetId: !Ref PrivateSubnet2
+      SubnetId: !Select [1, !Ref PrivateSubnetIds]
 
   ###########################################################################################################
   ##                                                                                                       ##
@@ -441,7 +433,7 @@ Resources:
 
 Outputs:
   HowToCreateServerKeyAndCert:
-    Description: Run the commands to generate a server key and cert.
+    Description: Run the commands to generate server key and cert and store in AWS Certificate Manager.
     Value: !Sub |-
       set -e;
       echo;
@@ -481,7 +473,7 @@ Outputs:
 
   HowToCreateClientKeyAndCert:
     Condition: CreateVpnEndpoint
-    Description: Run the commands to generate a client key and cert.
+    Description: Run the commands to generate OpenVPN configuration file with client key and cert.
     Value: !Sub |-
       set -e;
       echo;

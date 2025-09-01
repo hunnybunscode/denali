@@ -120,7 +120,7 @@ Main resources are deployed through an orchestration stack that manages four spe
 10. Provide values for the following parameters:
     1. General:
        - IAM Prefix
-       - Permissions Boundary Policy Arn
+       - Permissions Boundary Policy ARN
        - **Resource Suffix**: This value _**MUST**_ match across all related stacks to ensure proper resource and pipeline integration.
     2. Template Location:
        - Template Bucket Name: Enter the name of the S3 bucket [above](#2-upload-assets-to-s3-bucket-in-validation-account-low-side).
@@ -154,7 +154,7 @@ Main resources are deployed through an orchestration stack that manages four spe
        - Object Expiration In Days For Invalid Files Bucket
        - Object Expiration In Days For Access Log Bucket
 11. Click `Next`.
-12. (Optional) Under `Behavior on provisioning failure`, check `Preserve successfully provisioned resources` to prevent a rollback (and subsequent deletion) in case of a failure. This can save overall deployment time and help with troubleshooting. Refer to the [AWS documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stack-failure-options.html) for more info.
+12. (Optional) Under `Behavior on provisioning failure`, check `Preserve successfully provisioned resources` to prevent a rollback (and subsequent deletion) in case of a failure. This can save overall deployment time and help with troubleshooting. Note that it should be set to `Roll back all stack resources` after the initial stack creation; otherwise, stack updates can fail. Refer to the [AWS documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stack-failure-options.html) for more info.
 13. Under `Capabilities`, check the acknowledgment box(es).
 14. Click `Next`.
 15. Click `Submit`.
@@ -209,7 +209,7 @@ Create the infrastructure:
 12. Under `Capabilities`, check the acknowledgment box(es).
 13. Click `Next`.
 14. Click `Submit`.
-15. Wait for stack creation to complete for the main stack (status: `CREATE_COMPLETE`).
+15. Wait for stack creation to complete (status: `CREATE_COMPLETE`).
 
 Upload `content-types.yaml` file and schemas to S3 bucket:
 
@@ -249,25 +249,27 @@ Create the infrastructure:
 10. Provide values for the following parameters:
     1. General:
        - IAM Prefix
-       - Permissions Boundary Policy Arn
+       - Permissions Boundary Policy ARN
        - **Resource Suffix**: Enter the **SAME** value used [above](#4-deploy-the-main-resources)
-       - Proxy Server Address
-       - No Proxy List
-       - Email Notification
     2. Template Location:
        - Template Bucket Name: Enter the name of the S3 bucket [above](#2-upload-assets-to-s3-bucket-in-validation-account-low-side).
        - Template Prefix: Enter the prefix used [above](#2-upload-assets-to-s3-bucket-in-validation-account-low-side).
-    3. Image Builder:
-       - Semantic Version
-       - Parent Image
-       - Source Account ID
-       - Image Name Pattern
-       - Required Image Description Pattern
-       - Image Check Frequency
-       - Bypass GPG Check
+    3. Networking:
        - VPC ID
        - Subnet ID
        - Outbound CIDR
+    4. Image Builder:
+       - Semantic Version: Increment the version (e.g. 1.0.0 -> 1.0.1) when making changes to any parameters in this section, except for Email Notification.
+       - Parent Image
+       - Proxy Server Address
+       - No Proxy List
+       - Bypass GPG Check
+       - Email Notification
+    5. Image Builder Auto Update:
+       - Image Check Frequency: Leave it blank to disable auto check.
+       - Image Name Pattern: Ignored if disabled.
+       - Image Description Pattern: Ignored if disabled.
+       - Source Account ID: Ignored if disabled.
 11. Click `Next`.
 12. Under `Capabilities`, check the acknowledgment box(es).
 13. Click `Next`.
@@ -292,10 +294,10 @@ As Python package repositories may not be available on the high side, prepare wh
 
 1. On the low side, run the following commands (e.g., in CloudShell):
 
-```
-mkdir wheel
-python -m pip download --only-binary :all: --dest wheel --no-cache pip boto3 puremagic pyjwt
-```
+   ```
+   mkdir wheel
+   python -m pip download --only-binary :all: --dest wheel --no-cache pip boto3 puremagic pyjwt
+   ```
 
 2. Transfer all the downloaded wheel files from the `wheel` directory to the high side.
 3. On the high side, upload those files to S3 bucket:
@@ -393,7 +395,7 @@ The solution requires a Diode data transfer infrastructure stack in the Diode ac
 10. Provide values for the following parameters:
     1. General:
        - IAM Prefix
-       - Permissions Boundary Policy Arn
+       - Permissions Boundary Policy ARN
        - **Resource Suffix**: Enter the **SAME** value used [above](#4-deploy-the-main-resources)
     2. Resources from Validation Account:
        - Data Transfer Bucket Name: From the validation account's [main stack](#4-deploy-the-main-resources) Outputs, enter the value for `DataTransferBucketName`.
@@ -493,7 +495,7 @@ Create the infrastructure:
 12. Under `Capabilities`, check the acknowledgment box(es).
 13. Click `Next`.
 14. Click `Submit`.
-15. Wait for stack creation to complete for the main stack (status: `CREATE_COMPLETE`).
+15. Wait for stack creation to complete (status: `CREATE_COMPLETE`).
 16. Copy all the values in the stack Outputs.
 
 Upload `content-types.yaml` file and schemas to S3 bucket:
@@ -522,7 +524,7 @@ Set up DFDL input and output buckets for cross-account access
    7. Place a check mark next to `All object create events`.
    8. Select `Lambda function` in `Destination`.
    9. Select `Enter Lambda function ARN`.
-   10. Paste the value for `DfdlParserFunctionArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) in `Lambda function`.
+   10. Enter the value for `DfdlParserFunctionArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) in `Lambda function`.
    11. Click `Save changes`.
 
 2. Add/update bucket policy:
@@ -531,7 +533,7 @@ Set up DFDL input and output buckets for cross-account access
    2. Click `Edit` for `Bucket policy`.
    3. Update the bucket policy:
 
-      - If the policy is empty, paste the below. Replace `<DaffodilParserRoleArn>` with the value for `DaffodilParserRoleArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) and `<input-bucket-arn>` with the actual input bucket's ARN.
+      - If the policy is empty, copy and paste the below. Replace `<DaffodilParserRoleArn>` with the value for `DaffodilParserRoleArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) and `<input-bucket-arn>` with the actual input bucket's ARN.
 
       ```json
       {
@@ -610,7 +612,7 @@ Set up DFDL input and output buckets for cross-account access
    4. Click `Edit` for `Bucket policy`.
    5. Update the bucket policy:
 
-      - If the policy is empty, paste the below. Replace `<DaffodilParserRoleArn>` with the value for `DaffodilParserRoleArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) and `<output-bucket-arn>` with the actual output bucket's ARN.
+      - If the policy is empty, copy and paste the below. Replace `<DaffodilParserRoleArn>` with the value for `DaffodilParserRoleArn` key from the stack Outputs [from here](#3-deploy-daffodil-pipeline) and `<output-bucket-arn>` with the actual output bucket's ARN.
 
       ```json
       {
@@ -681,10 +683,12 @@ Set up DFDL input and output buckets for cross-account access
 
 ## How to Operate
 
-Use any ingestion method depicted in the [architecture diagram](#architecture-diagram) to upload files into ingestion buckets. For example,
+Use any ingestion method depicted in the [architecture diagram](#architecture-diagram) to upload files into ingestion buckets. For example:
 
 1. Bucket-to-bucket method: See documentation in the `customer-account` directory in the repo.
 2. API Gateway (Pre-signed URLs):
+   - API Gateway Endpoint URL is the value of `PresignedUrlGeneratorInvokeUrl` key from the [main stack](#4-deploy-the-main-resources) Outputs.
+   - Name of the ingestion bucket and key ID of the KMS key protecting the bucket are the values of `IngestBucketName` and `SSES3KmsKeyArn` keys from the [ingestion bucket stack](#7-create-ingestion-buckets) Outputs, respectively.
    - Use the sample Python script `upload_via_apigw.py` provided in the repo (setup instruction included within the script)
    - Example usage:
      `python3 upload_via_apigw.py --bucket <ingestion-bucket-name> --kms-key-id <kms-key-id-for-ingestion-bucket> --filepath <path-to-file-to-upload>`

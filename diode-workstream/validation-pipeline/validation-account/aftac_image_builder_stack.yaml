@@ -11,9 +11,6 @@ Metadata:
           - IamPrefix
           - PermissionsBoundaryPolicyArn
           - ResourceSuffix
-          - ProxyServerAddress
-          - NoProxyList
-          - EmailEndPoint
 
       - Label:
           default: Template Location
@@ -22,18 +19,29 @@ Metadata:
           - TemplatePrefix
 
       - Label:
+          default: Networking
+        Parameters:
+          - VpcId
+          - SubnetId
+          - OutboundCidrIp
+
+      - Label:
           default: Image Builder
         Parameters:
           - SemVer
           - ParentImage
-          - SourceAccountId
-          - ImageNamePattern
-          - RequiredImageDescriptionPattern
-          - ImageCheckFrequency
+          - ProxyServerAddress
+          - NoProxyList
           - BypassGpgCheck
-          - VpcId
-          - SubnetId
-          - OutboundCidrIp
+          - EmailEndPoint
+
+      - Label:
+          default: Image Builder Auto Update
+        Parameters:
+          - ImageCheckFrequency
+          - ImageNamePattern
+          - ImageDescriptionPattern
+          - SourceAccountId
 
     ParameterLabels:
       IamPrefix:
@@ -42,36 +50,36 @@ Metadata:
         default: Permissions Boundary Policy ARN
       ResourceSuffix:
         default: Resource Suffix
-      ProxyServerAddress:
-        default: Proxy Server Address
-      NoProxyList:
-        default: No Proxy List
-      EmailEndPoint:
-        default: Email Notification
       TemplateBucketName:
         default: Template Bucket Name
       TemplatePrefix:
         default: Template Prefix
-      SemVer:
-        default: Semantic Version
-      ParentImage:
-        default: Parent Image
-      SourceAccountId:
-        default: Source Account ID
-      ImageNamePattern:
-        default: Image Name Pattern
-      RequiredImageDescriptionPattern:
-        default: Required Image Description Pattern
-      ImageCheckFrequency:
-        default: Image Check Frequency
-      BypassGpgCheck:
-        default: Bypass GPG Check
       VpcId:
         default: VPC ID
       SubnetId:
         default: Subnet ID
       OutboundCidrIp:
         default: Outbound CIDR
+      SemVer:
+        default: Semantic Version
+      ParentImage:
+        default: Parent Image
+      ProxyServerAddress:
+        default: Proxy Server Address
+      NoProxyList:
+        default: No Proxy List
+      BypassGpgCheck:
+        default: Bypass GPG Check
+      EmailEndPoint:
+        default: Email Notification
+      ImageCheckFrequency:
+        default: Image Check Frequency
+      ImageNamePattern:
+        default: Image Name Pattern
+      ImageDescriptionPattern:
+        default: Image Description Pattern
+      SourceAccountId:
+        default: Source Account ID
 
 Parameters:
   IamPrefix:
@@ -96,23 +104,6 @@ Parameters:
     ConstraintDescription: >
       Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens; its length cannot exceed 20.
 
-  ProxyServerAddress:
-    Type: String
-    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
-    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
-    ConstraintDescription: Must be a valid http or IP address, without the port number
-
-  NoProxyList:
-    Type: String
-    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
-    Default: 169.254.169.254,s3.us-gov-west-1.amazonaws.com
-
-  EmailEndPoint:
-    Type: String
-    Description: (Recommended) The email address at which to receive notifications for ImageBuilder events
-    AllowedPattern: ^$|^\S+@\S+\.+\S+$
-    ConstraintDescription: Must be left blank or a valid email address
-
   TemplateBucketName:
     Type: String
     Description: Name of S3 bucket that contains the CloudFormation templates
@@ -122,59 +113,6 @@ Parameters:
     Description: Prefix (without leading or trailing slashes) for the CloudFormation templates
     AllowedPattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
     ConstraintDescription: Cannot start or end with a slash(/). Must be a valid path (e.g. my/path or my-path)
-
-  SemVer:
-    Type: String
-    Description: >
-      Semantic version of the Diode Image Recipe and other associated resources.
-      Increment this when updating the parent image below or any associated resources in the template itself.
-      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
-    Default: "1.0.0"
-
-  ParentImage:
-    Type: AWS::EC2::Image::Id
-    Description: The parent (or base) image for the image recipe
-
-  SourceAccountId:
-    Type: String
-    Description: AWS Account ID that owns the Parent Image (AMI)
-    AllowedPattern: ^\d{12}$
-    ConstraintDescription: Must be a valid 12-digit AWS account ID
-
-  ImageNamePattern:
-    Type: String
-    Description: >-
-      The base image name pattern for image builder output images.
-      This pattern is used to identify the correct source AMI.
-      The pattern must exactly match part of the AMI name.
-    Default: VI2E_RHEL8_Agents_Gold
-    AllowedPattern: ^[a-zA-Z0-9_-]+$
-    ConstraintDescription: Pattern must contain only alphanumeric characters, underscores, and hyphens
-
-  RequiredImageDescriptionPattern:
-    Type: CommaDelimitedList
-    Description: >-
-      Comma-separated list of required patterns that must be present in the image description.
-      These patterns are used to identify the correct source AMI that contains specific
-      software components (e.g., ClamAV, Nessus).
-    Default: Yum,ClamAV,Nessus
-    ConstraintDescription: Must be a comma-separated list of patterns
-
-  ImageCheckFrequency:
-    Type: String
-    Description: >-
-      The frequency to run the check for new base image shared from source account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
-      You can leave this blank if you want to manually check for new AMIs.
-    Default: rate(1 day)
-    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
-    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
-
-  BypassGpgCheck:
-    Type: String
-    Description: Select "true" to bypass GPG check for SSM Agent installation file; otherwise, select "false"
-    Default: "false"
-    AllowedValues: ["true", "false"]
-    ConstraintDescription: Must be either "true" or "false"
 
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -195,8 +133,74 @@ Parameters:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block
 
+  SemVer:
+    Type: String
+    Description: >
+      Semantic version of the Diode Image Recipe and other associated resources.
+      Increment this when updating the parent image below or any associated resources in the template itself.
+      The format is <major>.<minor>.<patch> where each component is an integer (e.g. 1.0.0).
+    Default: "1.0.0"
+
+  ParentImage:
+    Type: AWS::EC2::Image::Id
+    Description: The parent (or base) image for the image recipe
+
+  ProxyServerAddress:
+    Type: String
+    Description: The address of the proxy server for outbound internet access. It can be an http or IP address. The port is fixed at 3128.
+    AllowedPattern: ^(?!.*(:[0-9]{1,5}))(https?://([a-zA-Z0-9-_.]+)|((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])))$
+    ConstraintDescription: Must be a valid http or IP address, without the port number
+
+  NoProxyList:
+    Type: String
+    Description: A comma-separated list of addresses that should bypass the proxy server. These can be either http or IP addresses.
+    Default: 169.254.169.254,s3.us-gov-west-1.amazonaws.com
+
+  BypassGpgCheck:
+    Type: String
+    Description: Select "true" to bypass GPG check for SSM Agent installation file; otherwise, select "false"
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    ConstraintDescription: Must be either "true" or "false"
+
+  EmailEndPoint:
+    Type: String
+    Description: (Recommended) The email address at which to receive notifications for ImageBuilder events
+    AllowedPattern: ^$|^\S+@\S+\.+\S+$
+    ConstraintDescription: Must be left blank or a valid email address
+
+  ImageCheckFrequency:
+    Type: String
+    Description: >-
+      The frequency to run the check for new base image shared from source account. For valid values, go to https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html.
+      Leave this blank if you want to manually check for new AMIs.
+    Default: rate(1 day)
+    AllowedPattern: ^$|^cron\(.*\)$|^rate\([1-9]\d* (minute|minutes|hour|hours|day|days)\)$
+    ConstraintDescription: Must be left blank; or a valid cron or rate expression (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-scheduled-rule-pattern.html)
+
+  ImageNamePattern:
+    Type: String
+    Description: The base image name pattern used to identify the correct source AMI
+    Default: VI2E_RHEL8_Agents_Gold
+    AllowedPattern: ^$|^[a-zA-Z0-9_-]+$
+    ConstraintDescription: Pattern must either be blank or consist of only alphanumeric characters, underscores, and hyphens
+
+  ImageDescriptionPattern:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated list of required patterns that must be present in the image description.
+      These patterns are used to identify the correct source AMI that contains specific software components (e.g., ClamAV, Nessus).
+    Default: Yum,ClamAV,Nessus
+
+  SourceAccountId:
+    Type: String
+    Description: AWS Account ID that owns the base image
+    AllowedPattern: ^$|^\d{12}$
+    ConstraintDescription: Must be either blank or a valid 12-digit AWS account ID
+
 Conditions:
   EmailEndpointProvided: !Not [!Equals [!Ref EmailEndPoint, ""]]
+  EnableImageCheck: !Not [!Equals [!Ref ImageCheckFrequency, ""]]
   IsLCK: !Equals [!Ref "AWS::Partition", aws-iso-b]
   IsDCA: !Equals [!Ref "AWS::Partition", aws-iso]
   IsHighSide: !Or [Condition: IsLCK, Condition: IsDCA]
@@ -555,6 +559,7 @@ Resources:
   ImageBuilderInfraSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
+      VpcId: !Ref VpcId
       GroupDescription: Security Group for ImageBuilder infra
       SecurityGroupEgress:
         - CidrIp: !Ref OutboundCidrIp
@@ -567,7 +572,6 @@ Resources:
           FromPort: 3128
           ToPort: 3128
           Description: Allow outbound traffic on 3128
-      VpcId: !Ref VpcId
 
   ImageBuilderInfraInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -819,6 +823,7 @@ Resources:
 
   NewAmiImageBuilderTriggerLambda:
     Type: AWS::Lambda::Function
+    Condition: EnableImageCheck
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -836,8 +841,7 @@ Resources:
           SOURCE_ACCOUNT: !Ref SourceAccountId
           STACK_NAME: !Ref AWS::StackName
           IMAGE_NAME_PATTERN: !Ref ImageNamePattern
-          REQUIRED_DESCRIPTION_ITEMS:
-            !Join [",", !Ref RequiredImageDescriptionPattern]
+          REQUIRED_DESCRIPTION_ITEMS: !Join [",", !Ref ImageDescriptionPattern]
       Code:
         ZipFile: |
           import json
@@ -992,6 +996,7 @@ Resources:
 
   NewAmiImageBuilderTriggerLogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: EnableImageCheck
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -1000,6 +1005,7 @@ Resources:
 
   NewAmiImageBuilderTriggerLambdaRole:
     Type: AWS::IAM::Role
+    Condition: EnableImageCheck
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1117,6 +1123,7 @@ Resources:
 
   NewAmiImageBuilderTriggerScheduleRule:
     Type: AWS::Events::Rule
+    Condition: EnableImageCheck
     Properties:
       Name: !Sub trigger-image-pipeline-with-new-ami-${ResourceSuffix}
       Description: Periodically check for new AMIs
@@ -1128,6 +1135,7 @@ Resources:
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
+    Condition: EnableImageCheck
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref NewAmiImageBuilderTriggerLambda
