@@ -1,0 +1,173 @@
+environment:
+  name: dcw_aftac_pla_core_test_gov
+  region: &region us-gov-west-1
+  account: "075684568798"
+  iam:
+    prefix: AFC2S
+    permissionBoundaryArn: arn:aws-us-gov:iam::075684568798:policy/ProjAdminPolicy
+  tags:
+    DNR: "true"
+  proxy:
+    httpProxy: http://proxy.tr.pri.vi2e.io:3128
+    httpsProxy: http://proxy.tr.pri.vi2e.io:3128
+    noProxy: localhost,127.0.0.1,169.254.169.254,.internal,.corporate,10.0.0.0/16,192.168.0.0/16,172.20.0.0/16,.us-gov-west-1.amazonaws.com,.us-gov-west-1.eks.amazonaws.com
+  synthesizeOverride:
+    cloudFormationExecutionRole: arn:aws-us-gov:iam::075684568798:role/AFC2S-cdk-hnb659fds-cfn-exec-role-075684568798-us-gov-west-1
+    deployRoleArn: arn:aws-us-gov:iam::075684568798:role/AFC2S-cdk-hnb659fds-deploy-role-075684568798-us-gov-west-1
+    fileAssetPublishingRoleArn: arn:aws-us-gov:iam::075684568798:role/AFC2S-cdk-hnb659fds-file-role-075684568798-us-gov-west-1
+    imageAssetPublishingRoleArn: arn:aws-us-gov:iam::075684568798:role/AFC2S-cdk-hnb659fds-image-role-075684568798-us-gov-west-1
+    lookupRoleArn: arn:aws-us-gov:iam::075684568798:role/AFC2S-cdk-hnb659fds-lookup-role-075684568798-us-gov-west-1
+    fileAssetsBucketName: cdk-hnb659fds-assets2-075684568798-us-gov-west-1
+    qualifier: hnb659fds
+
+.pipelineVersion: &pipeline-version 1.0.0
+
+.storage: &storage
+  type: gp3
+  deviceName: /dev/xvda
+  sizeInGB: 20
+
+.storage-rhel: &rhel-storage
+  type: gp3
+  deviceName: /dev/sda1
+  sizeInGB: 20
+
+.vpc: &vpc
+  id: vpc-0f3d92ebd7fdb9aaf
+  subnet:
+    id: subnet-0b3182a2019a09d18
+
+.instanceTypes: &instanceTypes
+  - m6i.8xlarge
+  - m6a.xlarge
+  - m5.xlarge
+  - m5.large
+
+pipelines:
+  - name: amazon-eks-node-al2023-x86_64-standard-1_30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: *pipeline-version
+    scan: false
+    vpc: *vpc
+    instanceTypes: *instanceTypes
+    ami:
+      name: amazon-eks-node-al2023-x86_64-standard-1.30-*
+    storages:
+      - *storage
+    tags:
+      OS: Amazon Linux 2023
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: "1.30"
+    components:
+      - name: stig-build-linux-high
+        version: x.x.x
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value:
+              - "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/SecurityUpdate.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
+
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_30-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: *pipeline-version
+    scan: false
+    test: false
+    enhancedImageMetadata: false
+    vpc: *vpc
+    instanceTypes: *instanceTypes
+    ami:
+      name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
+    storages:
+      - *rhel-storage
+    tags:
+      OS: Red Hat Enterprise Linux 9
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: &kubernetesVersion "1.30"
+    components:
+      - lib/component/additional-software.yml
+      - name: aws-cli-version-2-linux
+        version: x.x.x
+        platform: linux
+      - name: lib/component/eks/rhel/install-eks-install.yml
+        version: *pipeline-version
+        platform: linux
+        parameters:
+          - name: KubernetesVersion
+            value: *kubernetesVersion
+          - name: HomePath
+            value: /tmp/workspace
+          - name: AWSRegion
+            value: *region
+      - name: stig-build-linux-high
+        version: x.x.x
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value: "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/allow-software-access.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/SecurityUpdate.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml
+
+  - name: amazon-eks-node-rhel9-x86_64-standard-1_32-stig-high
+    description: "EKS Optimized Image with STIG High"
+    version: *pipeline-version
+    scan: false
+    test: false
+    enhancedImageMetadata: false
+    vpc: *vpc
+    instanceTypes: *instanceTypes
+    ami:
+      name: RHEL-9.5.*_HVM-*-x86_64-*-Hourly2-GP3
+    storages:
+      - *rhel-storage
+    tags:
+      OS: Red Hat Enterprise Linux 9
+      ARCH: x86_64
+      STIG: High
+      FIPS: Enabled
+      K8S VERSION: &kubernetesVersion "1.32"
+    components:
+      - lib/component/additional-software.yml
+      - name: aws-cli-version-2-linux
+        version: x.x.x
+        platform: linux
+      - name: lib/component/eks/rhel/install-eks-install.yml
+        version: *pipeline-version
+        platform: linux
+        parameters:
+          - name: KubernetesVersion
+            value: *kubernetesVersion
+          - name: HomePath
+            value: /tmp/workspace
+          - name: AWSRegion
+            value: *region
+      - name: stig-build-linux-high
+        version: x.x.x
+        platform: linux
+        parameters:
+          - name: InstallPackages
+            value: "Yes"
+          - name: SetDoDConsentBanner
+            value: "Yes"
+      - lib/component/DODSTIGHardening.yml
+      - lib/component/allow-software-access.yml
+      - lib/component/eks/AllowEKSOperationalStatus.yml
+      - lib/component/eks/rhel/AllowEKSOperationalStatus-RHEL.yml
+      - lib/component/SecurityUpdate.yml
+      - lib/component/eks/rhel/cleanup-RHEL.yml

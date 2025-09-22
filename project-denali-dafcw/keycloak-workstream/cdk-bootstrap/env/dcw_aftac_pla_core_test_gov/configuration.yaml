@@ -1,0 +1,7 @@
+environment:
+  name: dcw_aftac_pla_core_test_gov
+  region: &region us-gov-west-1
+  account: "075684568798"
+  iam:
+    prefix: AFC2S
+    permissionBoundaryArn: arn:aws-us-gov:iam::075684568798:policy/ProjAdminPolicy

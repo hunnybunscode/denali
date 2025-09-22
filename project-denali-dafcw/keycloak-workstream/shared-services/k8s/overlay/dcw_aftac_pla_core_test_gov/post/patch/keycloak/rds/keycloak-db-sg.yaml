@@ -1,0 +1,20 @@
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: SecurityGroup
+metadata:
+  name: keycloak-rds-sg
+  namespace: keycloak
+spec:
+  name: eks-ack-keycloak-rds
+  vpcID: vpc-0f3d92ebd7fdb9aaf
+  ingressRules:
+    - ipProtocol: tcp
+      fromPort: 5432
+      toPort: 5432
+      ipRanges:
+        # Known Pod Subnets
+        - cidrIP: 10.146.224.0/23
+          description: pla-core TEST Tenant VPC Isolated Subnet A
+        - cidrIP: 10.146.226.0/23
+          description: pla-core TEST Tenant VPC Isolated Subnet B
+        - cidrIP: 10.146.228.0/23
+          description: pla-core TEST Tenant VPC Isolated Subnet C

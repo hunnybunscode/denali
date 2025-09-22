@@ -1,0 +1,25 @@
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: Subnet
+metadata:
+  name: keycloak-db-subnet-1
+  namespace: keycloak
+spec:
+  vpcID: vpc-0f3d92ebd7fdb9aaf
+  cidrBlock: "10.146.230.0/28"
+  availabilityZone: us-gov-west-1a 
+  tags:
+    - key: Name
+      value: "pla-core Test Tenant VPC Keycloak Isolated DB Subnet B"
+---
+apiVersion: ec2.services.k8s.aws/v1alpha1
+kind: Subnet
+metadata:
+  name: keycloak-db-subnet-2
+  namespace: keycloak
+spec:
+  vpcID: vpc-0f3d92ebd7fdb9aaf
+  cidrBlock: "10.146.230.16/28"
+  availabilityZone: us-gov-west-1b
+  tags:
+    - key: Name
+      value: "pla-core Test Tenant VPC Keycloak Isolated DB Subnet B"

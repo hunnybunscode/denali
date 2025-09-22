@@ -1,0 +1,31 @@
+- op: add
+  path: /spec/unsupported/podTemplate/spec/containers/0/envFrom
+  value:
+    - configMapRef:
+        name: http-proxy-config
+    - configMapRef:
+        name: keycloak-db
+- op: add
+  path: /spec/unsupported/podTemplate/spec/initContainers/0/envFrom
+  value:
+    - configMapRef:
+        name: http-proxy-config
+- op: add
+  path: /spec/unsupported/podTemplate/spec/initContainers/1/envFrom
+  value:
+    - configMapRef:
+        name: http-proxy-config
+- op: add
+  path: /spec/unsupported/podTemplate/spec/initContainers/2/envFrom
+  value:
+    - configMapRef:
+        name: http-proxy-config
+- op: remove
+  path: /spec/unsupported/podTemplate/spec/containers/0/volumeMounts/1
+- op: remove
+  path: /spec/unsupported/podTemplate/spec/initContainers/0
+- op: remove
+  path: /spec/unsupported/podTemplate/spec/initContainers/-1
+- op: replace
+  path: /spec/additionalOptions/4/value
+  value: strict

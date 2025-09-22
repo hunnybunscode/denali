@@ -1,0 +1,35 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: keycloak-instance
+  namespace: keycloak
+spec:
+  unsupported:
+    podTemplate:
+      spec:
+        initContainers:
+          - name: pki-initialize
+            image: registry.access.redhat.com/ubi9/openjdk-21:latest
+            securityContext:
+              privileged: false
+              runAsUser: 0
+              runAsGroup: 0
+            command:
+              - /bin/bash
+              - "-c"
+            args:
+              - |
+                set -e
+                echo "Initializing PKI"
+                ls -all /opt/scripts
+                cat /opt/scripts/create_keystore_container.sh
+                bash /opt/scripts/create_keystore_container.sh
+                update-ca-trust extract
+                trust list --filter ca-anchors | grep DOD -i -A 2 -B 3
+                cp -ra /etc/pki/* /etc/pki-custom
+                echo "Initializing PKI done"
+            volumeMounts:
+              - name: pki-custom-data
+                mountPath: /etc/pki-custom
+              - name: keycloak-init-scripts
+                mountPath: /opt/scripts
